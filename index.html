@@ -20610,6 +20610,14 @@ function _ajmRender(){
    O lançamento vai na data do próprio pendente, para o estoque daquele
    dia fechar certo.
    ══════════════════════════════════════════════════════════════════ */
+/* Guarda no Firebase quais pendentes já foram resolvidos */
+async function _ajRefSalvarResolvidos(){
+  try{
+    await setDoc(doc(db,'ajustesRefazimento','atual'), {resolvidos:_ajRefResolvidos}, {merge:true});
+  }catch(e){ console.error('ajRef salvar resolvidos',e); }
+}
+window._ajRefSalvarResolvidos=_ajRefSalvarResolvidos;
+
 let _ajRefSel={};
 
 function ajRefPendentesAbertos(){
@@ -26622,6 +26630,9 @@ function _simListasHTML(){
   }
   return html;
 }
+
+// estado da tela: produtos recolhidos por padrão e o texto da busca
+let _simPrevAberto=false, _simItensAberto=false, _simBusca='';
 
 function simTogglePrev(){ _simPrevAberto=!_simPrevAberto; renderSim(); }
 window.simTogglePrev=simTogglePrev;
