@@ -26536,43 +26536,114 @@ function _simResultadoHTML(){
   let html='<div class="card" style="margin-top:14px;border-left:3px solid var(--mc-roxo);">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"><div style="font-size:15px;font-weight:700;">📋 '+d.contexto+'</div>'+
     '<button class="mc-act-btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="simExportarExcel()">⬇️ Excel</button></div>'+
-    '<div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px;">Produtos</div>'+itensHtml+'</div>';
+    '<button onclick="simToggleItens()" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--bg-page);border:1px solid var(--border);border-radius:8px;padding:8px 11px;cursor:pointer;font-family:inherit;">'+
+      '<span style="font-size:11px;font-weight:700;color:var(--text-secondary);">PRODUTOS ('+d.itens.length+')</span>'+
+      '<span style="font-size:13px;color:var(--text-muted);">'+(_simItensAberto?'▲ ocultar':'▼ ver')+'</span></button>'+
+    (_simItensAberto?('<div style="margin-top:6px;">'+itensHtml+'</div>'):'')+'</div>';
 
   if(d.semFicha.length){
     html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px;color:#92400e;">⚠️ Sem ficha técnica (não explodido em MP): '+d.semFicha.join(', ')+'</div>';
   }
 
-  // Massas e recheios necessários
+  // busca única sobre massas, recheios e matérias-primas
   html+='<div class="card" style="margin-top:10px;">'+
-    '<div style="font-size:15px;font-weight:700;margin-bottom:8px;">🥄 Massas e recheios a produzir</div>';
-  if(massas.length){ html+='<div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin:6px 0 4px;">Massas ('+_fmtKg(totMassa)+' kg)</div>'+
-    massas.map(([n,kg])=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed var(--border);"><span>⚖️ '+n+'</span><strong>'+_fmtKg(kg)+' kg</strong></div>').join(''); }
-  if(recheios.length){ html+='<div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin:10px 0 4px;">Recheios ('+_fmtKg(totRech)+' kg)</div>'+
-    recheios.map(([n,kg])=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed var(--border);"><span>🥄 '+n+'</span><strong>'+_fmtKg(kg)+' kg</strong></div>').join(''); }
-  html+='</div>';
+    '<input type="text" id="sim-busca" value="'+String(_simBusca).replace(/"/g,'&quot;')+'" oninput="simBuscar(this.value)" placeholder="🔍 Buscar massa, recheio ou matéria-prima..." style="width:100%;font-size:15px;padding:12px 14px;border-radius:10px;border:1px solid var(--border-md,#d1d5db);box-sizing:border-box;">'+
+  '</div>';
+  html+='<div id="sim-listas">'+_simListasHTML()+'</div>';
 
-  // Matérias-primas de acompanhamento mensal (tabela separada)
+  return html;
+}
+
+/* As três listas, filtradas pela busca. Fica separado do resto para
+   digitar não redesenhar a tela inteira e o campo não perder o foco. */
+function _simListasHTML(){
+  if(!_simResData) return '';
+  const d=_simResData;
+  const q=_normNome(_simBusca||'');
+  const bate=n=>!q || _normNome(n||'').includes(q);
+
+  const massas=Object.entries(d.massas).filter(([n])=>bate(n)).sort((a,b)=>b[1]-a[1]);
+  const recheios=Object.entries(d.recheios).filter(([n])=>bate(n)).sort((a,b)=>b[1]-a[1]);
+  const mpTodas=Object.values(d.mp).sort((a,b)=>b.kg-a.kg);
+
+  // recheio comprado pronto também é matéria-prima: entra nas duas listas
+  const mpExtras=[];
+  Object.entries(d.recheios).forEach(([n,kg])=>{
+    const m=_simEhMateriaPrima(n);
+    if(!m) return;
+    if(mpTodas.some(x=>_normNome(x.mpNome||'')===_normNome(n))) return;   // já está lá
+    mpExtras.push({mpCodigo:m.codigo||m.firestoreId||'', mpNome:m.nome||n, mpUnidade:m.unidade||'kg', kg, vemDoRecheio:true});
+  });
+  const mp=mpTodas.concat(mpExtras).sort((a,b)=>b.kg-a.kg).filter(m=>bate(m.mpNome)||bate(m.mpCodigo));
+
+  const totMassa=massas.reduce((s,[,kg])=>s+kg,0), totRech=recheios.reduce((s,[,kg])=>s+kg,0);
+  const linha=(icone,nome,valor,extra)=>'<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--border);">'+
+    '<span style="flex:1;min-width:0;">'+icone+' '+nome+(extra||'')+'</span><strong style="white-space:nowrap;">'+valor+'</strong></div>';
+
+  let html='';
+
+  if(massas.length || recheios.length){
+    html+='<div class="card" style="margin-top:10px;">'+
+      '<div style="font-size:15px;font-weight:700;margin-bottom:8px;">🥄 Massas e recheios a produzir</div>';
+    if(massas.length) html+='<div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin:6px 0 4px;">Massas ('+_fmtKg(totMassa)+' kg)</div>'+
+      massas.map(([n,kg])=>linha('⚖️',n,_fmtKg(kg)+' kg')).join('');
+    if(recheios.length) html+='<div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin:10px 0 4px;">Recheios ('+_fmtKg(totRech)+' kg)</div>'+
+      recheios.map(([n,kg])=>{
+        const ehMp=_simEhMateriaPrima(n);
+        return linha('🥄',n,_fmtKg(kg)+' kg',
+          ehMp?' <span style="font-size:10px;font-weight:700;color:#16a34a;background:#f0fdf4;border-radius:99px;padding:1px 7px;">também é MP</span>':'');
+      }).join('');
+    html+='</div>';
+  }
+
   const mpMensal=mp.filter(m=>_SIM_MP_MENSAL.some(c=>_codEq(c,m.mpCodigo)));
   if(mpMensal.length){
     const totMensal=mpMensal.reduce((s,m)=>s+m.kg,0);
     html+='<div class="card" style="margin-top:10px;border-left:3px solid var(--mc-dourado);background:linear-gradient(135deg,var(--bg-primary),#fffbeb);">'+
       '<div style="font-size:15px;font-weight:700;margin-bottom:2px;">📅 Análise mensal ('+mpMensal.length+')</div>'+
       '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Itens que você acompanha mês a mês</div>'+
-      mpMensal.map(m=>'<div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;padding:6px 0;border-bottom:1px dashed var(--border);"><div><strong>'+m.mpNome+'</strong>'+(m.mpCodigo?' <span style="font-size:11px;color:var(--text-secondary);">'+m.mpCodigo+'</span>':'')+'</div><strong style="color:#d97706;white-space:nowrap;">'+_fmtKg(m.kg)+' '+(m.mpUnidade||'kg')+'</strong></div>').join('')+
+      mpMensal.map(m=>linha('',('<strong>'+m.mpNome+'</strong>'+(m.mpCodigo?' <span style="font-size:11px;color:var(--text-secondary);">'+m.mpCodigo+'</span>':'')),
+        '<span style="color:#d97706;">'+_fmtKg(m.kg)+' '+(m.mpUnidade||'kg')+'</span>')).join('')+
       '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;padding-top:8px;"><span>Total</span><span style="color:#d97706;">'+_fmtKg(totMensal)+' kg</span></div>'+
       '</div>';
   }
 
-  // Matérias-primas necessárias (todas) — com busca
-  html+='<div class="card" style="margin-top:10px;border-left:3px solid var(--mc-verde);">'+
-    '<div style="font-size:15px;font-weight:700;margin-bottom:8px;">🧪 Matérias-primas necessárias ('+mp.length+')</div>';
-  if(!mp.length) html+='<div class="empty">Nada a calcular.</div>';
-  else {
-    html+='<input type="text" oninput="simFiltrarMP(this.value)" placeholder="🔍 Buscar matéria-prima..." style="width:100%;font-size:14px;padding:10px;border-radius:8px;border:1px solid var(--border-md,#d1d5db);box-sizing:border-box;margin-bottom:8px;">';
-    html+=mp.map(m=>{ const mensal=_SIM_MP_MENSAL.some(c=>_codEq(c,m.mpCodigo)); return '<div class="sim-mp-row" data-s="'+_normNome((m.mpNome||'')+' '+(m.mpCodigo||''))+'" style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--border);"><div>'+(mensal?'📅 ':'')+'<strong>'+m.mpNome+'</strong>'+(m.mpCodigo?' <span style="font-size:11px;color:var(--text-secondary);">'+m.mpCodigo+'</span>':'')+'</div><strong style="color:var(--mc-verde);white-space:nowrap;">'+_fmtKg(m.kg)+' '+(m.mpUnidade||'kg')+'</strong></div>'; }).join('');
+  if(mp.length){
+    html+='<div class="card" style="margin-top:10px;border-left:3px solid var(--mc-verde);">'+
+      '<div style="font-size:15px;font-weight:700;margin-bottom:8px;">🧪 Matérias-primas necessárias ('+mp.length+')</div>'+
+      mp.map(m=>linha('',('<strong>'+m.mpNome+'</strong>'+(m.mpCodigo?' <span style="font-size:11px;color:var(--text-secondary);">'+m.mpCodigo+'</span>':'')+
+        (m.vemDoRecheio?' <span style="font-size:10px;font-weight:700;color:#7c3aed;background:#f5f3ff;border-radius:99px;padding:1px 7px;">comprado pronto</span>':'')),
+        _fmtKg(m.kg)+' '+(m.mpUnidade||'kg'))).join('')+
+      '</div>';
   }
-  html+='</div>';
+
+  if(q && !massas.length && !recheios.length && !mp.length){
+    html+='<div class="empty" style="margin-top:10px;padding:22px;text-align:center;color:var(--text-secondary);">Nada encontrado para "'+_simBusca+'".</div>';
+  }
   return html;
+}
+
+function simTogglePrev(){ _simPrevAberto=!_simPrevAberto; renderSim(); }
+window.simTogglePrev=simTogglePrev;
+function simToggleItens(){ _simItensAberto=!_simItensAberto; renderSim(); }
+window.simToggleItens=simToggleItens;
+
+/* Busca única: filtra massas, recheios e matérias-primas ao mesmo tempo.
+   Redesenha só as listas, para o campo não perder o foco enquanto digita. */
+function simBuscar(v){
+  _simBusca=v||'';
+  const box=document.getElementById('sim-listas');
+  if(box) box.innerHTML=_simListasHTML();
+}
+window.simBuscar=simBuscar;
+
+/* Um recheio que também é matéria-prima (requeijão, goiabada, salsicha…)
+   é comprado pronto: precisa aparecer nas duas listas, senão quem procura
+   pela matéria-prima não encontra. */
+function _simEhMateriaPrima(nome){
+  const n=_normNome(nome||'');
+  if(!n) return null;
+  return (materiasPrimas||[]).find(m=>_normNome(m.nome||'')===n) || null;
 }
 
 function renderSim(){
@@ -26611,7 +26682,12 @@ function renderSim(){
     corpo='<div class="card">'+
       semSel+
       '<div class="card-label">Dia do plano (Confeitaria)</div>'+chips+
-      '<div style="font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;margin-bottom:4px;">Produtos no plano</div>'+prevHtml+
+      // a lista de produtos fica recolhida: o que interessa é o resultado,
+      // não repetir o plano inteiro na tela
+      '<button onclick="simTogglePrev()" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--bg-page);border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;font-family:inherit;margin-bottom:'+(_simPrevAberto?'8px':'0')+';">'+
+        '<span style="font-size:12px;font-weight:700;color:var(--text-secondary);">PRODUTOS NO PLANO ('+prev.length+')</span>'+
+        '<span style="font-size:13px;color:var(--text-muted);">'+(_simPrevAberto?'▲ ocultar':'▼ ver')+'</span></button>'+
+      (_simPrevAberto?prevHtml:'')+
       (prev.length?'<button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="simCalcularPlano()">Calcular 🧮</button>':'')+
       '</div>';
   }
