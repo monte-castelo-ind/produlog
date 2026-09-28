@@ -5089,9 +5089,29 @@ let massaSel=null, dataMassa=null, recheioSel=null, dataRecheio=null;
 let registros=[], regMassas=[], regRecheios=[];
 
 // Listeners Firestore
+
+/* Mensagem de tela vazia que sabe a diferença entre "ainda carregando"
+   e "não existe nada". Evita o susto de achar que os dados sumiram. */
+function _vazio(txt, sub){
+  if(!window._regsCarregou){
+    return '<div class="empty" style="padding:30px;text-align:center;color:var(--text-secondary);">'+
+      '<div style="font-size:28px;margin-bottom:8px;">⏳</div>'+
+      '<div style="font-size:14px;font-weight:600;">Carregando...</div>'+
+      '<div style="font-size:12px;margin-top:4px;">Buscando os dados no servidor.</div></div>';
+  }
+  return '<div class="empty" style="padding:24px;text-align:center;color:var(--text-secondary);">'+txt+
+    (sub?('<div style="font-size:12px;margin-top:5px;">'+sub+'</div>'):'')+'</div>';
+}
+window._vazio=_vazio;
+
+/* Os dados vêm do Firebase depois que a tela já desenhou. Sem saber
+   disso, as telas mostravam "nenhum registro" no primeiro instante — o
+   que parecia que os lançamentos tinham sumido. Esta marca diz quando
+   a primeira resposta chegou. */
 onSnapshot(collection(db,'registros'), snap=>{
   try{
     registros=snap.docs.map(d=>({'firestoreId':d.id,...d.data()})).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+    window._regsCarregou=true;
     atualizarTela();
     if(typeof _ctrlAtualizarBadge==='function') _ctrlAtualizarBadge();
   }catch(e){ console.error('registros snap:',e); }
@@ -5562,7 +5582,7 @@ function renderMeusReg(dataFiltro){
   window._mrData = df;
   document.getElementById('mr-sub').textContent=`${regConf.length} registro(s) total`;
   const el=document.getElementById('mr-content');
-  if(!regConf.length){el.innerHTML='<div class="empty">Nenhum registro ainda.</div>';return;}
+  if(!regConf.length){el.innerHTML=_vazio('Nenhum registro ainda.');return;}
 
   const selectHtml=`<div style="margin-bottom:12px;">
     <select onchange="renderMeusReg(this.value)" style="font-size:15px;padding:10px 12px;border-radius:10px;border:0.5px solid var(--border-md);background:var(--bg-primary);color:var(--text-primary);width:100%;font-family:inherit;">
@@ -5775,7 +5795,7 @@ function renderCozReg(dataFiltro){
   window._cozData = df;
   document.getElementById('coz-reg-sub').textContent=`${regRecheios.length} registro(s) total`;
   const el=document.getElementById('coz-reg-content');
-  if(!regRecheios.length){el.innerHTML='<div class="empty">Nenhum registro ainda.</div>';return;}
+  if(!regRecheios.length){el.innerHTML=_vazio('Nenhum registro ainda.');return;}
 
   const selectHtml=`<div style="margin-bottom:12px;">
     <select onchange="renderCozReg(this.value)" style="font-size:15px;padding:10px 12px;border-radius:10px;border:0.5px solid var(--border-md);background:var(--bg-primary);color:var(--text-primary);width:100%;font-family:inherit;">
@@ -6290,7 +6310,7 @@ function renderEmbalagem(){
   const manuais=embManual.filter(r=>r.data===(dataSelEmb||hoje()));
   const total=regs.length+manuais.length;
   const feitos=regs.filter(r=>r.embalagem&&r.embalagem.feito).length+manuais.length; // manuais são sempre feitos
-  if(!total){el.innerHTML='<div class="empty">Nenhum produto neste dia.</div>';return;}
+  if(!total){el.innerHTML=_vazio('Nenhum produto neste dia.');return;}
   const pct=Math.round(feitos/total*100);const barColor=pct===100?'#4caf50':'var(--mc-dourado)';
   // Coletar alertas não lidos dos registros do dia
   const alertasDia=[];
@@ -6786,7 +6806,7 @@ function renderExpViewSelData(){
     const liberadosTotal=regs.reduce((s,r)=>s+((r.expedicao&&r.expedicao.totalLiberado)||0),0);
     return {data, regs, liberadosTotal};
   }).filter(x=>x.regs.length>0);
-  if(!datasComStatus.length){el.innerHTML='<div class="empty">Nenhum dia com produtos embalados.</div>';return;}
+  if(!datasComStatus.length){el.innerHTML=_vazio('Nenhum dia com produtos embalados.');return;}
   el.innerHTML=datasComStatus.map(x=>{
     const total=x.regs.length;
     const completos=x.regs.filter(r=>{
@@ -6814,7 +6834,7 @@ function renderExpView(){
   if(!el)return;
   const data=window._expViewData;
   const regs=registros.filter(r=>r.data===data&&r.embalagem&&r.embalagem.feito);
-  if(!regs.length){el.innerHTML='<div class="empty">Sem produtos embalados.</div>';return;}
+  if(!regs.length){el.innerHTML=_vazio('Sem produtos embalados.');return;}
   el.innerHTML=regs.map(r=>{
     const exp=r.expedicao||{parciais:[],totalLiberado:0};
     const qtdEmb=r.embalagem.qtdEmbalada||r.qtd;
@@ -6845,7 +6865,7 @@ function renderExpedicao(){
       '<div style="font-size:13px;font-weight:700;color:#1e3a8a;">📦 '+nControlados+' produto(s) do contêiner</div>'+
       '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Não aparecem aqui — a liberação deles é feita pela embalagem ou pela confeitaria.</div></div>'
     : '';
-  if(!regs.length){el.innerHTML=avisoCtrl+'<div class="empty">Nenhum produto embalado neste dia ainda.</div>';return;}
+  if(!regs.length){el.innerHTML=avisoCtrl+_vazio('Nenhum produto embalado neste dia ainda.');return;}
   // Separar pães (origem quadra) e salgados (resto)
   const paes=regs.filter(r=>r.origem==='quadra');
   const salgados=regs.filter(r=>r.origem!=='quadra');
@@ -8283,7 +8303,7 @@ function renderAdm(t){
         <div class="reg-detalhe">${r.qtdKg} kg${r.obs?` · <em>${r.obs}</em>`:''}</div></div>`).join('')}`;
   }
   else if(t==='embalagem'){
-    if(!registros.length){el.innerHTML='<div class="empty">Nenhum registro ainda.</div>';return;}
+    if(!registros.length){el.innerHTML=_vazio('Nenhum registro ainda.');return;}
     el.innerHTML = makeSelect('sel-emb-adm', datasReg, df, 'embalagem');
     const filt=registros.filter(r=>r.data===df);
     const total=filt.length,feitos=filt.filter(r=>r.embalagem&&r.embalagem.feito).length;
@@ -8306,7 +8326,7 @@ function renderAdm(t){
         }).join('')}`;
   }
   else if(t==='expedicao'){
-    if(!registros.length){el.innerHTML='<div class="empty">Nenhum registro ainda.</div>';return;}
+    if(!registros.length){el.innerHTML=_vazio('Nenhum registro ainda.');return;}
     el.innerHTML = makeSelect('sel-exp-adm', datasReg, df, 'expedicao');
     const filt=registros.filter(r=>r.data===df&&r.embalagem&&r.embalagem.feito);
     const total=filt.length;
@@ -8335,7 +8355,7 @@ function renderAdm(t){
         }).join('')}`;
   }
   else if(t==='producao'){
-    if(!registros.length){el.innerHTML='<div class="empty">Nenhum registro ainda.</div>';return;}
+    if(!registros.length){el.innerHTML=_vazio('Nenhum registro ainda.');return;}
     el.innerHTML = makeSelect('sel-prod-adm', datasReg, df, 'producao');
     const filt=registros.filter(r=>r.data===df&&r.origem!=='quadra');
     el.innerHTML+=!filt.length?'<div class="empty">Sem registros.</div>':
@@ -8347,7 +8367,7 @@ function renderAdm(t){
         </div></div>`).join('');
   }
   else if(t==='quebras'){
-    if(!registros.length){el.innerHTML='<div class="empty">Nenhum registro ainda.</div>';return;}
+    if(!registros.length){el.innerHTML=_vazio('Nenhum registro ainda.');return;}
     el.innerHTML = makeSelect('sel-qb-adm', datasReg, df, 'quebras');
     const filt=registros.filter(r=>r.data===df&&r.origem!=='quadra');
     el.innerHTML+=!filt.length?'<div class="empty">Sem registros.</div>':
@@ -18086,7 +18106,7 @@ function renderLaDias(){
   const grupos={};
   lista.forEach(r=>{ const t=laTipo(r); const k=r.data+'|'+t; (grupos[k]=grupos[k]||{data:r.data,tipo:t,itens:0,pct:0})&&(grupos[k].itens++,grupos[k].pct+=parseInt(r.qtd)||0); });
   const arr=Object.values(grupos).sort((a,b)=>{ const dk=laDataKey(b.data).localeCompare(laDataKey(a.data)); return dk!==0?dk:(a.tipo<b.tipo?-1:1); });
-  if(!arr.length){ el.innerHTML='<div class="empty" style="padding:24px;">Nenhuma produção registrada.</div>'; return; }
+  if(!arr.length){ el.innerHTML=_vazio('Nenhuma produção registrada.','Os lançamentos aparecem aqui assim que a confeitaria registrar.'); return; }
   let html=laNavbar('s-la-dias')+'<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;padding:10px 12px;background:rgba(37,99,235,.06);border-radius:10px;">Marque um dia quando você <strong>lançar a produção cheia dele no ERP</strong>. Antes disso, os produtos ficam disponíveis para liberação antecipada.</div>';
   html+='<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center;flex-wrap:wrap;"><input type="text" id="la-ate-data" placeholder="dd/mm/aaaa" value="06/07/2026" style="flex:1;min-width:120px;font-size:13px;padding:8px 10px;border-radius:8px;border:1px solid var(--border,#d1d5db);"><button onclick="laMarcarAte()" class="btn" style="background:#16a34a;color:#fff;border:none;font-size:13px;padding:8px 12px;border-radius:8px;cursor:pointer;">✓ Marcar tudo até esta data</button></div>';
   let diaAtual='';
@@ -19700,8 +19720,7 @@ function renderLaAjustes(){
   const el=document.getElementById('la-ajustes-content'); if(!el) return;
   const abertos=laAjustes.filter(a=>(a.status||'aberto')==='aberto');
   const fechados=laAjustes.filter(a=>a.status==='fechado').slice(0,20);
-  // coluna mais estreita: em tela larga o card esticado fica difícil de ler
-  let html='<div style="max-width:720px;margin:0 auto;">'+laNavbar('s-la-ajustes')+
+  let html=laNavbar('s-la-ajustes')+
   // avisos de acompanhamento: o que espera embalagem e o que já foi priorizado
   (laSemEmbalar().length
     ? '<button onclick="laAbrirSemEmbalar()" class="card" style="display:flex;align-items:center;gap:11px;width:100%;margin-bottom:10px;cursor:pointer;border:2px solid #d97706;background:#fffbeb;text-align:left;font-family:inherit;">'+
@@ -19738,7 +19757,7 @@ function renderLaAjustes(){
   if(abertos.length){
     html+=abertos.map(a=>{
       const diaJaLancado=laDiaLancado(a.data,a.tipo);
-      return '<div class="card" style="max-width:720px;margin:0 auto 8px;border-left:4px solid '+(diaJaLancado?'#dc2626':'#d97706')+';">'+
+      return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+(diaJaLancado?'#dc2626':'#d97706')+';">'+
         // cabeçalho: produto e quantidade
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'+
           '<div style="flex:1;min-width:0;">'+
@@ -19775,7 +19794,7 @@ function renderLaAjustes(){
     html+='<div style="font-size:13px;font-weight:700;margin:16px 0 8px;color:var(--text-secondary);">Histórico (fechados)</div>';
     html+=fechados.map(a=>'<div class="card" style="margin-bottom:6px;opacity:.7;"><div style="display:flex;justify-content:space-between;"><div style="font-size:13px;">'+a.produto+' · '+a.qtd+' pct</div><div style="font-size:11px;color:#16a34a;font-weight:700;">✓ fechado '+(a.fechadoEm||'')+'</div></div></div>').join('');
   }
-  el.innerHTML=html+'</div>';
+  el.innerHTML=html;
 }
 window.renderLaAjustes=renderLaAjustes;
 
