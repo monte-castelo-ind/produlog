@@ -19700,7 +19700,8 @@ function renderLaAjustes(){
   const el=document.getElementById('la-ajustes-content'); if(!el) return;
   const abertos=laAjustes.filter(a=>(a.status||'aberto')==='aberto');
   const fechados=laAjustes.filter(a=>a.status==='fechado').slice(0,20);
-  let html=laNavbar('s-la-ajustes')+
+  // coluna mais estreita: em tela larga o card esticado fica difícil de ler
+  let html='<div style="max-width:720px;margin:0 auto;">'+laNavbar('s-la-ajustes')+
   // avisos de acompanhamento: o que espera embalagem e o que já foi priorizado
   (laSemEmbalar().length
     ? '<button onclick="laAbrirSemEmbalar()" class="card" style="display:flex;align-items:center;gap:11px;width:100%;margin-bottom:10px;cursor:pointer;border:2px solid #d97706;background:#fffbeb;text-align:left;font-family:inherit;">'+
@@ -19737,27 +19738,44 @@ function renderLaAjustes(){
   if(abertos.length){
     html+=abertos.map(a=>{
       const diaJaLancado=laDiaLancado(a.data,a.tipo);
-      return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+(diaJaLancado?'#dc2626':'#d97706')+';">'+
-        '<div style="display:flex;justify-content:space-between;align-items:start;"><div><div style="font-size:15px;font-weight:800;">'+a.produto+' <span style="font-size:12px;color:var(--text-secondary);">'+(a.cod?'#'+a.cod:'')+'</span></div>'+
-        '<div style="font-size:11px;color:var(--text-secondary);">ENTRADA de '+a.qtd+' pct · '+laTipoLabel(a.tipo)+' '+(a.data||'?')+' · por '+(a.criadoPor||'')+'</div>'+
-        (a.qtdSolicitada&&a.qtdSolicitada!==a.qtd?'<div style="font-size:11px;color:var(--text-secondary);">(solicitado: '+a.qtdSolicitada+' pct)</div>':'')+
-        (a.entradaManual?'<div style="font-size:11px;font-weight:700;color:#2563eb;margin-top:2px;">📥 entrada lançada à mão (processo antigo)'+(a.obsManual?(' · '+a.obsManual):'')+'</div>':'')+
-        (a.acimaEmbalado?'<div style="font-size:11px;font-weight:700;color:#d97706;margin-top:2px;">⚠️ liberado acima do embalado</div>':'')+
-        (diaJaLancado?'<div style="font-size:12px;font-weight:700;color:#dc2626;margin-top:4px;">🔴 Dia já lançado no ERP — faça a SAÍDA agora!</div>':'<div style="font-size:11px;color:var(--text-secondary);margin-top:4px;">Aguardando o dia ser lançado.</div>')+
-        '</div><div style="font-size:20px;font-weight:900;color:#d97706;">'+a.qtd+'</div></div>'+
-        '<div style="display:flex;gap:6px;margin-top:8px;">'+
-        '<button onclick="laCopiarInstrucao(\'entrada\',\''+escapeJsStr(a.cod||'')+'\',\''+escapeJsStr(a.produto||'')+'\','+(a.qtd||0)+')" class="btn" style="flex:1;background:#2563eb;color:#fff;border:none;font-size:12px;">📋 Instrução ENTRADA</button>'+
-        (diaJaLancado?'<button onclick="laCopiarInstrucao(\'saida\',\''+escapeJsStr(a.cod||'')+'\',\''+escapeJsStr(a.produto||'')+'\','+(a.qtd||0)+')" class="btn" style="flex:1;background:#7c3aed;color:#fff;border:none;font-size:12px;">📋 Instrução SAÍDA</button>':'')+
+      return '<div class="card" style="max-width:720px;margin:0 auto 8px;border-left:4px solid '+(diaJaLancado?'#dc2626':'#d97706')+';">'+
+        // cabeçalho: produto e quantidade
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-size:15px;font-weight:800;line-height:1.25;">'+a.produto+
+              (a.cod?' <span style="font-size:11px;font-weight:600;color:var(--text-muted);">#'+a.cod+'</span>':'')+
+              (a.prioridadeEm?' <span style="font-size:10px;font-weight:800;color:#2563eb;background:#dbeafe;border-radius:99px;padding:1px 7px;">⬆️ na fila</span>':'')+'</div>'+
+            '<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">'+
+              laTipoLabel(a.tipo)+' · produção de '+(a.data||'sem dia')+'</div>'+
+            // quando e por quem foi liberado
+            '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">'+
+              '🕐 liberado em '+(a.criadoEm||'—')+(a.criadoPor?(' por '+a.criadoPor):'')+'</div>'+
+            (a.qtdSolicitada&&a.qtdSolicitada!==a.qtd?'<div style="font-size:11px;color:var(--text-muted);">solicitado: '+a.qtdSolicitada+' pct</div>':'')+
+          '</div>'+
+          '<div style="text-align:right;white-space:nowrap;">'+
+            '<div style="font-size:20px;font-weight:900;color:#d97706;line-height:1;">'+a.qtd+'</div>'+
+            '<div style="font-size:10px;color:var(--text-muted);">pacotes</div></div>'+
         '</div>'+
-        '<button onclick="laFecharAjuste(\''+a.firestoreId+'\')" class="btn" style="width:100%;margin-top:6px;background:'+(diaJaLancado?'#dc2626':'#fff')+';color:'+(diaJaLancado?'#fff':'#dc2626')+';border:1px solid #dc2626;">'+(eligoPronto()?'↩ Lançar SAÍDA no ELIGO e fechar':'↩ Fiz o ajuste de SAÍDA (fechar par)')+'</button>'+
-        '</div>';
+        // avisos, só quando existem
+        (a.entradaManual?'<div style="font-size:11px;font-weight:700;color:#2563eb;margin-top:5px;">📥 entrada lançada à mão'+(a.obsManual?(' · '+a.obsManual):'')+'</div>':'')+
+        (a.acimaEmbalado?'<div style="font-size:11px;font-weight:700;color:#d97706;margin-top:3px;">⚠️ liberado acima do embalado</div>':'')+
+        (a.eligoEntradaId?'<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">ELIGO nº '+a.eligoEntradaId+'</div>':'')+
+        (diaJaLancado
+          ? '<div style="font-size:12px;font-weight:700;color:#dc2626;margin-top:6px;">🔴 Dia já lançado no ERP — faça a SAÍDA agora</div>'
+          : '<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">Aguardando o dia ser lançado.</div>')+
+        // ações
+        '<button onclick="laFecharAjuste(\''+a.firestoreId+'\')" class="btn" style="width:100%;margin-top:9px;background:'+(diaJaLancado?'#dc2626':'#fff')+';color:'+(diaJaLancado?'#fff':'#dc2626')+';border:1px solid #dc2626;">'+
+          (eligoPronto()?'↩ Lançar SAÍDA no ELIGO e fechar':'↩ Fiz o ajuste de SAÍDA (fechar par)')+'</button>'+
+        '<button onclick="laCopiarInstrucao(\'entrada\',\''+escapeJsStr(a.cod||'')+'\',\''+escapeJsStr(a.produto||'')+'\','+(a.qtd||0)+')" style="width:100%;margin-top:5px;background:none;border:none;color:var(--text-muted);font-size:11px;cursor:pointer;font-family:inherit;padding:4px;">📋 copiar instrução de entrada'+
+          (diaJaLancado?' · <span onclick="event.stopPropagation();laCopiarInstrucao(\'saida\',\''+escapeJsStr(a.cod||'')+'\',\''+escapeJsStr(a.produto||'')+'\','+(a.qtd||0)+')" style="color:#7c3aed;">saída</span>':'')+'</button>'+
+      '</div>';
     }).join('');
   }
   if(fechados.length){
     html+='<div style="font-size:13px;font-weight:700;margin:16px 0 8px;color:var(--text-secondary);">Histórico (fechados)</div>';
     html+=fechados.map(a=>'<div class="card" style="margin-bottom:6px;opacity:.7;"><div style="display:flex;justify-content:space-between;"><div style="font-size:13px;">'+a.produto+' · '+a.qtd+' pct</div><div style="font-size:11px;color:#16a34a;font-weight:700;">✓ fechado '+(a.fechadoEm||'')+'</div></div></div>').join('');
   }
-  el.innerHTML=html;
+  el.innerHTML=html+'</div>';
 }
 window.renderLaAjustes=renderLaAjustes;
 
