@@ -26613,6 +26613,7 @@ function simAbrirCfgMensal(){
       '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Escolha o que acompanhar mês a mês. Pode ser matéria-prima, massa ou recheio. A ordem aqui é a ordem na tela.</div></div>'+
     '<div id="sim-cfg-corpo" style="flex:1;overflow-y:auto;padding:12px 16px;"></div>'+
     '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<div id="sim-cfg-status" style="font-size:12px;text-align:center;min-height:17px;margin-bottom:6px;"></div>'+
       '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'sim-cfg-modal\').remove()">Fechar</button></div>'+
   '</div>';
   document.body.appendChild(ov);
@@ -26686,22 +26687,47 @@ function simCfgSugestoes(){
 }
 window.simCfgSugestoes=simCfgSugestoes;
 
+/* Salva a configuração. É chamado ANTES de redesenhar: se o desenho
+   falhar por qualquer motivo, a gravação já aconteceu — antes, um erro
+   no render impedia o salvamento e a mudança sumia ao recarregar. */
 async function _simCfgSalvar(){
   try{
     await setDoc(doc(db,'configuracoes','simAnaliseMensal'),
       {itens:_simMensal, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
-  }catch(e){ alert('Erro ao salvar: '+e.message); }
+    _simCfgAviso('✓ salvo', '#16a34a');
+    return true;
+  }catch(e){
+    _simCfgAviso('⚠️ não salvou: '+e.message, '#dc2626');
+    alert('Não consegui salvar a configuração:\n\n'+e.message+'\n\nA mudança vale só nesta sessão.');
+    return false;
+  }
 }
+
+// aviso curto dentro do modal, para dar certeza de que gravou
+function _simCfgAviso(txt, cor){
+  const el=document.getElementById('sim-cfg-status');
+  if(!el) return;
+  el.innerHTML='<span style="color:'+cor+';font-weight:700;">'+txt+'</span>';
+  if(cor==='#16a34a') setTimeout(()=>{ if(el.textContent.includes('salvo')) el.innerHTML=''; }, 2200);
+}
+
+// redesenhar nunca pode derrubar o salvamento
+function _simCfgRedesenhar(){
+  try{ simCfgRender(); }catch(e){ console.error('simCfgRender',e); }
+  try{ if(typeof renderSim==='function' && document.querySelector('.screen.active')?.id==='s-sim') renderSim(); }
+  catch(e){ console.error('renderSim',e); }
+}
+
 async function simCfgAdicionar(tipo, chave){
   _simMensal=[...(_simMensal||[]), {tipo, chave}];
-  simCfgRender(); renderSim();
   await _simCfgSalvar();
+  _simCfgRedesenhar();
 }
 window.simCfgAdicionar=simCfgAdicionar;
 async function simCfgRemover(i){
   _simMensal=(_simMensal||[]).filter((_,k)=>k!==i);
-  simCfgRender(); renderSim();
   await _simCfgSalvar();
+  _simCfgRedesenhar();
 }
 window.simCfgRemover=simCfgRemover;
 async function simCfgMover(i, dir){
@@ -26710,8 +26736,8 @@ async function simCfgMover(i, dir){
   if(j<0 || j>=lista.length) return;
   [lista[i],lista[j]]=[lista[j],lista[i]];
   _simMensal=lista;
-  simCfgRender(); renderSim();
   await _simCfgSalvar();
+  _simCfgRedesenhar();
 }
 window.simCfgMover=simCfgMover;
 
