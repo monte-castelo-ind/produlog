@@ -14849,7 +14849,23 @@ window.renderPainel=renderPainel; window.setPgPeriodo=setPgPeriodo; window.setPg
 // ===== SIMULADOR DE NECESSIDADE DE MATÉRIA-PRIMA =====
 let _simModo='avulso', _simItens=[], _simDia='todos', _simResData=null, _simSemana=null;
 // Matérias-primas acompanhadas mensalmente (aparecem também em tabela separada no simulador)
-const _SIM_MP_MENSAL=['14058','14132','14098','14125','14105','14099','14113','14093','14033','14153','14139','14067'];
+// Análise mensal: lista configurável pelo admin (engrenagem no bloco).
+// Aceita matéria-prima, massa e recheio, e a ordem é a que estiver aqui.
+const _SIM_MENSAL_PADRAO=[
+  {tipo:'mp', chave:'14058'}, {tipo:'mp', chave:'14132'}, {tipo:'mp', chave:'14098'},
+  {tipo:'mp', chave:'14125'}, {tipo:'mp', chave:'14105'}, {tipo:'mp', chave:'14099'},
+  {tipo:'mp', chave:'14113'}, {tipo:'mp', chave:'14093'}, {tipo:'mp', chave:'14033'},
+  {tipo:'mp', chave:'14153'}, {tipo:'mp', chave:'14139'}, {tipo:'mp', chave:'14067'}
+];
+let _simMensal=_SIM_MENSAL_PADRAO.slice();
+
+onSnapshot(doc(db,'configuracoes','simAnaliseMensal'), snap=>{
+  try{
+    const d=snap.data()||{};
+    if(Array.isArray(d.itens)) _simMensal=d.itens;
+    if(document.querySelector('.screen.active')?.id==='s-sim' && typeof renderSim==='function') renderSim();
+  }catch(e){ console.error('config análise mensal',e); }
+});
 function simFiltrarMP(v){ const q=_normNome(v||''); document.querySelectorAll('.sim-mp-row').forEach(function(r){ const t=r.getAttribute('data-s')||''; r.style.display=(!q||t.indexOf(q)>=0)?'':'none'; }); }
 window.simFiltrarMP=simFiltrarMP;
 
@@ -26564,6 +26580,141 @@ function _simResultadoHTML(){
 
 /* As três listas, filtradas pela busca. Fica separado do resto para
    digitar não redesenhar a tela inteira e o campo não perder o foco. */
+/* Monta as linhas da análise mensal na ordem configurada.
+   Cada item pode ser matéria-prima, massa ou recheio. */
+function _simMensalLinhas(d, mpLista){
+  const out=[];
+  (_simMensal||[]).forEach(cfg=>{
+    if(cfg.tipo==='massa'){
+      const kg=Object.entries(d.massas||{}).find(([n])=>_normNome(n)===_normNome(cfg.chave));
+      if(kg) out.push({mpCodigo:'', mpNome:kg[0], mpUnidade:'kg', kg:kg[1], tipo:'massa'});
+    } else if(cfg.tipo==='recheio'){
+      const kg=Object.entries(d.recheios||{}).find(([n])=>_normNome(n)===_normNome(cfg.chave));
+      if(kg) out.push({mpCodigo:'', mpNome:kg[0], mpUnidade:'kg', kg:kg[1], tipo:'recheio'});
+    } else {
+      const m=(mpLista||[]).find(x=>_codEq(cfg.chave, x.mpCodigo));
+      if(m) out.push({...m, tipo:'mp'});
+    }
+  });
+  return out;
+}
+
+/* ── configuração da análise mensal ─────────────────────────────── */
+let _simCfgBusca='';
+function simAbrirCfgMensal(){
+  if(!(window.adminMode||window.setorAtual==='admin')){ alert('Só o admin configura a análise mensal.'); return; }
+  _simCfgBusca='';
+  const ov=document.createElement('div');
+  ov.id='sim-cfg-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">⚙️ Análise mensal</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Escolha o que acompanhar mês a mês. Pode ser matéria-prima, massa ou recheio. A ordem aqui é a ordem na tela.</div></div>'+
+    '<div id="sim-cfg-corpo" style="flex:1;overflow-y:auto;padding:12px 16px;"></div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'sim-cfg-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  simCfgRender();
+}
+window.simAbrirCfgMensal=simAbrirCfgMensal;
+
+function simCfgRender(){
+  const box=document.getElementById('sim-cfg-corpo'); if(!box) return;
+  const nomeDe=cfg=>{
+    if(cfg.tipo==='mp'){
+      const m=(materiasPrimas||[]).find(x=>_codEq(x.codigo||x.firestoreId, cfg.chave));
+      return m?(m.nome+' · '+cfg.chave):('cód '+cfg.chave);
+    }
+    return cfg.chave;
+  };
+  const icone=t=>t==='massa'?'⚖️':(t==='recheio'?'🥄':'🧪');
+
+  let h='<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:6px;">NA ANÁLISE ('+(_simMensal||[]).length+')</div>';
+  h+=(_simMensal||[]).length
+    ? (_simMensal||[]).map((cfg,i)=>'<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--border);border-radius:9px;margin-bottom:5px;">'+
+        '<span style="flex:0 0 auto;font-size:16px;">'+icone(cfg.tipo)+'</span>'+
+        '<span style="flex:1;min-width:0;font-size:13px;font-weight:600;">'+nomeDe(cfg)+'</span>'+
+        '<button onclick="simCfgMover('+i+',-1)"'+(i===0?' disabled':'')+' title="Subir" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);color:'+(i===0?'#cbd5e1':'var(--text-secondary)')+';border-radius:6px;padding:4px 9px;font-size:13px;cursor:pointer;font-family:inherit;">▲</button>'+
+        '<button onclick="simCfgMover('+i+',1)"'+(i===(_simMensal.length-1)?' disabled':'')+' title="Descer" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);color:'+(i===(_simMensal.length-1)?'#cbd5e1':'var(--text-secondary)')+';border-radius:6px;padding:4px 9px;font-size:13px;cursor:pointer;font-family:inherit;">▼</button>'+
+        '<button onclick="simCfgRemover('+i+')" title="Tirar" style="flex:0 0 auto;background:none;border:1px solid #fecaca;color:#dc2626;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;font-family:inherit;">✕</button>'+
+      '</div>').join('')
+    : '<div style="font-size:12px;color:var(--text-secondary);padding:12px;text-align:center;">Nada na análise. Adicione abaixo.</div>';
+
+  h+='<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin:16px 0 6px;">ADICIONAR</div>'+
+    '<input type="text" id="sim-cfg-busca" value="'+String(_simCfgBusca).replace(/"/g,'&quot;')+'" oninput="simCfgBuscar(this.value)" placeholder="🔍 Buscar matéria-prima, massa ou recheio" autocomplete="off" style="width:100%;padding:11px;min-height:46px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;">'+
+    '<div id="sim-cfg-sug"></div>';
+  box.innerHTML=h;
+  simCfgSugestoes();
+}
+window.simCfgRender=simCfgRender;
+
+function simCfgBuscar(v){ _simCfgBusca=v||''; simCfgSugestoes(); }
+window.simCfgBuscar=simCfgBuscar;
+
+function simCfgSugestoes(){
+  const box=document.getElementById('sim-cfg-sug'); if(!box) return;
+  const q=_normNome(_simCfgBusca);
+  if(!q || q.length<2){ box.innerHTML='<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Digite ao menos 2 letras.</div>'; return; }
+  const ja=cfg=>(_simMensal||[]).some(x=>x.tipo===cfg.tipo && _normNome(String(x.chave))===_normNome(String(cfg.chave)));
+
+  const achados=[];
+  (materiasPrimas||[]).forEach(m=>{
+    const cod=String(m.codigo||m.firestoreId||'');
+    if(_normNome(m.nome||'').includes(q) || cod.includes(_simCfgBusca.trim()))
+      achados.push({tipo:'mp', chave:cod, label:(m.nome||'')+' · '+cod, icone:'🧪'});
+  });
+  (typeof MASSAS!=='undefined'?MASSAS:[]).forEach(n=>{
+    const nome=(typeof n==='string')?n:(n.nome||'');
+    if(_normNome(nome).includes(q)) achados.push({tipo:'massa', chave:nome, label:nome, icone:'⚖️'});
+  });
+  (typeof RECHEIOS!=='undefined'?RECHEIOS:[]).forEach(n=>{
+    const nome=(typeof n==='string')?n:(n.nome||'');
+    if(_normNome(nome).includes(q)) achados.push({tipo:'recheio', chave:nome, label:nome, icone:'🥄'});
+  });
+
+  box.innerHTML = achados.length
+    ? achados.slice(0,20).map(a=>{
+        const dentro=ja(a);
+        return '<button type="button"'+(dentro?' disabled':'')+' onclick="simCfgAdicionar(\''+escapeJsStr(a.tipo)+'\',\''+escapeJsStr(String(a.chave))+'\')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:'+(dentro?'var(--bg-page)':'#fff')+';border:1px solid var(--border);border-radius:9px;padding:10px 11px;margin-top:6px;cursor:'+(dentro?'default':'pointer')+';font-family:inherit;opacity:'+(dentro?'.55':'1')+';">'+
+          '<span style="font-size:15px;">'+a.icone+'</span>'+
+          '<span style="flex:1;min-width:0;font-size:13px;font-weight:600;">'+a.label+'</span>'+
+          '<span style="font-size:11px;color:'+(dentro?'var(--text-muted)':'var(--mc-azul,#2563eb)')+';font-weight:700;">'+(dentro?'já está':'+ adicionar')+'</span></button>';
+      }).join('')
+    : '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">Nada encontrado.</div>';
+}
+window.simCfgSugestoes=simCfgSugestoes;
+
+async function _simCfgSalvar(){
+  try{
+    await setDoc(doc(db,'configuracoes','simAnaliseMensal'),
+      {itens:_simMensal, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Erro ao salvar: '+e.message); }
+}
+async function simCfgAdicionar(tipo, chave){
+  _simMensal=[...(_simMensal||[]), {tipo, chave}];
+  simCfgRender(); renderSim();
+  await _simCfgSalvar();
+}
+window.simCfgAdicionar=simCfgAdicionar;
+async function simCfgRemover(i){
+  _simMensal=(_simMensal||[]).filter((_,k)=>k!==i);
+  simCfgRender(); renderSim();
+  await _simCfgSalvar();
+}
+window.simCfgRemover=simCfgRemover;
+async function simCfgMover(i, dir){
+  const lista=[...(_simMensal||[])];
+  const j=i+dir;
+  if(j<0 || j>=lista.length) return;
+  [lista[i],lista[j]]=[lista[j],lista[i]];
+  _simMensal=lista;
+  simCfgRender(); renderSim();
+  await _simCfgSalvar();
+}
+window.simCfgMover=simCfgMover;
+
 function _simListasHTML(){
   if(!_simResData) return '';
   const d=_simResData;
@@ -26604,13 +26755,28 @@ function _simListasHTML(){
     html+='</div>';
   }
 
-  const mpMensal=mp.filter(m=>_SIM_MP_MENSAL.some(c=>_codEq(c,m.mpCodigo)));
+  const mpMensal=_simMensalLinhas(d, mp);
+  // sem nada configurado, o admin ainda vê o acesso à engrenagem
+  if(!mpMensal.length && (window.adminMode||window.setorAtual==='admin') && (massas.length||recheios.length||mp.length)){
+    html+='<div class="card" style="margin-top:10px;border-left:3px solid var(--mc-dourado);">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
+        '<div style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary);">📅 Análise mensal: nenhum item escolhido ainda.</div>'+
+        '<button onclick="simAbrirCfgMensal()" class="btn btn-secondary" style="flex:0 0 auto;">⚙️ Escolher</button></div></div>';
+  }
   if(mpMensal.length){
     const totMensal=mpMensal.reduce((s,m)=>s+m.kg,0);
     html+='<div class="card" style="margin-top:10px;border-left:3px solid var(--mc-dourado);background:linear-gradient(135deg,var(--bg-primary),#fffbeb);">'+
-      '<div style="font-size:15px;font-weight:700;margin-bottom:2px;">📅 Análise mensal ('+mpMensal.length+')</div>'+
-      '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Itens que você acompanha mês a mês</div>'+
-      mpMensal.map(m=>linha('',('<strong>'+m.mpNome+'</strong>'+(m.mpCodigo?' <span style="font-size:11px;color:var(--text-secondary);">'+m.mpCodigo+'</span>':'')),
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:15px;font-weight:700;margin-bottom:2px;">📅 Análise mensal ('+mpMensal.length+')</div>'+
+          '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Itens que você acompanha mês a mês</div>'+
+        '</div>'+
+        ((window.adminMode||window.setorAtual==='admin')
+          ? '<button onclick="simAbrirCfgMensal()" title="Escolher os itens e a ordem" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:14px;cursor:pointer;font-family:inherit;">⚙️</button>'
+          : '')+
+      '</div>'+
+      mpMensal.map(m=>linha((m.tipo==='massa'?'⚖️':(m.tipo==='recheio'?'🥄':'')),
+        ('<strong>'+m.mpNome+'</strong>'+(m.mpCodigo?' <span style="font-size:11px;color:var(--text-secondary);">'+m.mpCodigo+'</span>':'')),
         '<span style="color:#d97706;">'+_fmtKg(m.kg)+' '+(m.mpUnidade||'kg')+'</span>')).join('')+
       '<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:800;padding-top:8px;"><span>Total</span><span style="color:#d97706;">'+_fmtKg(totMensal)+' kg</span></div>'+
       '</div>';
