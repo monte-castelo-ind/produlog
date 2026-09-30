@@ -16932,19 +16932,46 @@ window.carregRemItem=carregRemItem; window.carregEditQtd=carregEditQtd;
 function _carregTemEan(cod){ return (eansList||[]).some(e=>_codEq(e.codigo, cod)); }
 function _carregSemEan(itens){ return (itens||[]).filter(i=>!_carregTemEan(i.codigo)); }
 window._carregTemEan=_carregTemEan;
+/* Uma linha do PDF → item. Dois formatos:
+   - PEDIDO (tem "R$"): Código · Descrição · Quant. · Unid. · Valor unit. · Total.
+     A quantidade é o número logo antes da unidade seguida de "R$" — o último
+     número da linha é o TOTAL EM REAIS e não pode ser lido como quantidade
+     (era o que acontecia: 672 pacotes no lugar de 32; e total com ponto de
+     milhar, R$ 28.809,00, fazia a linha sumir). Descrição em duas linhas deixa
+     a linha só com "237 12,0000 PCT R$…": o código vem colado na quantidade.
+   - CARREGAMENTO (sem "R$"): Código · Produto · Quantidade no fim — como antes. */
+function _carregNumBR(s){
+  s=String(s||'').trim();
+  if(s.indexOf(',')>=0) s=s.replace(/\./g,'').replace(',','.');
+  return parseFloat(s)||0;
+}
+function _carregLinhaItem(l){
+  l=String(l||'').replace(/\s+/g,' ').trim(); if(!l) return null;
+  if(/^(c[óo]d|separa|carregamento|classifica|endere|emitido|p[áa]gina|placa|rota)/i.test(l)) return null;
+  var m, cod, nome, qtd;
+  if(/R\$/.test(l)){
+    m=l.match(/(?:^|\s)(\d{1,6})\s+(?:(.*?)\s+)?(\d{1,3}(?:\.\d{3})*,\d{1,4}|\d+)\s*(PCT|UN|UNID|CX|KG)\s+R\$/i);
+    if(!m) return null;
+    cod=m[1]; nome=(m[2]||'').trim(); qtd=_carregNumBR(m[3]);
+  } else {
+    m=l.match(/^(\d{1,6})\s+(.+?)\s+([\d]+[.,]?\d*)\s*(?:PCT|UN|UNID|CX)?\.?\s*$/i);
+    if(!m) return null;
+    cod=m[1].trim(); nome=m[2].trim(); qtd=parseFloat(String(m[3]).replace(',','.'))||0;
+  }
+  qtd=Math.round(qtd);
+  if(!cod || qtd<=0) return null;
+  return { cod:cod, nome:nome, qtd:qtd };
+}
 function _carregParseTexto(txt){
   let add=0, naoAch=[];
   String(txt||'').split(/\r?\n/).forEach(l=>{
-    l=l.trim(); if(!l) return;
-    if(/^(c[óo]d|separa|carregamento|classifica|endere|emitido|p[áa]gina|placa|rota)/i.test(l)) return;
-    const m=l.match(/^(\d{1,6})\s+(.+?)\s+([\d]+[.,]?\d*)\s*(?:PCT|UN|UNID|CX)?\.?\s*$/i);
-    if(!m) return;
-    const cod=m[1].trim();
-    let nome=m[2].trim();
-    const qtd=Math.round(parseFloat(String(m[3]).replace(',','.'))||0);
-    if(!cod || qtd<=0) return;
+    const it=_carregLinhaItem(l);
+    if(!it) return;
+    const cod=it.cod, qtd=it.qtd;
+    let nome=it.nome;
     const p=_carregAcharProduto(cod);
     if(p) nome=p.nome||nome;
+    if(!nome) nome='Produto '+cod;
     const existente=_carregEditando.itens.find(i=>_codEq(i.codigo,cod));
     if(existente){ existente.qtdSolicitada+=qtd; add++; return; }
     _carregEditando.itens.push({codigo:cod, nome:nome, qtdSolicitada:qtd, qtdBipada:0});
@@ -17546,14 +17573,11 @@ async function _carregLerPdfItens(file){
 function _carregParseItensDeTexto(txt){
   const itens=[];
   String(txt||'').split(/\r?\n/).forEach(l=>{
-    l=l.trim(); if(!l) return;
-    if(/^(c[óo]d|separa|carregamento|classifica|endere|emitido|p[áa]gina|placa|rota)/i.test(l)) return;
-    const m=l.match(/^(\d{1,6})\s+(.+?)\s+([\d]+[.,]?\d*)\s*(?:PCT|UN|UNID|CX)?\.?\s*$/i);
-    if(!m) return;
-    const cod=m[1].trim(); let nome=m[2].trim();
-    const qtd=Math.round(parseFloat(String(m[3]).replace(',','.'))||0);
-    if(!cod||qtd<=0) return;
+    const it=_carregLinhaItem(l);
+    if(!it) return;
+    const cod=it.cod, qtd=it.qtd; let nome=it.nome;
     const p=_carregAcharProduto(cod); if(p) nome=p.nome||nome;
+    if(!nome) nome='Produto '+cod;
     const ex=itens.find(i=>_codEq(i.codigo,cod));
     if(ex){ ex.qtdSolicitada+=qtd; return; }
     itens.push({codigo:cod, nome:nome, qtdSolicitada:qtd, qtdBipada:0});
