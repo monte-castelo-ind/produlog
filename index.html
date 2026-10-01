@@ -912,7 +912,7 @@
   <!-- MATÉRIAS-PRIMAS -->
   <div class="screen" id="s-mp-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-cadastros'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -967,7 +967,7 @@
   <!-- RASTREAMENTO DE MATÉRIA-PRIMA -->
   <div class="screen" id="s-rastreio">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1009,7 +1009,7 @@
   <!-- ESTOQUE: COZINHA (recheios) -->
   <div class="screen" id="s-estoque-coz">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-coz-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Cozinha</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Estoque de Recheios</div><div class="mc-page-sub">Saldo em tempo real</div></div>
@@ -1021,7 +1021,7 @@
   <!-- ESTOQUE: CONFEITARIA (massas + recheios) -->
   <div class="screen" id="s-estoque-conf">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-conf-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Confeitaria</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Estoque</div><div class="mc-page-sub">Massas e recheios · tempo real</div></div>
@@ -1070,7 +1070,7 @@
   <!-- ESTOQUE: ADMIN -->
   <div class="screen" id="s-estoque-admin">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Controle de Estoque</div><div class="mc-page-sub">Massas e recheios</div></div>
@@ -1123,7 +1123,7 @@
   <!-- CONFEITARIA HOME -->
   <div class="screen" id="s-conf-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?window.goTo('s-adm-hub'):window.goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1285,7 +1285,7 @@
   <!-- CONFEITARIA: VER MASSAS -->
   <div class="screen" id="s-conf-massas">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-conf-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1306,7 +1306,7 @@
   <!-- PASSO 1: DATA PRODUÇÃO -->
   <div class="screen" id="s-sel-data">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-conf-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1338,7 +1338,7 @@
   <!-- PASSO 2: PRODUTO -->
   <div class="screen" id="s-novo-reg">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1369,7 +1369,7 @@
   <!-- PASSO 3: QUANTIDADES -->
   <div class="screen" id="s-qtd">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-novo-reg')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1430,7 +1430,7 @@
   <!-- MEUS REGISTROS -->
   <div class="screen" id="s-meus-reg">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-conf-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1451,7 +1451,7 @@
   <!-- MASSAS: DATA -->
   <div class="screen" id="s-massa-data">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-conf-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1483,7 +1483,7 @@
   <!-- MASSAS: LANÇAMENTO -->
   <div class="screen" id="s-massa-lanc">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-massa-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1526,7 +1526,7 @@
   <!-- COZINHA HOME -->
   <div class="screen" id="s-coz-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?window.goTo('s-adm-hub'):window.goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1640,7 +1640,7 @@
   <!-- RECHEIO: DATA -->
   <div class="screen" id="s-rc-painel">
     <div class="topbar verde" id="rc-topbar">
-      <button class="mc-header-back" onclick="goTo('s-coz-home')" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;">‹</button>
+      <button class="mc-header-back" onclick="voltar()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;">‹</button>
       <div class="topbar-title"><div class="topbar-title-main">🎯 Painel de Recheios</div><div class="topbar-title-sub" id="rc-sub">Hoje e amanhã</div></div>
     </div>
     <div style="flex:1;padding:16px;overflow-y:auto;" id="rc-content"></div>
@@ -1648,7 +1648,7 @@
 
   <div class="screen" id="s-recheio-data">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-coz-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1680,7 +1680,7 @@
   <!-- RECHEIO: LANÇAMENTO -->
   <div class="screen" id="s-recheio-lanc">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-recheio-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1723,7 +1723,7 @@
   <!-- COZINHA REGISTROS -->
   <div class="screen" id="s-coz-reg">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-coz-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1744,7 +1744,7 @@
   <!-- EMBALAGEM: SELECIONAR DATA -->
   <div class="screen" id="s-emb-sel-data">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?window.goTo('s-adm-hub'):window.goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1808,6 +1808,11 @@
         <div style="flex:1;"><div class="hb-title">Expedição já pegou</div><div class="hb-desc">Lançar produto pego antes da embalagem</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
+      <button class="home-btn" onclick="_cdcModo='lista';goTo('s-cdc')" style="border-left-color:var(--mc-roxo,#7c3aed);margin-bottom:4px;">
+        <div class="hb-icon" style="background:#ede9fe;">📊</div>
+        <div style="flex:1;"><div class="hb-title">Controle Diário</div><div class="hb-desc">Produzido, embalado e quebra por dia</div></div>
+        <span style="color:var(--text-secondary);font-size:20px;">›</span>
+      </button>
 
       <div class="section-divider" style="margin-top:14px;">Equipe</div>
       <button class="home-btn" onclick="abrirPresenca('emb')" style="border-left-color:var(--mc-azul);">
@@ -1834,7 +1839,7 @@
   <!-- EMBALAGEM: LISTA DE DIAS COM PRODUTOS PENDENTES -->
   <div class="screen" id="s-emb-produtos-pendentes">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-emb-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1856,7 +1861,7 @@
   <!-- EMBALAGEM: INCONFORMIDADES -->
   <div class="screen" id="s-emb-inconformidades">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo(window.setorAtual==='admin'||window.adminMode?'s-adm-hub':'s-emb-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1879,7 +1884,7 @@
   <!-- INCONFORMIDADE FORM -->
   <div class="screen" id="s-inconformidade-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-emb-inconformidades')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1902,7 +1907,7 @@
   <!-- EMBALAGEM: CHECKLIST -->
   <div class="screen" id="s-emb-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-emb-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1933,7 +1938,7 @@
   <!-- EMBALAGEM: PRODUTO MANUAL -->
   <div class="screen" id="s-emb-manual">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-emb-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -1992,7 +1997,7 @@
 
   <div class="screen" id="s-exp-view">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-exp-view-sel')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2033,7 +2038,7 @@
   <!-- PRESENÇA: REGISTROS CONF -->
   <div class="screen" id="s-presenca-reg-conf">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-conf-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2054,7 +2059,7 @@
   <!-- PRESENÇA: REGISTROS COZ -->
   <div class="screen" id="s-presenca-reg-coz">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-coz-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2075,7 +2080,7 @@
   <!-- PRESENÇA: REGISTROS EMB -->
   <div class="screen" id="s-presenca-reg-emb">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-emb-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2117,7 +2122,7 @@
   <!-- MANUTENÇÃO: NOVA MÁQUINA -->
   <div class="screen" id="s-manut-nova-maq">
     <div class="mc-header" id="manut-nova-topbar">
-      <button class="mc-header-back" onclick="goTo('s-manut-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2147,7 +2152,7 @@
   <!-- MANUTENÇÃO: DETALHES MÁQUINA -->
   <div class="screen" id="s-manut-maq">
     <div class="mc-header" id="manut-maq-topbar">
-      <button class="mc-header-back" onclick="goTo('s-manut-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2167,7 +2172,7 @@
   <!-- MANUTENÇÃO: NOVO LANÇAMENTO -->
   <div class="screen" id="s-manut-lanc">
     <div class="mc-header" id="manut-lanc-topbar">
-      <button class="mc-header-back" onclick="goTo('s-manut-maq')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2274,7 +2279,7 @@
 
 <div class="screen" id="s-rafael-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2330,7 +2335,7 @@
   <!-- REQUISIÇÕES — RAFAEL (recebimento) -->
   <div class="screen" id="s-req-rafael">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-rafael-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📥 Requisições</div><div class="mc-page-sub">Receber e conferir compras</div></div>
@@ -2341,7 +2346,7 @@
   <!-- REQUISIÇÕES — ADMIN (acompanhamento) -->
   <div class="screen" id="s-req-admin">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-g-log')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📥 Requisições (acompanhamento)</div><div class="mc-page-sub">Recebimentos do Rafael</div></div>
@@ -2352,7 +2357,7 @@
   <!-- FARINHAS HOME -->
   <div class="screen" id="s-farinha-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-rafael-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2372,7 +2377,7 @@
   <!-- FARINHAS: NOVA CONTAGEM -->
   <div class="screen" id="s-farinha-lanc">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-farinha-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2393,7 +2398,7 @@
   <!-- FARINHAS: HISTÓRICO -->
   <div class="screen" id="s-farinha-hist">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-farinha-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2414,7 +2419,7 @@
   <!-- PEDIDOS POR FORA -->
   <div class="screen" id="s-pf">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-carreg')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Expedição</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📄 Pedidos por fora</div><div class="mc-page-sub">Um lançamento por dia</div></div>
@@ -2435,7 +2440,7 @@
 
   <div class="screen" id="s-emb-alt">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo(window.adminMode?'s-adm-hub':'s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Alterações do embalado</div><div class="mc-page-sub">Mudanças depois de finalizado</div></div>
@@ -2481,7 +2486,7 @@
 
   <div class="screen" id="s-ret-hist">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-ret')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📚 Histórico de retornos</div><div class="mc-page-sub">Tudo que já foi resolvido</div></div>
@@ -2507,7 +2512,7 @@
   <!-- FORMULÁRIO DA AMOSTRA -->
   <div class="screen" id="s-am-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-am')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title" id="am-form-titulo">🧪 Nova amostra</div><div class="mc-page-sub">Informe as unidades de cada produto</div></div>
@@ -2518,7 +2523,7 @@
   <!-- EMBALAGEM -->
   <div class="screen" id="s-am-emb">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo(window.adminMode?'s-adm-hub':'s-emb-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Embalagem</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧪 Amostras</div><div class="mc-page-sub">Solicitações e amostras a produzir</div></div>
@@ -2543,7 +2548,7 @@
   <!-- INTERNO -->
   <div class="screen" id="s-est-interno">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-est-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Estoque da empresa</div><div class="mc-page-sub">Dentro da fábrica</div></div>
@@ -2554,7 +2559,7 @@
   <!-- CONTÊINER -->
   <div class="screen" id="s-est-container">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-est-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🚛 Estoque da rua</div><div class="mc-page-sub">Reserva no contêiner</div></div>
@@ -2565,7 +2570,7 @@
   <!-- MOVIMENTAÇÕES -->
   <div class="screen" id="s-est-mov">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-est-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Movimentações</div><div class="mc-page-sub">Tudo que entrou e saiu</div></div>
@@ -2576,7 +2581,7 @@
   <!-- PRODUTOS CONTROLADOS -->
   <div class="screen" id="s-est-prod">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-est-config')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Produtos controlados</div><div class="mc-page-sub">Quais entram no controle</div></div>
@@ -2587,7 +2592,7 @@
   <!-- CONFIGURAÇÕES -->
   <div class="screen" id="s-est-config">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-est-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🔧 Configurações</div><div class="mc-page-sub">Capacidade, corte e senha</div></div>
@@ -2597,7 +2602,7 @@
   <!-- CONTAINER HOME -->
   <div class="screen" id="s-container-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-rafael-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2621,7 +2626,7 @@
   <!-- CONTAINER ITEM DETAIL -->
   <div class="screen" id="s-container-item">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-container-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2644,7 +2649,7 @@
   <!-- CONTAINER: ENTRADA -->
   <div class="screen" id="s-container-entrada">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-container-item')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2691,7 +2696,7 @@
   <!-- CONTAINER: SAÍDA -->
   <div class="screen" id="s-container-saida">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-container-item')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2713,7 +2718,7 @@
   <!-- QUADRA HOME -->
   <div class="screen" id="s-quadra-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2779,7 +2784,7 @@
   <!-- QUADRA: PRODUZIR KITS (Etapa 1) -->
   <div class="screen" id="s-quadra-kits-prod">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-quadra-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Quadra</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Produzir kits</div><div class="mc-page-sub">Gera estoque de kits</div></div>
@@ -2790,7 +2795,7 @@
   <!-- QUADRA: PASSO 1 - DATA -->
   <div class="screen" id="s-quadra-data">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-quadra-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2821,7 +2826,7 @@
   <!-- QUADRA: PASSO 2 - KIT -->
   <div class="screen" id="s-quadra-kit">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-quadra-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2849,7 +2854,7 @@
   <!-- QUADRA: PASSO 3 - RECEITA + PRODUTOS -->
   <div class="screen" id="s-quadra-lanc">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-quadra-kit')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2870,7 +2875,7 @@
   <!-- QUADRA: REGISTROS -->
   <div class="screen" id="s-quadra-reg">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-quadra-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2925,7 +2930,7 @@
   <!-- NOVA PENDÊNCIA DE TESTE -->
   <div class="screen" id="s-teste-pendencia-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-testes-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2948,7 +2953,7 @@
   <!-- TESTES: PRODUTO DETALHE -->
   <div class="screen" id="s-testes-produto">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-testes-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -2969,7 +2974,7 @@
   <!-- TESTES: NOVO TESTE -->
   <div class="screen" id="s-testes-novo">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-testes-produto')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3026,7 +3031,7 @@
   <!-- TESTES: EDITAR TESTE -->
   <div class="screen" id="s-testes-edit">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-testes-produto')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3083,7 +3088,7 @@
   <!-- EXPEDIÇÃO: SELECIONAR DATA -->
   <div class="screen" id="s-exp-sel-data">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?window.goTo('s-adm-hub'):window.goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3106,7 +3111,7 @@
   <!-- EXPEDIÇÃO: LIBERAÇÃO -->
   <div class="screen" id="s-exp-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-exp-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3325,7 +3330,7 @@
   <!-- GRUPO: SETORES DE PRODUÇÃO -->
   <div class="screen" id="s-adm-g-setores">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Setores de Produção</div><div class="mc-page-sub">Acessar qualquer setor</div></div>
@@ -3367,7 +3372,7 @@
   <!-- GRUPO: PLANEJAMENTO & PRODUÇÃO -->
   <div class="screen" id="s-adm-g-plan">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Planejamento &amp; Produção</div><div class="mc-page-sub">Plano, controle e painel</div></div>
@@ -3404,7 +3409,7 @@
   <!-- GRUPO: MATÉRIA-PRIMA & ESTOQUE -->
   <div class="screen" id="s-adm-g-mp">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧪 Matéria-Prima &amp; Estoque</div><div class="mc-page-sub">Simulação, rastreio e contagem</div></div>
@@ -3447,7 +3452,7 @@
   <!-- GRUPO: COMPRAS & LOGÍSTICA -->
   <div class="screen" id="s-adm-g-log">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🛒 Compras &amp; Logística</div><div class="mc-page-sub">Pedidos e carregamentos</div></div>
@@ -3489,7 +3494,7 @@
   <!-- GRUPO: GESTÃO & TAREFAS -->
   <div class="screen" id="s-adm-g-gestao">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✅ Gestão &amp; Tarefas</div><div class="mc-page-sub">Demandas e solicitações</div></div>
@@ -3516,7 +3521,7 @@
   <!-- GRUPO: RELATÓRIOS & EQUIPE -->
   <div class="screen" id="s-adm-g-rel">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📊 Relatórios &amp; Equipe</div><div class="mc-page-sub">Dados, presença e manutenção</div></div>
@@ -3541,7 +3546,7 @@
   </div>
   <div class="screen" id="s-adm-presencas">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3590,7 +3595,7 @@
 
   <div class="screen" id="s-adm-cadastros">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🗂️ Cadastros & Configurações</div><div class="mc-page-sub">Bases, produtos e ajustes do sistema</div></div>
@@ -3679,7 +3684,7 @@
   <!-- AJUSTES DE REFAZIMENTO -->
   <div class="screen" id="s-ajref">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🔄 Ajustes de Refazimento</div><div class="mc-page-sub">Conferência de pendentes por dia</div></div>
@@ -3690,7 +3695,7 @@
   <!-- ===== CADASTRO DE MATÉRIA PRIMA (valores) ===== -->
   <div class="screen" id="s-mp-precos">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3749,7 +3754,7 @@
   <!-- ===== CADASTRO DE EMBALAGENS ===== -->
   <div class="screen" id="s-emb">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3851,7 +3856,7 @@
 
   <div class="screen" id="s-adm-buscar">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3881,7 +3886,7 @@
   <!-- ADMIN KITS HUB -->
   <div class="screen" id="s-adm-kits">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3904,7 +3909,7 @@
   <!-- ADMIN KIT FORM -->
   <div class="screen" id="s-adm-kit-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-kits')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3927,7 +3932,7 @@
   <!-- ADMIN PRODUTO FORM -->
   <div class="screen" id="s-adm-prod-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-kits')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3950,7 +3955,7 @@
   <!-- ADMIN PRODUTOS CONFEITARIA -->
   <div class="screen" id="s-adm-prod-conf">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3975,7 +3980,7 @@
   <!-- ADMIN PRODUTO CONFEITARIA FORM -->
   <div class="screen" id="s-adm-prod-conf-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-prod-conf')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -3998,7 +4003,7 @@
   <!-- ADMIN MASSAS E RECHEIOS -->
   <div class="screen" id="s-adm-mr">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4018,7 +4023,7 @@
   <!-- EDITOR DE FICHA TÉCNICA (massa / recheio) -->
   <div class="screen" id="s-receita-edit">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-mr')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4058,7 +4063,7 @@
   <!-- ADMIN GERENCIAR SENHAS -->
   <div class="screen" id="s-adm-senhas">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4079,7 +4084,7 @@
 
   <div class="screen" id="s-adm-editar-senha">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-senhas')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4114,7 +4119,7 @@
 
   <div class="screen" id="s-adm-contagem-itens">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4133,7 +4138,7 @@
 
   <div class="screen" id="s-adm-contagem-grupo">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-contagem-itens')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4156,7 +4161,7 @@
   <!-- ADMIN FARINHAS CONFIG -->
   <div class="screen" id="s-adm-farinhas-cfg">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-cadastros')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4198,7 +4203,7 @@
 
   <div class="screen" id="s-devolucao-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-devolucoes')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4243,7 +4248,7 @@
 
   <div class="screen" id="s-prioridade-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-prioridades')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4266,7 +4271,7 @@
   <!-- SIMONE - FINANCEIRO -->
   <div class="screen" id="s-simone-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4328,7 +4333,7 @@
   <!-- COMPRAS: PEDIDO POR FORNECEDOR -->
   <div class="screen" id="s-compra-forn">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-compras')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Pedido</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📝 Montar pedido</div><div class="mc-page-sub">Quantidade · kg · preço</div></div>
@@ -4339,7 +4344,7 @@
   <!-- COMPRAS: LISTA DE FORNECEDORES -->
   <div class="screen" id="s-compras-fornlist">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-compras')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Fornecedores</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏢 Fornecedores</div><div class="mc-page-sub">Contato e dados · v2</div></div>
@@ -4350,7 +4355,7 @@
   <!-- COMPRAS: CADASTRO FORNECEDOR -->
   <div class="screen" id="s-compra-forncad">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-compras-fornlist')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Fornecedor</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏢 Dados do fornecedor</div><div class="mc-page-sub">Contato, vendedor, entrega</div></div>
@@ -4361,7 +4366,7 @@
   <!-- COMPRAS: HISTÓRICO -->
   <div class="screen" id="s-compras-hist">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-compras')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Histórico</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Histórico de pedidos</div><div class="mc-page-sub">Todos os fornecedores</div></div>
@@ -4388,7 +4393,7 @@
   <!-- CARREGAMENTO: MONTAR (admin) -->
   <div class="screen" id="s-carreg-edit">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-carreg')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Carregamento</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📝 Montar carregamento</div><div class="mc-page-sub">Produtos e quantidades</div></div>
@@ -4399,7 +4404,7 @@
   <!-- AGENDA DE CONTAGENS -->
   <div class="screen" id="s-agenda">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo(window.adminMode?'s-adm-hub':'s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Agenda</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🗓️ Agenda de Contagens</div><div class="mc-page-sub">Aviso 3 dias antes</div></div>
@@ -4413,7 +4418,7 @@
 <!-- TELA 1: Dias lançados (admin) -->
 <div class="screen" id="s-la-dias">
   <div class="mc-header">
-    <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+    <button class="mc-header-back" onclick="voltar()">‹</button>
     <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">✅ Dias lançados no ERP</div><div class="mc-page-sub">Linha de corte da produção</div></div>
@@ -4424,7 +4429,7 @@
 <!-- TELA 2: Solicitar (escritório) -->
 <div class="screen" id="s-la-solicitar">
   <div class="mc-header">
-    <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+    <button class="mc-header-back" onclick="voltar()">‹</button>
     <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">📝 Solicitar produto</div><div class="mc-page-sub">Pedido de liberação antecipada</div></div>
@@ -4438,7 +4443,7 @@
 <!-- TELA 3: Decisão (admin) -->
 <div class="screen" id="s-la-decisao">
   <div class="mc-header">
-    <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+    <button class="mc-header-back" onclick="voltar()">‹</button>
     <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">⚖️ Decidir solicitações</div><div class="mc-page-sub">Aprovar ou negar liberações</div></div>
@@ -4449,7 +4454,7 @@
 <!-- TELA 4: Ajustes em aberto (admin) -->
 <div class="screen" id="s-la-resumo">
   <div class="mc-header">
-    <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+    <button class="mc-header-back" onclick="voltar()">‹</button>
     <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Liberação</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">📊 Resumo dos ajustes</div><div class="mc-page-sub">Soma do que está em aberto, por produto</div></div>
@@ -4459,7 +4464,7 @@
 
 <div class="screen" id="s-la-ajustes">
   <div class="mc-header">
-    <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+    <button class="mc-header-back" onclick="voltar()">‹</button>
     <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">↩ Ajustes em aberto</div><div class="mc-page-sub">Controle de entradas/saídas</div></div>
@@ -4493,7 +4498,7 @@
 
   <div class="screen" id="s-cpm">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Controle de Produção</div><div class="mc-page-sub">Lançamento mensal manual</div></div>
@@ -4503,7 +4508,7 @@
 
   <div class="screen" id="s-ctrl-prod">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Controle de Produção</div><div class="mc-page-sub">Conferência de lançamentos</div></div>
@@ -4514,7 +4519,7 @@
   <!-- CADASTRO DE EANs -->
   <div class="screen" id="s-eans">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-carreg')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Cadastro</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏷️ Códigos de barras</div><div class="mc-page-sub">EAN de cada produto</div></div>
@@ -4525,7 +4530,7 @@
   <!-- CARREGAMENTO: CONFERÊNCIA/BIPAGEM -->
   <div class="screen" id="s-carreg-conf">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-carreg')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Conferência</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📡 Bipagem</div><div class="mc-page-sub">Leitura de código de barras</div></div>
@@ -4543,7 +4548,7 @@
   <!-- ESTOQUE EMBALAGEM -->
   <div class="screen" id="s-estoque-emb">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-emb-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4566,7 +4571,7 @@
     <!-- PLANEJAMENTO DE PRODUÇÃO - HOME -->
   <div class="screen" id="s-estoque-emb-form">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-estoque-emb')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4589,7 +4594,7 @@
   <!-- EMBALAGEM: CLIENTE C&F -->
   <div class="screen" id="s-emb-cf">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-emb-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4613,7 +4618,7 @@
 <!-- ADMIN STATUS PANEL -->
   <div class="screen" id="s-adm-status">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4636,7 +4641,7 @@
   <!-- PROTÓTIPO PAINEL GERENCIAL -->
   <div class="screen" id="s-painel-proto">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Gerencial</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧪 Painel (protótipo)</div><div class="mc-page-sub">Visão de KPIs e gráficos</div></div>
@@ -4648,7 +4653,7 @@
   <!-- PAINEL GERENCIAL (completo) -->
   <div class="screen" id="s-painel">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Gerencial</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📊 Painel Gerencial</div><div class="mc-page-sub">Indicadores e pendências</div></div>
@@ -4660,7 +4665,7 @@
   <!-- SIMULADOR DE MATÉRIA-PRIMA -->
   <div class="screen" id="s-sim">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Planejamento</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧮 Simulador de Matéria-Prima</div><div class="mc-page-sub">Necessidade por produção</div></div>
@@ -4671,7 +4676,7 @@
   <!-- ALTERAÇÕES DE RECEITA: HOME -->
   <div class="screen" id="s-alt-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Alterações de Receita</div><div class="mc-page-sub">Solicite ajustes nas fichas</div></div>
@@ -4693,7 +4698,7 @@
   <!-- ALTERAÇÕES: LISTA DE RECEITAS -->
   <div class="screen" id="s-alt-lista">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-alt-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title" id="alt-lista-titulo">Receitas</div><div class="mc-page-sub">Escolha a receita</div></div>
@@ -4707,7 +4712,7 @@
   <!-- ALTERAÇÕES: EDITOR -->
   <div class="screen" id="s-alt-editor">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-alt-lista')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Editar receita</div><div class="mc-page-sub">Ajuste e solicite</div></div>
@@ -4718,7 +4723,7 @@
   <!-- ALTERAÇÕES: ADMIN (aprovar/negar + histórico) -->
   <div class="screen" id="s-alt-admin">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Solicitações de Receita</div><div class="mc-page-sub">Aprovar, negar e histórico</div></div>
@@ -4729,7 +4734,7 @@
   <!-- ACOMPANHAMENTO DO PLANO -->
   <div class="screen" id="s-acomp">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-conf-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Plano</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Acompanhamento do Plano</div><div class="mc-page-sub">O que já foi feito × pendente</div></div>
@@ -4741,7 +4746,7 @@
   <!-- ACOMPANHAMENTO DO PLANO — COZINHA (recheios) -->
   <div class="screen" id="s-acomp-coz">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-coz-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Acompanhamento — Recheios</div><div class="mc-page-sub">Plano × produzido, por dia</div></div>
@@ -4753,7 +4758,7 @@
   <!-- GERENCIADOR DE DEMANDAS -->
   <div class="screen" id="s-demandas">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🗂️ Demandas</div><div class="mc-page-sub">Tarefas, assuntos e projetos</div></div>
@@ -4765,7 +4770,7 @@
   <!-- DEMANDA: DETALHE/EDIÇÃO -->
   <div class="screen" id="s-demanda-det">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-demandas')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Demanda</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📝 Demanda</div><div class="mc-page-sub">Editar e acompanhar</div></div>
@@ -4776,7 +4781,7 @@
   <!-- CONTAGEM HOME -->
   <div class="screen" id="s-contagem-home">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4859,7 +4864,7 @@
     <!-- CONTAGEM: PRODUTO ACABADO SUB-MENU -->
   <div class="screen" id="s-contagem-prod-acabado">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-contagem-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4899,7 +4904,7 @@
     <!-- CONTAGEM: LANÇAMENTO -->
   <div class="screen" id="s-contagem-lanc">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-contagem-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4928,7 +4933,7 @@
     <!-- CONTAGEM: HISTÓRICO -->
   <div class="screen" id="s-contagem-hist">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-contagem-home')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4949,7 +4954,7 @@
   <!-- ADMIN DASHBOARD -->
   <div class="screen" id="s-adm">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="window.adminMode?goTo('s-adm-hub'):goTo('s-inicio')">‹</button>
+      <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -5272,7 +5277,52 @@ function verificarPin(){
 }
 window.verificarPin=verificarPin;
 
-function goTo(id){
+/* ══════════════════════════════════════════════════════════════════
+   HISTÓRICO DE NAVEGAÇÃO
+   Cada botão de voltar tinha um destino fixo, quase sempre a tela
+   inicial do setor. Com isso, entrar em três níveis e voltar jogava a
+   pessoa lá para fora. Aqui guardamos por onde ela passou e o voltar
+   usa a tela anterior de verdade.
+   ══════════════════════════════════════════════════════════════════ */
+let _navPilha=[];
+const _NAV_LIMITE=25;
+
+function _navTelaAtual(){
+  const a=document.querySelector('.screen.active');
+  return a?a.id:'';
+}
+
+/* Destino de fallback quando não há histórico (primeira tela do setor) */
+function _navRaiz(){
+  if(window.adminMode) return 's-adm-hub';
+  return (typeof DESTINOS!=='undefined' && DESTINOS[window.setorAtual]) || 's-inicio';
+}
+
+function voltar(){
+  const atual=_navTelaAtual();
+  const raiz=_navRaiz();
+  // na tela inicial do setor, voltar é sair do setor
+  if(atual===raiz){ _navPilha=[]; goTo(window.adminMode?'s-adm-hub':'s-inicio', true); return; }
+  while(_navPilha.length){
+    const anterior=_navPilha.pop();
+    if(anterior && anterior!==atual && document.getElementById(anterior)){
+      goTo(anterior, true);     // true = não empilha de novo
+      return;
+    }
+  }
+  goTo(raiz, true);
+}
+window.voltar=voltar;
+
+function goTo(id, semHistorico){
+  const atual=_navTelaAtual();
+  // guarda de onde veio, para o voltar saber o caminho
+  if(!semHistorico && atual && atual!==id){
+    _navPilha.push(atual);
+    if(_navPilha.length>_NAV_LIMITE) _navPilha.shift();
+  }
+  // trocar de setor ou voltar ao início limpa o caminho antigo
+  if(id==='s-inicio' || id==='s-adm-hub') _navPilha=[];
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
@@ -6974,6 +7024,8 @@ async function adicionarLiberacao(fid,qtdEmb){
 /* A tela do "já peguei" é usada pela expedição e pela embalagem:
    cada uma volta para a sua. */
 function expManualVoltar(){
+  // se há de onde voltar, respeita o caminho; senão usa o destino do setor
+  if(_navPilha.length) return voltar();
   if(window.setorAtual==='embalagem') return goTo('s-emb-home');
   if(window.adminMode) return goTo('s-adm-hub');
   goTo('s-exp-sel-data');
@@ -20927,6 +20979,8 @@ function _cdcEhAdmin(){ return window.adminMode===true || window.setorAtual==='a
 /* O controle diário é aberto pelo admin, pela confeitaria e pela
    embalagem: cada um volta para a sua tela. */
 function cdcVoltar(){
+  // se há de onde voltar, respeita o caminho; senão usa o destino do setor
+  if(_navPilha.length) return voltar();
   if(window.setorAtual==='confeitaria') return goTo('s-conf-home');
   if(window.setorAtual==='embalagem') return goTo('s-emb-home');
   goTo('s-adm-hub');
@@ -21015,7 +21069,8 @@ function _cdcRenderDia(datas){
     const celProd='<td style="padding:8px 10px;font-weight:600;position:sticky;left:0;background:'+bg+';">'+l.nome+'</td>';
     const celNums='<td style="padding:8px 10px;text-align:center;font-weight:700;">'+l.prod+'</td>'+
       '<td style="padding:8px 10px;text-align:center;font-weight:700;">'+l.emb+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;font-weight:800;color:'+qCor+';">'+(l.quebra!==0?(l.quebra>0?'':'+')+(-l.quebra===0?0:l.quebra):'0')+'</td>'+
+      // a quebra sai como -5 ou +3; antes saía "+-5" quando era negativa
+      '<td style="padding:8px 10px;text-align:center;font-weight:800;color:'+qCor+';">'+(l.quebra===0?'0':(l.quebra>0?'+':'')+l.quebra)+'</td>'+
       '<td style="padding:8px 10px;text-align:center;">'+btnConf+'</td>';
     h+='<tr style="background:'+bg+';border-top:1px solid var(--border,#f1f5f9);">'+celProd+
       (_cdcEhAdmin()
@@ -21774,6 +21829,8 @@ function libControlado(r){
 }
 
 function libVoltar(){
+  // se há de onde voltar, respeita o caminho; senão usa o destino do setor
+  if(_navPilha.length) return voltar();
   if(window.adminMode) return goTo('s-adm-hub');
   const d=(typeof DESTINOS!=='undefined' && DESTINOS[window.setorAtual]) || 's-inicio';
   goTo(d);
@@ -22025,6 +22082,8 @@ function retRenderAtual(){
   retAtualizarBadges();
 }
 function retVoltar(){
+  // se há de onde voltar, respeita o caminho; senão usa o destino do setor
+  if(_navPilha.length) return voltar();
   if(window.adminMode) return goTo('s-adm-hub');
   goTo((typeof DESTINOS!=='undefined' && DESTINOS[window.setorAtual]) || 's-inicio');
 }
@@ -22742,6 +22801,8 @@ function amRenderAtual(){
 }
 
 function amVoltar(){
+  // se há de onde voltar, respeita o caminho; senão usa o destino do setor
+  if(_navPilha.length) return voltar();
   if(window.adminMode) return goTo('s-adm-hub');
   goTo((typeof DESTINOS!=='undefined' && DESTINOS[window.setorAtual]) || 's-inicio');
 }
@@ -24912,6 +24973,8 @@ function _estPreviewCapacidade(cod, pacotes){
    auditoria (pacotes 0, para não mexer nos totais). */
 // volta para a tela de origem de quem está logado
 function estVoltar(){
+  // se há de onde voltar, respeita o caminho; senão usa o destino do setor
+  if(_navPilha.length) return voltar();
   if(window.adminMode) return goTo('s-adm-hub');
   const dest=(typeof DESTINOS!=='undefined' && DESTINOS[window.setorAtual]) || 's-inicio';
   goTo(dest==='s-est-hub'?'s-inicio':dest);
