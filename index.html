@@ -1137,6 +1137,7 @@
         <div class="mc-page-sub" id="conf-date"></div>
       </div>
       <div class="mc-header-actions">
+        <button class="mc-act-btn-secondary" onclick="goTo('s-cdc')" title="Controle diário">📊</button>
         <button class="mc-act-btn-secondary" onclick="abrirPlano()">📅 Plano</button>
         <button class="mc-act-btn-primary" onclick="iniciarNovoReg()">+ Lançar</button>
       </div>
@@ -1918,6 +1919,8 @@
         <button class="mc-act-btn-secondary" onclick="abrirPresenca('emb')" title="Presença">👥</button>
         <button class="mc-act-btn-secondary" onclick="abrirExpView('emb')" title="Ver expedição">🚚</button>
         <button class="mc-act-btn-secondary" onclick="goTo('s-est-hub')" title="Estoque &amp; Contêiner">🏬</button>
+        <button class="mc-act-btn-secondary" onclick="goTo('s-exp-manual')" title="Produto pego antes da embalagem">📥</button>
+        <button class="mc-act-btn-secondary" onclick="goTo('s-cdc')" title="Controle diário">📊</button>
         <button class="mc-act-btn-primary" onclick="goTo('s-emb-manual')">+ Produto</button>
       </div>
     </div>
@@ -3126,7 +3129,7 @@
   <!-- EXPEDIÇÃO: LANÇAMENTO MANUAL ("JÁ PEGUEI") -->
   <div class="screen" id="s-exp-manual">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-exp-sel-data')">‹</button>
+      <button class="mc-header-back" onclick="expManualVoltar()">‹</button>
       <div class="mc-brand">
         <div class="mc-brand-logo"></div>
         <div class="mc-brand-text">
@@ -4476,7 +4479,7 @@
 
   <div class="screen" id="s-cdc">
     <div class="mc-header">
-      <button class="mc-header-back" onclick="goTo('s-adm-hub')">‹</button>
+      <button class="mc-header-back" onclick="cdcVoltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📊 Controle Diário Confeitaria</div><div class="mc-page-sub">Resumo por dia</div></div>
@@ -6968,6 +6971,15 @@ async function adicionarLiberacao(fid,qtdEmb){
 }
 
 // ===== EXPEDIÇÃO: LANÇAMENTO MANUAL ("JÁ PEGUEI") =====
+/* A tela do "já peguei" é usada pela expedição e pela embalagem:
+   cada uma volta para a sua. */
+function expManualVoltar(){
+  if(window.setorAtual==='embalagem') return goTo('s-emb-home');
+  if(window.adminMode) return goTo('s-adm-hub');
+  goTo('s-exp-sel-data');
+}
+window.expManualVoltar=expManualVoltar;
+
 function renderExpManual(){
   const el=document.getElementById('exp-manual-list'); if(!el) return;
   const busca=(document.getElementById('exp-manual-busca')?.value||'').toLowerCase().trim();
@@ -20907,6 +20919,20 @@ function _ajRefRenderResumo(){
   return h;
 }
 
+/* A confeitaria e a embalagem veem uma versão enxuta do Controle Diário:
+   produto, produzido, embalado, quebra e a conferência de consumo.
+   As colunas de massa e recheio ficam só para o admin. */
+function _cdcEhAdmin(){ return window.adminMode===true || window.setorAtual==='admin'; }
+
+/* O controle diário é aberto pelo admin, pela confeitaria e pela
+   embalagem: cada um volta para a sua tela. */
+function cdcVoltar(){
+  if(window.setorAtual==='confeitaria') return goTo('s-conf-home');
+  if(window.setorAtual==='embalagem') return goTo('s-emb-home');
+  goTo('s-adm-hub');
+}
+window.cdcVoltar=cdcVoltar;
+
 function renderCDC(){
   const el=document.getElementById('cdc-content'); if(!el) return;
   const datas=_cdcDatasDisponiveis();
@@ -20969,14 +20995,16 @@ function _cdcRenderDia(datas){
   // botão conferido + excel
   h+='<div style="display:flex;gap:8px;margin-bottom:12px;">'+
     '<button onclick="_cdcMarcarConferido(\''+escapeJsStr(_cdcDataSel)+'\')" style="flex:1;background:'+(st.conferido?'#16a34a':'#fff')+';color:'+(st.conferido?'#fff':'#16a34a')+';border:1px solid #16a34a;padding:11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">'+(st.conferido?'✓ Dia conferido':'Marcar como conferido')+'</button>'+
-    '<button onclick="_cdcExcel()" style="flex:1;background:#334155;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">⬇ Excel</button>'+
+    (_cdcEhAdmin()?'<button onclick="_cdcExcel()" style="flex:1;background:#334155;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">⬇ Excel</button>':'')+
     '</div>';
 
   // tabela
   h+='<div style="overflow-x:auto;border:1px solid var(--border,#e2e8f0);border-radius:10px;">';
-  h+='<table style="border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;min-width:680px;">';
+  h+='<table style="border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;'+(_cdcEhAdmin()?'min-width:680px;':'')+'">';
   h+='<thead><tr style="background:#334155;color:#fff;">'+
-    ['Produto','Massa','kg Massa','Recheio','kg Rec.','Recheio AD','kg Rec.AD','Prod.','Emb.','Quebra','Conf.']
+    (_cdcEhAdmin()
+      ? ['Produto','Massa','kg Massa','Recheio','kg Rec.','Recheio AD','kg Rec.AD','Prod.','Emb.','Quebra','Conf.']
+      : ['Produto','Total Prod.','Total Embalado','Quebra','Conf.'])
     .map((c,i)=>'<th style="padding:8px 10px;text-align:'+(i===0?'left':'center')+';font-weight:700;position:'+(i===0?'sticky':'static')+';left:0;'+(i===0?'background:#334155;z-index:1;':'')+'">'+c+'</th>').join('')+'</tr></thead><tbody>';
   linhas.forEach((l,i)=>{
     const bg=i%2?'#f8fafc':'#fff';
@@ -20984,31 +21012,37 @@ function _cdcRenderDia(datas){
     const qCor=qAbs===0?'#16a34a':(l.pctEmb>6?'#dc2626':'#d97706');
     // botão de conferência de consumo (só aparece se fora da faixa de 6%; vermelho se grave >25%)
     const btnConf = l.consumoForaFaixa ? '<button onclick="_cdcDetalheConsumo(\''+escapeJsStr(l.cod)+'\',\''+escapeJsStr(l.nome)+'\')" style="background:'+(l.consumoGrave?'#dc2626':'#fef3c7')+';border:1px solid '+(l.consumoGrave?'#b91c1c':'#d97706')+';color:'+(l.consumoGrave?'#fff':'#b45309')+';font-size:14px;padding:2px 8px;border-radius:6px;cursor:pointer;font-weight:800;" title="Ver conferência de consumo">⚠</button>' : '<span style="color:#cbd5e1;">—</span>';
-    h+='<tr style="background:'+bg+';border-top:1px solid var(--border,#f1f5f9);">'+
-      '<td style="padding:8px 10px;font-weight:600;position:sticky;left:0;background:'+bg+';">'+l.nome+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoMassa||'—')+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;font-weight:600;">'+kg(l.kgMassa)+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoRecheio||'—')+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;">'+kg(l.kgR1)+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoRecheio2||'—')+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;">'+kg(l.kgR2)+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;font-weight:700;">'+l.prod+'</td>'+
+    const celProd='<td style="padding:8px 10px;font-weight:600;position:sticky;left:0;background:'+bg+';">'+l.nome+'</td>';
+    const celNums='<td style="padding:8px 10px;text-align:center;font-weight:700;">'+l.prod+'</td>'+
       '<td style="padding:8px 10px;text-align:center;font-weight:700;">'+l.emb+'</td>'+
       '<td style="padding:8px 10px;text-align:center;font-weight:800;color:'+qCor+';">'+(l.quebra!==0?(l.quebra>0?'':'+')+(-l.quebra===0?0:l.quebra):'0')+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;">'+btnConf+'</td>'+
-      '</tr>';
+      '<td style="padding:8px 10px;text-align:center;">'+btnConf+'</td>';
+    h+='<tr style="background:'+bg+';border-top:1px solid var(--border,#f1f5f9);">'+celProd+
+      (_cdcEhAdmin()
+        ? '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoMassa||'—')+'</td>'+
+          '<td style="padding:8px 10px;text-align:center;font-weight:600;">'+kg(l.kgMassa)+'</td>'+
+          '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoRecheio||'—')+'</td>'+
+          '<td style="padding:8px 10px;text-align:center;">'+kg(l.kgR1)+'</td>'+
+          '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoRecheio2||'—')+'</td>'+
+          '<td style="padding:8px 10px;text-align:center;">'+kg(l.kgR2)+'</td>'
+        : '')+
+      celNums+'</tr>';
   });
   h+='<tr style="background:#e2e8f0;font-weight:800;border-top:2px solid #94a3b8;">'+
     '<td style="padding:9px 10px;position:sticky;left:0;background:#e2e8f0;">TOTAL</td>'+
-    '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgMassa)+'</td>'+
-    '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgR1)+'</td>'+
-    '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgR2)+'</td>'+
+    (_cdcEhAdmin()
+      ? '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgMassa)+'</td>'+
+        '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgR1)+'</td>'+
+        '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgR2)+'</td>'
+      : '')+
     '<td style="padding:9px 10px;text-align:center;">'+tot.prod+'</td>'+
     '<td style="padding:9px 10px;text-align:center;">'+tot.emb+'</td>'+
     '<td style="padding:9px 10px;text-align:center;">'+tot.quebra+'</td><td></td>'+
     '</tr>';
   h+='</tbody></table></div>';
 
+  // os blocos abaixo são de análise: só o admin precisa deles
+  if(!_cdcEhAdmin()) return h;
   // ---------- RESUMO DE MASSAS E RECHEIOS PRODUZIDOS ----------
   h+=_cdcResumoInsumos(_cdcDataSel);
   // ---------- CONFERÊNCIA GERAL DE CONSUMO (esperado × real, agregado) ----------
@@ -24386,7 +24420,7 @@ window.estRenderInterno=estRenderInterno;
 function estAbrirContagem(cod){
   const p=estProd(cod); if(!p) return;
   const atual=estSaldoInterno(cod);
-  _estUnid='cx';
+  _estUnid='pct';
   _estModal('🔢 Contagem — '+p.nome,
     '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">O app tem <strong>'+atual+'</strong> pacotes ('+estCaixas(atual,p.pctCaixa)+' cx). Informe o que você contou de verdade; a diferença fica registrada.</div>'+
     _estCampoQtd(cod,'Quantidade contada')+
@@ -24539,7 +24573,7 @@ function estAbrirEntrada(cod){
   const prods=estAtivos();
   if(!prods.length){ alert('Cadastre os produtos controlados antes.'); return; }
   const sel=cod||prods[0].codigo;
-  _estUnid='cx';
+  _estUnid='pct';
   _estModal('➕ Entrada no contêiner',
     '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);">Produto</label>'+
     '<select id="est-e-prod" onchange="estPreviewQtd(this.value)" style="width:100%;padding:12px;min-height:48px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;margin:4px 0 12px;">'+
@@ -24619,7 +24653,7 @@ function estAbrirMigrar(cod){
   const st=estStatusProduto(p);
   const lotes=_estLotesDe(cod);
   if(!lotes.length){ alert('Não há saldo deste produto no contêiner.'); return; }
-  _estUnid='cx';
+  _estUnid='pct';
   _estMigCod=String(cod);
   _estLotesSel=[String(lotes[0].firestoreId)];      // começa no mais antigo
   _estModal('🚚 Trazer do contêiner — '+p.nome,
@@ -24767,7 +24801,7 @@ window.estConfirmarMigrar=estConfirmarMigrar;
 /* ── CAMPO DE QUANTIDADE: caixa ou pacote ────────────────────────
    A operação fala em caixas, o sistema guarda em pacotes. A pessoa
    escolhe a unidade e vê o total nas duas na hora, antes de salvar. */
-let _estUnid='cx';
+let _estUnid='pct';   // lançamento sempre em pacotes
 function estSetUnid(u, cod){
   _estUnid=u;
   document.querySelectorAll('[data-est-unid]').forEach(b=>{
@@ -24785,11 +24819,11 @@ window.estSetUnid=estSetUnid;
 // bloco reutilizado por entrada, contagem, baixa e migração
 function _estCampoQtd(cod, rotulo, valorInicial){
   const p=estProd(cod), pct=p?(Number(p.pctCaixa)||0):0;
-  const btn=(u,txt)=>'<button type="button" data-est-unid="'+u+'" onclick="estSetUnid(\''+u+'\',\''+escapeJsStr(cod)+'\')" '+
-    'style="flex:1;background:'+(_estUnid===u?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_estUnid===u?'#fff':'var(--text-secondary)')+';border:1px solid '+(_estUnid===u?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:9px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">'+txt+'</button>';
-  return '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);">'+rotulo+'</label>'+
-    '<div style="display:flex;gap:8px;margin:6px 0 8px;">'+btn('cx','📦 Caixas')+btn('pct','Pacotes')+'</div>'+
-    '<input type="number" id="est-q-val" value="'+(valorInicial===undefined?'':valorInicial)+'" inputmode="numeric" placeholder="'+(_estUnid==='cx'?'Quantas caixas':'Quantos pacotes')+'" oninput="estPreviewQtd(\''+escapeJsStr(cod)+'\')" style="width:100%;padding:14px;min-height:52px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:18px;font-weight:700;box-sizing:border-box;">'+
+  // o lançamento é sempre em PACOTES: contar caixa gerava erro quando a
+  // última vinha incompleta
+  _estUnid='pct';
+  return '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);">'+rotulo+' <span style="color:var(--text-muted);font-weight:400;">(em pacotes)</span></label>'+
+    '<input type="number" id="est-q-val" value="'+(valorInicial===undefined?'':valorInicial)+'" inputmode="numeric" placeholder="Quantos pacotes" oninput="estPreviewQtd(\''+escapeJsStr(cod)+'\')" style="width:100%;padding:14px;min-height:52px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:18px;font-weight:700;box-sizing:border-box;margin-top:6px;">'+
     '<div id="est-q-prev" style="font-size:14px;font-weight:800;color:var(--mc-azul);min-height:22px;margin:6px 0 10px;text-align:center;background:var(--bg-page);border-radius:8px;padding:8px;"></div>'+
     '<input type="hidden" id="est-q-pct" value="'+pct+'">';
 }
