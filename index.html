@@ -1137,7 +1137,7 @@
         <div class="mc-page-sub" id="conf-date"></div>
       </div>
       <div class="mc-header-actions">
-        <button class="mc-act-btn-secondary" onclick="goTo('s-cdc')" title="Controle diário">📊</button>
+        <button class="mc-act-btn-secondary" onclick="cdcAbrir('setor')" title="Controle diário">📊</button>
         <button class="mc-act-btn-secondary" onclick="abrirPlano()">📅 Plano</button>
         <button class="mc-act-btn-primary" onclick="iniciarNovoReg()">+ Lançar</button>
       </div>
@@ -1808,7 +1808,7 @@
         <div style="flex:1;"><div class="hb-title">Expedição já pegou</div><div class="hb-desc">Lançar produto pego antes da embalagem</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
-      <button class="home-btn" onclick="_cdcModo='lista';goTo('s-cdc')" style="border-left-color:var(--mc-roxo,#7c3aed);margin-bottom:4px;">
+      <button class="home-btn" onclick="cdcAbrir('setor')" style="border-left-color:var(--mc-roxo,#7c3aed);margin-bottom:4px;">
         <div class="hb-icon" style="background:#ede9fe;">📊</div>
         <div style="flex:1;"><div class="hb-title">Controle Diário</div><div class="hb-desc">Produzido, embalado e quebra por dia</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
@@ -1925,7 +1925,7 @@
         <button class="mc-act-btn-secondary" onclick="abrirExpView('emb')" title="Ver expedição">🚚</button>
         <button class="mc-act-btn-secondary" onclick="goTo('s-est-hub')" title="Estoque &amp; Contêiner">🏬</button>
         <button class="mc-act-btn-secondary" onclick="goTo('s-exp-manual')" title="Produto pego antes da embalagem">📥</button>
-        <button class="mc-act-btn-secondary" onclick="goTo('s-cdc')" title="Controle diário">📊</button>
+        <button class="mc-act-btn-secondary" onclick="cdcAbrir('setor')" title="Controle diário">📊</button>
         <button class="mc-act-btn-primary" onclick="goTo('s-emb-manual')">+ Produto</button>
       </div>
     </div>
@@ -3223,7 +3223,7 @@
         <span class="mc-sector-arrow">›</span>
       </button>
 
-      <button class="mc-sector-card" style="border-left:4px solid var(--mc-roxo,#7c3aed);margin-bottom:10px;" onclick="_cdcModo='lista';goTo('s-cdc');renderCDC()">
+      <button class="mc-sector-card" style="border-left:4px solid var(--mc-roxo,#7c3aed);margin-bottom:10px;" onclick="cdcAbrir('admin')">
         <div class="mc-sector-icon" style="background:#ede9fe;">📊</div>
         <div class="mc-sector-info">
           <div class="mc-sector-title">Controle Diário Confeitaria</div>
@@ -20974,7 +20974,22 @@ function _ajRefRenderResumo(){
 /* A confeitaria e a embalagem veem uma versão enxuta do Controle Diário:
    produto, produzido, embalado, quebra e a conferência de consumo.
    As colunas de massa e recheio ficam só para o admin. */
-function _cdcEhAdmin(){ return window.adminMode===true || window.setorAtual==='admin'; }
+/* A visão depende de POR ONDE a pessoa entrou, não de quem está logado:
+   pelo painel do admin abre completa; pelo botão da confeitaria ou da
+   embalagem abre enxuta — mesmo que quem esteja usando seja o admin. */
+let _cdcVisao='';   // '' = decide pelo login | 'setor' = enxuta | 'admin' = completa
+function cdcAbrir(visao){
+  _cdcVisao=visao||'';
+  _cdcModo='lista';
+  goTo('s-cdc');
+}
+window.cdcAbrir=cdcAbrir;
+
+function _cdcEhAdmin(){
+  if(_cdcVisao==='setor') return false;
+  if(_cdcVisao==='admin') return true;
+  return window.adminMode===true || window.setorAtual==='admin';
+}
 
 /* O controle diário é aberto pelo admin, pela confeitaria e pela
    embalagem: cada um volta para a sua tela. */
@@ -22569,6 +22584,13 @@ function retRender(){
   const nHist=retValidados().length;
   let h='';
 
+  // quantas ainda não tiveram nota emitida
+  const semNota=(retornos||[]).filter(r=>!(r.nota&&r.nota.emitida));
+  if(semNota.length){
+    h+='<div class="card" style="margin-bottom:12px;background:#eff6ff;border:1px solid #bfdbfe;">'+
+      '<div style="font-size:13px;font-weight:800;color:#1e40af;">🧾 '+semNota.length+' retorno(s) sem nota emitida</div>'+
+      '<div style="font-size:12px;color:#1e3a8a;margin-top:3px;">Marque a caixinha NOTA quando o financeiro emitir.</div></div>';
+  }
   if(lista.length){
     const pct=lista.reduce((t,r)=>t+retFaltaDestinar(r),0);
     const antigo=retDiasParado(lista[0]);
@@ -22594,6 +22616,41 @@ function retRender(){
 }
 window.retRender=retRender;
 
+/* ── NOTA FISCAL DO RETORNO ──────────────────────────────────────
+   O financeiro marca aqui quando a nota de devolução foi emitida.
+   Fica no card para dar para ver de relance o que ainda falta. */
+function retCaixaNota(r){
+  const ok=!!(r.nota && r.nota.emitida);
+  const quem=ok?((r.nota.por||'')+(r.nota.em?(' · '+r.nota.em):'')):'';
+  return '<button onclick="event.stopPropagation();retToggleNota(\''+escapeJsStr(r.firestoreId)+'\')" '+
+    'title="'+(ok?('Nota emitida '+quem):'Marcar que a nota foi emitida')+'" '+
+    'style="flex:0 0 auto;display:flex;align-items:center;gap:6px;background:'+(ok?'#f0fdf4':'#fff')+';border:1px solid '+(ok?'#16a34a':'var(--border-md,#cbd5e1)')+';border-radius:8px;padding:6px 10px;cursor:pointer;font-family:inherit;">'+
+      '<span style="width:18px;height:18px;border-radius:4px;border:2px solid '+(ok?'#16a34a':'#cbd5e1')+';background:'+(ok?'#16a34a':'#fff')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;line-height:1;">'+(ok?'✓':'')+'</span>'+
+      '<span style="font-size:11px;font-weight:700;color:'+(ok?'#15803d':'var(--text-secondary)')+';">NOTA</span>'+
+    '</button>';
+}
+window.retCaixaNota=retCaixaNota;
+
+async function retToggleNota(id){
+  const r=retornos.find(x=>x.firestoreId===id); if(!r) return;
+  const ok=!!(r.nota && r.nota.emitida);
+  if(ok){
+    if(!confirm('Desmarcar a nota de "'+r.cliente+'"?\n\nEstá marcada como emitida'+
+      (r.nota.por?(' por '+r.nota.por):'')+(r.nota.em?(' em '+r.nota.em):'')+'.')) return;
+    try{ await updateDoc(doc(db,'retornos',id),{nota:{emitida:false, desmarcadoPor:_demAutor(), desmarcadoEm:agora()}}); }
+    catch(e){ alert('Erro: '+e.message); }
+    return;
+  }
+  const num=prompt('Número da nota de devolução (opcional):','');
+  if(num===null) return;
+  try{
+    await updateDoc(doc(db,'retornos',id),{nota:{
+      emitida:true, numero:String(num||'').trim(), por:_demAutor(), em:agora(), ts:Date.now()
+    }});
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.retToggleNota=retToggleNota;
+
 function retCardLista(r){
   const validado=r.status==='validado';
   const falta=retFaltaDestinar(r);
@@ -22605,6 +22662,8 @@ function retCardLista(r){
         '<div style="font-size:15px;font-weight:800;">'+r.cliente+'</div>'+
         '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">'+(r.motivo||'')+'</div>'+
       '</div>'+
+      // caixinha da nota fiscal: marcada pelo financeiro, com quem e quando
+      retCaixaNota(r)+
       '<div style="text-align:right;white-space:nowrap;">'+
         '<div style="font-size:11px;font-weight:800;color:'+(validado?'#16a34a':(dias>=3?'#dc2626':'#d97706'))+';">'+
           (validado?'✓ resolvido':(dias===0?'hoje':(dias===1?'ontem':'há '+dias+' dias')))+'</div>'+
@@ -22614,6 +22673,10 @@ function retCardLista(r){
       (r.totalItens||0)+' produto(s) · '+(r.totalPacotes||0)+' pacote(s)'+
       (falta?(' · <strong style="color:#d97706;">'+falta+' sem destino</strong>'):'')+'</div>'+
     '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">🚚 '+(r.motorista||'—')+' · por '+(r.criadoPor||'')+'</div>'+
+    (r.nota&&r.nota.emitida
+      ? '<div style="font-size:11px;color:#15803d;margin-top:3px;">🧾 nota emitida'+
+          (r.nota.numero?(' nº '+r.nota.numero):'')+' · '+(r.nota.por||'')+(r.nota.em?(' em '+r.nota.em):'')+'</div>'
+      : '')+
     (validado?'<div style="font-size:11px;color:#15803d;margin-top:3px;">'+retResumoDestinos(r)+'</div>':'')+
   '</div>';
 }
