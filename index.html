@@ -16243,8 +16243,13 @@ function compRenderFooter(){
     linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Exportar OC</button>'+
            '<button class="btn btn-secondary" style="flex:1;" onclick="compReabrir()">↩️ Reabrir</button>';
   }
+  // o admin pode apagar um pedido lançado errado, de dentro dele mesmo
+  const podeApagar = (window.adminMode===true) && _compPedido && _compPedido.firestoreId;
+  const btnApagar = podeApagar
+    ? '<button onclick="compExcluirPedido(\''+escapeJsStr(_compPedido.firestoreId)+'\')" style="width:100%;margin-top:8px;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Excluir este pedido</button>'
+    : '';
   el.innerHTML='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;padding:0 2px;"><span style="color:var(--text-secondary);">'+t.n+' item(ns) · '+_fmtKg(t.kg)+' kg</span><strong style="font-size:16px;color:var(--mc-verde);">'+_fmtRS(t.rs)+'</strong></div>'+
-    '<div style="display:flex;gap:8px;">'+linha1+'</div>'+linha2+'<div style="height:6px;"></div>';
+    '<div style="display:flex;gap:8px;">'+linha1+'</div>'+linha2+btnApagar+'<div style="height:6px;"></div>';
 }
 function _compMontarItens(){
   const itens=[];
@@ -16447,6 +16452,13 @@ async function compExcluirPedido(id){
   try{
     for(const r of reqs){ if(r.firestoreId) await deleteDoc(doc(db,'requisicoes',r.firestoreId)); }
     await deleteDoc(doc(db,'comprasPedidos',id));
+    // se o pedido aberto na tela era esse, volta para a lista
+    if(_compPedido && _compPedido.firestoreId===id){
+      _compPedido={fornecedorId:_compFornSel, fornecedorNome:(_compForn(_compFornSel)||{}).nome||'', status:'solicitado', itens:[]};
+      _compQtd={}; _compPreco={}; _compObs={};
+      goTo('s-compras'); if(typeof renderCompras==='function') renderCompras();
+    }
+    alert('Pedido excluído.');
   }catch(e){ alert('Erro: '+e.message); }
 }
 window.compExcluirPedido=compExcluirPedido;
@@ -22489,10 +22501,10 @@ function retRenderDetalhe(){
         dest.map((d,di)=>{ const dd=retDestino(d.destino);
           return '<span style="display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid '+dd.cor+';color:'+dd.cor+';border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700;">'+
             dd.icone+' '+d.qtd+' '+dd.nome+
-            (validado?'':'<button onclick="retTirarDestino('+i+','+di+')" style="background:none;border:none;color:'+dd.cor+';cursor:pointer;font-size:14px;padding:0 0 0 3px;font-family:inherit;">✕</button>')+
+            (validado||!retPodeDestinar()?'':'<button onclick="retTirarDestino('+i+','+di+')" style="background:none;border:none;color:'+dd.cor+';cursor:pointer;font-size:14px;padding:0 0 0 3px;font-family:inherit;">✕</button>')+
           '</span>'; }).join('')+'</div>':'')+
       // botões para destinar o que falta
-      (!validado && resta>0
+      (!validado && resta>0 && retPodeDestinar()
         ? '<div style="margin-top:9px;">'+
             '<div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:5px;">Faltam '+resta+' — para onde vão?</div>'+
             '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
@@ -22504,9 +22516,11 @@ function retRenderDetalhe(){
 
   rod.innerHTML=(validado
       ? '<div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:9px;">Validado por '+(r.validadoPor||'')+' em '+(r.validadoEm||'')+'</div>'
-      : (falta
-          ? '<div style="font-size:12px;color:#b45309;font-weight:700;text-align:center;margin-bottom:9px;">Destine todos os pacotes para finalizar</div>'
-          : '<button onclick="retFinalizarValidacao()" class="btn btn-primary" style="width:100%;margin-bottom:9px;">✓ Finalizar validação</button>'))+
+      : (!retPodeDestinar()
+          ? '<div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:9px;line-height:1.5;">Aguardando a confeitaria conferir e dar destino.<br>'+(falta?(falta+' pacote(s) sem destino.'):'Tudo destinado.')+'</div>'
+          : (falta
+            ? '<div style="font-size:12px;color:#b45309;font-weight:700;text-align:center;margin-bottom:9px;">Destine todos os pacotes para finalizar</div>'
+            : '<button onclick="retFinalizarValidacao()" class="btn btn-primary" style="width:100%;margin-bottom:9px;">✓ Finalizar validação</button>')))+
     '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'ret-det-modal\').remove()">Fechar</button>'+
     ((window.adminMode||window.setorAtual==='admin')
       ? '<button onclick="retExcluir(\''+r.firestoreId+'\')" style="width:100%;margin-top:8px;background:none;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Excluir este retorno</button>'
@@ -22515,7 +22529,15 @@ function retRenderDetalhe(){
 window.retRenderDetalhe=retRenderDetalhe;
 
 // destinar uma quantidade — permite dividir o mesmo item entre destinos
+/* Dar destino é trabalho da confeitaria: é ela que confere o estado do
+   produto. O carregamento só registra o que voltou. */
+function retPodeDestinar(){
+  return window.adminMode===true || window.setorAtual==='admin' || window.setorAtual==='confeitaria';
+}
+window.retPodeDestinar=retPodeDestinar;
+
 async function retDarDestino(idx, destinoId){
+  if(!retPodeDestinar()){ alert('Só a confeitaria dá destino aos produtos.\n\nAqui você pode registrar o retorno; a confeitaria confere e decide.'); return; }
   const r=retornos.find(x=>x.firestoreId===_retAberto); if(!r) return;
   const it=(r.itens||[])[idx]; if(!it) return;
   const resta=retItemResta(it);
@@ -22546,6 +22568,7 @@ async function retDarDestino(idx, destinoId){
 window.retDarDestino=retDarDestino;
 
 async function retTirarDestino(idx, di){
+  if(!retPodeDestinar()){ alert('Só a confeitaria altera os destinos.'); return; }
   const r=retornos.find(x=>x.firestoreId===_retAberto); if(!r) return;
   const itens=JSON.parse(JSON.stringify(r.itens||[]));
   if(!itens[idx] || !itens[idx].destinacoes) return;
@@ -22560,6 +22583,7 @@ async function retTirarDestino(idx, di){
 window.retTirarDestino=retTirarDestino;
 
 async function retFinalizarValidacao(){
+  if(!retPodeDestinar()){ alert('Só a confeitaria finaliza a validação.'); return; }
   const r=retornos.find(x=>x.firestoreId===_retAberto); if(!r) return;
   if(retFaltaDestinar(r)>0){ alert('Ainda há pacotes sem destino.'); return; }
   if(!confirm('Finalizar a validação deste retorno?\n\n'+retResumoDestinos(r))) return;
