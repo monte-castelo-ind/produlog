@@ -24503,6 +24503,9 @@ function estRenderConfig(){
       '<div style="font-size:13px;font-weight:700;color:#b45309;">🧹 Zerar o saldo</div>'+
       '<div style="font-size:11px;color:#78350f;margin:4px 0 10px;line-height:1.5;">Coloca o estoque de dentro e/ou o do contêiner em zero, registrando o ajuste nas movimentações. O histórico é mantido — use depois de uma contagem geral.</div>'+
       '<button onclick="estAbrirZerar()" style="width:100%;background:#fff;border:1px solid #d97706;color:#b45309;border-radius:9px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Escolher o que zerar</button>'+
+      (estResumoZeragens().length
+        ? '<button onclick="estAbrirZeragens()" style="width:100%;margin-top:7px;background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;">🕐 Ver o que havia antes de zerar ('+estResumoZeragens().length+')</button>'
+        : '')+
     '</div>'+
     '<div class="card" style="margin-top:12px;border:1px solid #fecaca;">'+
       '<div style="font-size:13px;font-weight:700;color:#b91c1c;">🗑 Apagar tudo</div>'+
@@ -25343,6 +25346,73 @@ window.estLimparCorteMov=estLimparCorteMov;
    O saldo de dentro é a soma dos movimentos, então zerar é lançar a
    saída do que existe hoje — assim o histórico continua explicando o
    que aconteceu. O contêiner é zerado baixando cada lote. */
+/* ── O QUE HAVIA ANTES DE ZERAR ──────────────────────────────────
+   Ao zerar, cada produto gera um movimento com o saldo que tinha.
+   Aqui esses movimentos viram um resumo legível, separando o que
+   estava dentro da empresa do que estava no contêiner. */
+function estResumoZeragens(){
+  const zer=(estMovs||[]).filter(m=>m.tipo==='contagem' &&
+    /zerado pelo admin/i.test(String(m.motivo||'')));
+  // agrupa por momento (data e hora), porque pode haver mais de uma zeragem
+  const porVez={};
+  zer.forEach(m=>{
+    // m.hora vem como "02/10/2026 09:15": a hora são os 5 últimos
+    const chave=(m.data||'')+' às '+String(m.hora||'').slice(-5);
+    if(!porVez[chave]) porVez[chave]={quando:chave, dataNum:estDataNum(m.data), interno:{}, container:{}, totI:0, totC:0};
+    const g=porVez[chave];
+    const qtd=Math.abs(Number(m.pacotes)||0);
+    if(m.local==='container'){
+      g.container[m.codigo]=g.container[m.codigo]||{nome:m.nome||m.codigo, qtd:0, lotes:[]};
+      g.container[m.codigo].qtd+=qtd;
+      g.container[m.codigo].lotes.push((m.obs||'').replace(/ · saldo anterior.*/,''));
+      g.totC+=qtd;
+    } else {
+      g.interno[m.codigo]=g.interno[m.codigo]||{nome:m.nome||m.codigo, qtd:0};
+      g.interno[m.codigo].qtd+=qtd;
+      g.totI+=qtd;
+    }
+  });
+  return Object.values(porVez).sort((a,b)=>(b.dataNum-a.dataNum)||String(b.quando).localeCompare(String(a.quando)));
+}
+
+function estAbrirZeragens(){
+  const lista=estResumoZeragens();
+  const ov=document.createElement('div');
+  ov.id='est-zer-hist';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  const bloco=(titulo, emoji, itens, total, cor)=>{
+    const arr=Object.values(itens).sort((a,b)=>b.qtd-a.qtd);
+    if(!arr.length) return '';
+    return '<div style="margin-top:10px;">'+
+      '<div style="font-size:12px;font-weight:800;color:'+cor+';margin-bottom:5px;">'+emoji+' '+titulo+' · '+total+' pct</div>'+
+      arr.map(x=>'<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--border);">'+
+        '<span style="flex:1;min-width:0;">'+x.nome+
+          (x.lotes&&x.lotes.length>1?('<span style="display:block;font-size:10px;color:var(--text-muted);">'+x.lotes.length+' lotes</span>'):'')+
+        '</span><strong style="white-space:nowrap;">'+x.qtd+' pct</strong></div>').join('')+
+    '</div>';
+  };
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🕐 O que havia antes de zerar</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">Saldo de cada produto no momento em que o estoque foi zerado.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      (lista.length
+        ? lista.map(v=>'<div class="card" style="margin-bottom:10px;">'+
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">'+
+              '<div style="font-size:14px;font-weight:800;">'+v.quando+'</div>'+
+              '<div style="font-size:13px;font-weight:800;color:var(--mc-azul);">'+(v.totI+v.totC)+' pct no total</div></div>'+
+            bloco('Estoque de dentro','🏭',v.interno,v.totI,'#2563eb')+
+            bloco('Contêiner (rua)','🚛',v.container,v.totC,'#7c3aed')+
+          '</div>').join('')
+        : '<div style="padding:24px;text-align:center;color:var(--text-secondary);font-size:13px;">Nenhuma zeragem registrada ainda.</div>')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'est-zer-hist\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.estAbrirZeragens=estAbrirZeragens;
+
 function estAbrirZerar(){
   if(!estEhAdmin()){ alert('Só o admin pode zerar o estoque.'); return; }
   const prods=estAtivos();
