@@ -22207,12 +22207,14 @@ function _cdqLinhas(data){
     const man=(chaveSalva?salvo[chaveSalva]:null)||{};
     const consumidos=Number(man.consumidos)||0;
     const massaVelha=Number(man.massaVelha)||0;
+    const obs=String(man.obs||'');
+    const bloqueado=man.bloqueado===true;
     const kgPorKit=(typeof _kitKgPorKit==='function')?_kitKgPorKit(g.kit):0;
     const kgKits=consumidos*kgPorKit;
     const disponivel=kgKits+massaVelha;          // o que entrou de massa
     const quebraKg=disponivel-g.embKg;           // o que não virou pacote
     const quebraPct=disponivel>0?(quebraKg/disponivel*100):0;
-    return {...g, consumidos, massaVelha, kgPorKit, kgKits, disponivel, quebraKg, quebraPct,
+    return {...g, consumidos, massaVelha, obs, bloqueado, kgPorKit, kgKits, disponivel, quebraKg, quebraPct,
             preenchido:(consumidos>0||massaVelha>0)};
   }).sort((a,b)=>b.disponivel-a.disponivel || a.kit.localeCompare(b.kit,'pt-BR'));
 }
@@ -22239,6 +22241,7 @@ function _cdqRenderLista(datas){
     datas.slice(0,60).map(d=>{
       const ls=_cdqLinhas(d);
       const falta=ls.filter(l=>!l.preenchido).length;
+      const bloqN=ls.filter(l=>l.bloqueado).length;
       const totEmb=ls.reduce((t,l)=>t+l.embKg,0);
       const totDisp=ls.reduce((t,l)=>t+l.disponivel,0);
       const qpct=totDisp>0?((totDisp-totEmb)/totDisp*100):null;
@@ -22247,7 +22250,8 @@ function _cdqRenderLista(datas){
         '<span style="flex:1;min-width:0;">'+
           '<span style="display:block;font-size:15px;font-weight:800;">'+d+'</span>'+
           '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
-            ls.length+' kit(s) · '+_fmtKg(totEmb)+' kg embalado'+(falta?(' · <strong style="color:#d97706;">'+falta+' sem preencher</strong>'):'')+'</span></span>'+
+            ls.length+' kit(s) · '+_fmtKg(totEmb)+' kg embalado'+(falta?(' · <strong style="color:#d97706;">'+falta+' sem preencher</strong>'):'')+
+            (bloqN?(' · <strong style="color:#dc2626;">🚫 '+bloqN+' pendente(s)</strong>'):'')+'</span></span>'+
         '<span style="text-align:right;white-space:nowrap;">'+
           '<span style="display:block;font-size:17px;font-weight:900;color:'+cor+';">'+(qpct===null?'—':(qpct>0?'':'+')+_fmtKg(Math.abs(qpct))+'%')+'</span>'+
           '<span style="display:block;font-size:10px;color:var(--text-muted);">quebra</span></span>'+
@@ -22270,6 +22274,15 @@ function _cdqRenderDia(datas){
 
   if(!ls.length) return h+_vazio('Nenhum kit neste dia.');
 
+  // pendências: o que você marcou para não lançar ainda
+  const bloq=ls.filter(l=>l.bloqueado);
+  if(bloq.length){
+    h+='<div class="card" style="margin-bottom:12px;border:2px solid #dc2626;background:#fef2f2;">'+
+      '<div style="font-size:14px;font-weight:800;color:#b91c1c;">🚫 '+bloq.length+' kit(s) com pendência — não lançar ainda</div>'+
+      bloq.map(l=>'<div style="font-size:12px;color:#7f1d1d;margin-top:4px;"><strong>'+l.kit+'</strong>'+(l.obs?(' · '+l.obs):'')+'</div>').join('')+
+    '</div>';
+  }
+
   h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
     '<table style="border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;min-width:760px;">'+
     '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
@@ -22291,14 +22304,22 @@ function _cdqRenderDia(datas){
       tot.kgKits+=l.kgKits; tot.massaVelha+=l.massaVelha; tot.embKg+=l.embKg; tot.disponivel+=l.disponivel;
       tot.nPreenchidos++;
     }
-    const bg=n%2?'#fafbfc':'#fff';
+    const bg=l.bloqueado?'#fef2f2':(n%2?'#fafbfc':'#fff');
     const qc=!l.preenchido?'var(--text-muted)':(Math.abs(l.quebraPct)>8?'#dc2626':(Math.abs(l.quebraPct)>4?'#d97706':'#16a34a'));
     const campo=(campoNome, valor, dica)=>'<input type="number" step="any" min="0" value="'+(valor||'')+'" placeholder="'+dica+'" '+
+      'id="cdq-'+campoNome+'-'+n+'" data-cdq-col="'+campoNome+'" data-cdq-linha="'+n+'" data-cdq-kit="'+escapeHtmlAttr(l.kit)+'" '+
       'onchange="cdqSalvarCampo(\''+escapeJsStr(l.kit)+'\',\''+campoNome+'\',this.value)" '+
+      // Enter salva e desce para o mesmo campo da linha de baixo
+      'onkeydown="if(event.key===\'Enter\'){event.preventDefault();cdqProximo(this);}" '+
       'style="width:90px;padding:7px;border:1px solid var(--border-md,#d1d5db);border-radius:7px;font-size:13px;text-align:center;font-family:inherit;">';
     h+='<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
-      '<td style="padding:9px 10px;font-weight:700;position:sticky;left:0;background:'+bg+';">'+l.kit+
-        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+kg(l.kgPorKit)+' kg/kit · '+Object.keys(l.produtos).length+' produto(s)</div></td>'+
+      '<td style="padding:9px 10px;font-weight:700;position:sticky;left:0;background:'+bg+';">'+
+        (l.bloqueado?'<span style="font-size:13px;">🚫 </span>':'')+l.kit+
+        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+kg(l.kgPorKit)+' kg/kit · '+Object.keys(l.produtos).length+' produto(s)</div>'+
+        (l.obs?'<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:3px;white-space:normal;max-width:260px;">📝 '+l.obs+'</div>':'')+
+        '<button onclick="cdqAbrirObs(\''+escapeJsStr(l.kit)+'\')" style="background:none;border:none;color:var(--mc-azul,#2563eb);font-size:11px;cursor:pointer;padding:3px 0 0;font-family:inherit;">'+
+          (l.obs||l.bloqueado?'✏️ editar nota':'+ nota')+'</button>'+
+      '</td>'+
       '<td style="padding:9px 8px;text-align:center;">'+campo('consumidos', l.consumidos, 'kits')+'</td>'+
       '<td style="padding:9px 8px;text-align:center;font-weight:700;">'+(l.kgKits?kg(l.kgKits):'—')+'</td>'+
       '<td style="padding:9px 8px;text-align:center;">'+campo('massaVelha', l.massaVelha, 'kg')+'</td>'+
@@ -22338,6 +22359,73 @@ function _cdqRenderDia(datas){
     '</div>').join('');
   return h;
 }
+
+/* Enter salva e desce para o mesmo campo da linha de baixo, para
+   preencher a coluna inteira sem tirar a mão do teclado. */
+function escapeHtmlAttr(v){ return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+window.escapeHtmlAttr=escapeHtmlAttr;
+
+function cdqProximo(inp){
+  const col=inp.dataset.cdqCol, linha=parseInt(inp.dataset.cdqLinha)||0;
+  // salva direto: disparar o evento de mudança nem sempre funciona
+  cdqSalvarCampo(inp.dataset.cdqKit||'', col, inp.value);
+  // o render é assíncrono: espera a tela voltar para achar o próximo
+  setTimeout(()=>{
+    const prox=document.getElementById('cdq-'+col+'-'+(linha+1));
+    if(prox){ prox.focus(); prox.select && prox.select(); }
+    else {
+      // acabou a coluna: vai para o topo da próxima
+      const outra=(col==='consumidos')?'massaVelha':'consumidos';
+      const primeiro=document.getElementById('cdq-'+outra+'-0');
+      if(primeiro){ primeiro.focus(); primeiro.select && primeiro.select(); }
+    }
+  }, 80);
+}
+window.cdqProximo=cdqProximo;
+
+/* ── NOTA E PENDÊNCIA DO KIT ─────────────────────────────────────
+   Controle à parte: serve para registrar o que precisa ser resolvido
+   antes de lançar a produção no ERP. Não mexe em nada do resto do app. */
+function cdqAbrirObs(kit){
+  const l=_cdqLinhas(_cdqDataSel).find(x=>_kitNormNome(x.kit)===_kitNormNome(kit));
+  if(!l) return;
+  const ov=document.createElement('div');
+  ov.id='cdq-obs-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:18px;">'+
+    '<div style="font-size:17px;font-weight:800;">📝 '+l.kit+'</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+_cdqDataSel+
+      ' · quebra '+(l.preenchido?((l.quebraPct>0?'':'+')+_fmtKg(Math.abs(l.quebraPct))+'% · '+_fmtKg(Math.abs(l.quebraKg))+' kg'):'não calculada')+'</div>'+
+    '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);display:block;margin-top:14px;">Observação</label>'+
+    '<textarea id="cdq-obs-txt" rows="3" placeholder="ex: quebra alta, conferir pesagem do kit" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin:4px 0 12px;resize:vertical;">'+(l.obs||'')+'</textarea>'+
+    '<label for="cdq-obs-bloq" style="display:flex;align-items:flex-start;gap:9px;padding:11px;background:'+(l.bloqueado?'#fef2f2':'var(--bg-page)')+';border:2px solid '+(l.bloqueado?'#dc2626':'var(--border)')+';border-radius:10px;cursor:pointer;margin-bottom:14px;">'+
+      '<input type="checkbox" id="cdq-obs-bloq"'+(l.bloqueado?' checked':'')+' style="width:20px;height:20px;margin:1px 0 0;flex:0 0 auto;cursor:pointer;">'+
+      '<span style="flex:1;"><span style="display:block;font-size:13px;font-weight:700;color:'+(l.bloqueado?'#b91c1c':'var(--text-primary)')+';">🚫 Não lançar no sistema ainda</span>'+
+      '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;line-height:1.4;">Destaca este kit até a pendência ser resolvida. É só um lembrete — não altera nada no app.</span></span></label>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'cdq-obs-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="cdqSalvarObs(\''+escapeJsStr(l.kit)+'\')">Salvar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  setTimeout(()=>document.getElementById('cdq-obs-txt')?.focus(),60);
+}
+window.cdqAbrirObs=cdqAbrirObs;
+
+async function cdqSalvarObs(kit){
+  const obs=((document.getElementById('cdq-obs-txt')||{}).value||'').trim();
+  const bloqueado=!!(document.getElementById('cdq-obs-bloq')||{}).checked;
+  const atual=(cdqDados[_cdqDataSel]||{}).kits||{};
+  const chave=Object.keys(atual).find(k=>_kitNormNome(k)===_kitNormNome(kit)) || kit;
+  const kits={...atual, [chave]:{...(atual[chave]||{}), obs, bloqueado}};
+  cdqDados[_cdqDataSel]={...(cdqDados[_cdqDataSel]||{}), kits};
+  document.getElementById('cdq-obs-modal')?.remove();
+  renderCDQ();
+  try{
+    await setDoc(doc(db,'quadraControleDiario',_cdqDataSel),
+      {kits, data:_cdqDataSel, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Erro ao salvar: '+e.message); }
+}
+window.cdqSalvarObs=cdqSalvarObs;
 
 async function cdqSalvarCampo(kit, campo, valor){
   const v=Math.max(0, parseFloat(String(valor).replace(',','.'))||0);
