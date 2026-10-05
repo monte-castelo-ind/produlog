@@ -25364,7 +25364,9 @@ function estResumoZeragens(){
     if(m.local==='container'){
       g.container[m.codigo]=g.container[m.codigo]||{nome:m.nome||m.codigo, qtd:0, lotes:[]};
       g.container[m.codigo].qtd+=qtd;
-      g.container[m.codigo].lotes.push((m.obs||'').replace(/ · saldo anterior.*/,''));
+      // a validade do lote vem na observação: "lote val 20/10/2026 · saldo anterior: 116 pct"
+      const mv=String(m.obs||'').match(/lote val\s+([^\s·]+)/);
+      g.container[m.codigo].lotes.push({validade:(mv?mv[1]:'—'), qtd});
       g.totC+=qtd;
     } else {
       g.interno[m.codigo]=g.interno[m.codigo]||{nome:m.nome||m.codigo, qtd:0};
@@ -25385,10 +25387,17 @@ function estAbrirZeragens(){
     if(!arr.length) return '';
     return '<div style="margin-top:10px;">'+
       '<div style="font-size:12px;font-weight:800;color:'+cor+';margin-bottom:5px;">'+emoji+' '+titulo+' · '+total+' pct</div>'+
-      arr.map(x=>'<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--border);">'+
-        '<span style="flex:1;min-width:0;">'+x.nome+
-          (x.lotes&&x.lotes.length>1?('<span style="display:block;font-size:10px;color:var(--text-muted);">'+x.lotes.length+' lotes</span>'):'')+
-        '</span><strong style="white-space:nowrap;">'+x.qtd+' pct</strong></div>').join('')+
+      arr.map(x=>'<div style="padding:6px 0;border-bottom:1px dashed var(--border);">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;">'+
+          '<span style="flex:1;min-width:0;font-weight:600;">'+x.nome+'</span>'+
+          '<strong style="white-space:nowrap;">'+x.qtd+' pct</strong></div>'+
+        // cada lote com a validade que tinha
+        (x.lotes&&x.lotes.length
+          ? x.lotes.slice().sort((a,b)=>estDataNum(a.validade)-estDataNum(b.validade))
+              .map(l=>'<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text-secondary);padding-left:10px;margin-top:2px;">'+
+                '<span>📅 val '+l.validade+'</span><span>'+l.qtd+' pct</span></div>').join('')
+          : '')+
+      '</div>').join('')+
     '</div>';
   };
   ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
