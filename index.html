@@ -25491,7 +25491,15 @@ function estRenderMov(){
   const tipos=[['todos','Tudo'],['carregamento','Carregamento'],['baixa','Baixa manual'],['porfora','Por fora'],['entrada','Entrada'],['contagem','Contagem']];
   const chip=(ativoV,v,l,fn)=>'<button onclick="'+fn+'(\''+v+'\')" style="background:'+(ativoV===v?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(ativoV===v?'#fff':'var(--text-secondary)')+';border:1px solid '+(ativoV===v?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:99px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+l+'</button>';
 
-  let h='<div class="card" style="margin-bottom:12px;">'+
+  let h=(estResumoZeragens().length
+    ? '<button onclick="estAbrirZeragens()" class="card" style="display:flex;align-items:center;gap:10px;width:100%;margin-bottom:12px;cursor:pointer;border:1px solid #bfdbfe;background:#eff6ff;text-align:left;font-family:inherit;">'+
+        '<span style="font-size:20px;">🕐</span>'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:13px;font-weight:800;color:#1e40af;">O que havia antes de zerar</span>'+
+          '<span style="display:block;font-size:11px;color:#1e3a8a;margin-top:1px;">Saldo por produto, separando empresa e contêiner</span>'+
+        '</span><span style="font-size:18px;color:#2563eb;">›</span></button>'
+    : '')+
+  '<div class="card" style="margin-bottom:12px;">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">'+
       '<span style="font-size:11px;font-weight:700;color:var(--text-secondary);">PERÍODO</span>'+
       (estEhAdmin()
