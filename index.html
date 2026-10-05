@@ -2448,6 +2448,17 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="emb-alt-content"></div>
   </div>
 
+  <!-- CONTROLE DIÁRIO DA QUADRA -->
+  <div class="screen" id="s-cdq">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Quadra</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title">🍞 Controle Diário Quadra</div><div class="mc-page-sub">Consumo de kits × embalado</div></div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="cdq-content"></div>
+  </div>
+
   <!-- ============ RETORNO DE MERCADORIAS ============ -->
   <div class="screen" id="s-ret">
     <div class="mc-header">
@@ -3228,6 +3239,15 @@
         <div class="mc-sector-info">
           <div class="mc-sector-title">Controle Diário Confeitaria</div>
           <div class="mc-sector-desc">Massa, recheio, produzido, embalado e quebra por dia</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+
+      <button class="mc-sector-card" style="border-left:4px solid var(--mc-dourado,#d97706);margin-bottom:10px;" onclick="cdqAbrir()">
+        <div class="mc-sector-icon" style="background:#fef3c7;">🍞</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Controle Diário Quadra</div>
+          <div class="mc-sector-desc">Kits consumidos &times; embalado &middot; quebra por kit</div>
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
@@ -5391,6 +5411,7 @@ function goTo(id, semHistorico){
   if(id==='s-la-resumo') renderLaResumo();
   if(id==='s-cpm') renderCpm();
   if(id==='s-cdc') renderCDC();
+  if(id==='s-cdq' && typeof renderCDQ==='function') renderCDQ();
   if(id==='s-perdas') renderPerdas();
   if(id==='s-carreg-edit') renderCarregEdit();
   if(id==='s-carreg-conf') renderCarregConf();
@@ -22070,6 +22091,210 @@ async function libEntrarNoContainer(reg, qtd, validade, setor){
   }catch(e){ console.error('entrada no contêiner',e); alert('A liberação foi registrada, mas não consegui dar entrada no contêiner: '+e.message); }
 }
 window.libEntrarNoContainer=libEntrarNoContainer;
+
+/* ══════════════════════════════════════════════════════════════════
+   CONTROLE DIÁRIO DA QUADRA
+   Por KIT, não por produto: o kit vira massa, e vários produtos saem
+   dela. A conta compara o que entrou (kits consumidos + massa velha)
+   com o que saiu embalado, tudo em quilos.
+   Guarda em: quadraControleDiario/{data}
+   ══════════════════════════════════════════════════════════════════ */
+let cdqDados={};          // {data: {kits:{nomeKit:{consumidos, massaVelha}}}}
+let _cdqDataSel='', _cdqModo='lista';
+
+onSnapshot(collection(db,'quadraControleDiario'), snap=>{
+  try{
+    cdqDados={};
+    snap.docs.forEach(d=>{ cdqDados[d.id]=d.data(); });
+    if(document.querySelector('.screen.active')?.id==='s-cdq') renderCDQ();
+  }catch(e){ console.error('cdq snap',e); }
+});
+
+/* Dias com produção da quadra, do mais recente para o mais antigo */
+function _cdqDatas(){
+  const ds=new Set();
+  (registros||[]).forEach(r=>{ if(_cdqEhQuadra(r) && r.data) ds.add(r.data); });
+  Object.keys(cdqDados||{}).forEach(d=>ds.add(d));
+  return [...ds].sort((a,b)=>estDataNum(b)-estDataNum(a));
+}
+
+/* O registro é da quadra quando o produto está no catálogo dela */
+function _cdqEhQuadra(r){
+  const nome=_normNome(r.produto||'');
+  return (QUADRA_PRODUTOS||[]).some(p=>_normNome(p.nome||'')===nome);
+}
+
+function _cdqProdutoDe(nome){
+  const n=_normNome(nome||'');
+  return (QUADRA_PRODUTOS||[]).find(p=>_normNome(p.nome||'')===n) || null;
+}
+
+/* Uma linha por KIT usado no dia */
+function _cdqLinhas(data){
+  const salvo=(cdqDados[data]||{}).kits||{};
+  const porKit={};
+
+  // o que foi embalado no dia, somado por kit, convertido em quilos
+  (registros||[]).forEach(r=>{
+    if(r.data!==data || !_cdqEhQuadra(r)) return;
+    const p=_cdqProdutoDe(r.produto);
+    if(!p || !p.kit) return;
+    const kg=(Number(p.kgPacote)||0);
+    const embPct=laEmbalado(r.embalagem||{});
+    const prodPct=Number(r.qtd)||0;
+    if(!porKit[p.kit]) porKit[p.kit]={kit:p.kit, embKg:0, prodKg:0, embPct:0, prodPct:0, produtos:{}};
+    const g=porKit[p.kit];
+    g.embKg+=embPct*kg; g.prodKg+=prodPct*kg;
+    g.embPct+=embPct;   g.prodPct+=prodPct;
+    g.produtos[r.produto]=g.produtos[r.produto]||{nome:r.produto, kgPacote:kg, emb:0, prod:0};
+    g.produtos[r.produto].emb+=embPct;
+    g.produtos[r.produto].prod+=prodPct;
+  });
+
+  // kits que foram preenchidos à mão mas ainda não têm produto embalado
+  Object.keys(salvo).forEach(k=>{ if(!porKit[k]) porKit[k]={kit:k, embKg:0, prodKg:0, embPct:0, prodPct:0, produtos:{}}; });
+
+  return Object.values(porKit).map(g=>{
+    const man=salvo[g.kit]||{};
+    const consumidos=Number(man.consumidos)||0;
+    const massaVelha=Number(man.massaVelha)||0;
+    const kgPorKit=(typeof _kitKgPorKit==='function')?_kitKgPorKit(g.kit):0;
+    const kgKits=consumidos*kgPorKit;
+    const disponivel=kgKits+massaVelha;          // o que entrou de massa
+    const quebraKg=disponivel-g.embKg;           // o que não virou pacote
+    const quebraPct=disponivel>0?(quebraKg/disponivel*100):0;
+    return {...g, consumidos, massaVelha, kgPorKit, kgKits, disponivel, quebraKg, quebraPct,
+            preenchido:(consumidos>0||massaVelha>0)};
+  }).sort((a,b)=>b.disponivel-a.disponivel || a.kit.localeCompare(b.kit,'pt-BR'));
+}
+
+function renderCDQ(){
+  const el=document.getElementById('cdq-content'); if(!el) return;
+  const datas=_cdqDatas();
+  if(!datas.length){ el.innerHTML=_vazio('Nenhuma produção da quadra registrada.'); return; }
+  if(_cdqModo==='lista'){ el.innerHTML=_cdqRenderLista(datas); return; }
+  if(!_cdqDataSel || !datas.includes(_cdqDataSel)) _cdqDataSel=datas[0];
+  el.innerHTML=_cdqRenderDia(datas);
+}
+window.renderCDQ=renderCDQ;
+
+function cdqAbrir(){ _cdqModo='lista'; goTo('s-cdq'); }
+window.cdqAbrir=cdqAbrir;
+function _cdqVerDia(d){ _cdqDataSel=d; _cdqModo='dia'; renderCDQ(); }
+window._cdqVerDia=_cdqVerDia;
+function _cdqVoltarLista(){ _cdqModo='lista'; renderCDQ(); }
+window._cdqVoltarLista=_cdqVoltarLista;
+
+function _cdqRenderLista(datas){
+  return '<div class="mc-section-header">Escolha o dia</div>'+
+    datas.slice(0,60).map(d=>{
+      const ls=_cdqLinhas(d);
+      const falta=ls.filter(l=>!l.preenchido).length;
+      const totEmb=ls.reduce((t,l)=>t+l.embKg,0);
+      const totDisp=ls.reduce((t,l)=>t+l.disponivel,0);
+      const qpct=totDisp>0?((totDisp-totEmb)/totDisp*100):null;
+      const cor=qpct===null?'var(--text-muted)':(Math.abs(qpct)>8?'#dc2626':(Math.abs(qpct)>4?'#d97706':'#16a34a'));
+      return '<button onclick="_cdqVerDia(\''+escapeJsStr(d)+'\')" class="card" style="display:flex;align-items:center;gap:10px;width:100%;margin-bottom:7px;cursor:pointer;text-align:left;font-family:inherit;">'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:15px;font-weight:800;">'+d+'</span>'+
+          '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
+            ls.length+' kit(s) · '+_fmtKg(totEmb)+' kg embalado'+(falta?(' · <strong style="color:#d97706;">'+falta+' sem preencher</strong>'):'')+'</span></span>'+
+        '<span style="text-align:right;white-space:nowrap;">'+
+          '<span style="display:block;font-size:17px;font-weight:900;color:'+cor+';">'+(qpct===null?'—':(qpct>0?'':'+')+_fmtKg(Math.abs(qpct))+'%')+'</span>'+
+          '<span style="display:block;font-size:10px;color:var(--text-muted);">quebra</span></span>'+
+        '<span style="font-size:18px;color:var(--text-muted);">›</span></button>';
+    }).join('');
+}
+
+function _cdqRenderDia(datas){
+  const i=datas.indexOf(_cdqDataSel);
+  const ls=_cdqLinhas(_cdqDataSel);
+  const kg=v=>_fmtKg(v);
+
+  let h='<button onclick="_cdqVoltarLista()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">‹ Todos os dias</button>';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">'+
+    '<button onclick="_cdqVerDia(\''+escapeJsStr(datas[i+1]||_cdqDataSel)+'\')"'+(i>=datas.length-1?' disabled':'')+' style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-family:inherit;color:'+(i>=datas.length-1?'#cbd5e1':'var(--text-secondary)')+';">‹ anterior</button>'+
+    '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;">📅 '+_cdqDataSel+'</div>'+
+      '<div style="font-size:11px;color:var(--text-secondary);">'+ls.length+' kit(s)</div></div>'+
+    '<button onclick="_cdqVerDia(\''+escapeJsStr(datas[i-1]||_cdqDataSel)+'\')"'+(i<=0?' disabled':'')+' style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-family:inherit;color:'+(i<=0?'#cbd5e1':'var(--text-secondary)')+';">próximo ›</button>'+
+  '</div>';
+
+  if(!ls.length) return h+_vazio('Nenhum kit neste dia.');
+
+  h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
+    '<table style="border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;min-width:760px;">'+
+    '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
+      '<th style="padding:9px 10px;text-align:left;position:sticky;left:0;background:#334155;">KIT</th>'+
+      '<th style="padding:9px 8px;text-align:center;">KITS CONSUMIDOS</th>'+
+      '<th style="padding:9px 8px;text-align:center;">TOTAL (KG)</th>'+
+      '<th style="padding:9px 8px;text-align:center;">MASSA VELHA</th>'+
+      '<th style="padding:9px 8px;text-align:center;">EMBALADO (KG)</th>'+
+      '<th style="padding:9px 8px;text-align:center;">QUEBRA %</th>'+
+      '<th style="padding:9px 8px;text-align:center;">QUEBRA KG</th>'+
+    '</tr></thead><tbody>';
+
+  const tot={kgKits:0, massaVelha:0, embKg:0, disponivel:0};
+  ls.forEach((l,n)=>{
+    tot.kgKits+=l.kgKits; tot.massaVelha+=l.massaVelha; tot.embKg+=l.embKg; tot.disponivel+=l.disponivel;
+    const bg=n%2?'#fafbfc':'#fff';
+    const qc=!l.preenchido?'var(--text-muted)':(Math.abs(l.quebraPct)>8?'#dc2626':(Math.abs(l.quebraPct)>4?'#d97706':'#16a34a'));
+    const campo=(campoNome, valor, dica)=>'<input type="number" step="any" min="0" value="'+(valor||'')+'" placeholder="'+dica+'" '+
+      'onchange="cdqSalvarCampo(\''+escapeJsStr(l.kit)+'\',\''+campoNome+'\',this.value)" '+
+      'style="width:90px;padding:7px;border:1px solid var(--border-md,#d1d5db);border-radius:7px;font-size:13px;text-align:center;font-family:inherit;">';
+    h+='<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
+      '<td style="padding:9px 10px;font-weight:700;position:sticky;left:0;background:'+bg+';">'+l.kit+
+        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+kg(l.kgPorKit)+' kg/kit · '+Object.keys(l.produtos).length+' produto(s)</div></td>'+
+      '<td style="padding:9px 8px;text-align:center;">'+campo('consumidos', l.consumidos, 'kits')+'</td>'+
+      '<td style="padding:9px 8px;text-align:center;font-weight:700;">'+(l.kgKits?kg(l.kgKits):'—')+'</td>'+
+      '<td style="padding:9px 8px;text-align:center;">'+campo('massaVelha', l.massaVelha, 'kg')+'</td>'+
+      '<td style="padding:9px 8px;text-align:center;font-weight:700;">'+(l.embKg?kg(l.embKg):'0')+
+        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+l.embPct+' pct</div></td>'+
+      '<td style="padding:9px 8px;text-align:center;font-weight:900;color:'+qc+';">'+(l.preenchido?((l.quebraPct>0?'':'+')+kg(Math.abs(l.quebraPct))+'%'):'—')+'</td>'+
+      '<td style="padding:9px 8px;text-align:center;font-weight:800;color:'+qc+';">'+(l.preenchido?((l.quebraKg>0?'':'+')+kg(Math.abs(l.quebraKg))):'—')+'</td>'+
+    '</tr>';
+  });
+
+  const qTot=tot.disponivel-tot.embKg;
+  const qTotPct=tot.disponivel>0?(qTot/tot.disponivel*100):0;
+  h+='<tr style="background:#e2e8f0;font-weight:800;border-top:2px solid #94a3b8;">'+
+    '<td style="padding:10px;position:sticky;left:0;background:#e2e8f0;">TOTAL</td><td></td>'+
+    '<td style="padding:10px 8px;text-align:center;">'+kg(tot.kgKits)+'</td>'+
+    '<td style="padding:10px 8px;text-align:center;">'+kg(tot.massaVelha)+'</td>'+
+    '<td style="padding:10px 8px;text-align:center;">'+kg(tot.embKg)+'</td>'+
+    '<td style="padding:10px 8px;text-align:center;">'+(tot.disponivel?((qTotPct>0?'':'+')+kg(Math.abs(qTotPct))+'%'):'—')+'</td>'+
+    '<td style="padding:10px 8px;text-align:center;">'+(tot.disponivel?((qTot>0?'':'+')+kg(Math.abs(qTot))):'—')+'</td>'+
+  '</tr></tbody></table></div>';
+
+  h+='<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">'+
+    '<strong>TOTAL (KG)</strong> = kits consumidos × peso do kit. '+
+    '<strong>EMBALADO</strong> = soma dos pacotes de todos os produtos daquele kit × peso de cada pacote. '+
+    '<strong>QUEBRA</strong> = (total + massa velha) − embalado.</div>';
+
+  // detalhe de quais produtos entraram em cada kit
+  h+=ls.filter(l=>Object.keys(l.produtos).length).map(l=>
+    '<div class="card" style="margin-top:10px;">'+
+      '<div style="font-size:13px;font-weight:800;margin-bottom:6px;">'+l.kit+'</div>'+
+      Object.values(l.produtos).sort((a,b)=>b.emb-a.emb).map(pp=>
+        '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px dashed var(--border);">'+
+          '<span style="flex:1;min-width:0;">'+pp.nome+' <span style="color:var(--text-muted);font-size:10px;">'+kg(pp.kgPacote)+' kg/pct</span></span>'+
+          '<span style="white-space:nowrap;">'+pp.emb+' pct · <strong>'+kg(pp.emb*pp.kgPacote)+' kg</strong></span></div>').join('')+
+    '</div>').join('');
+  return h;
+}
+
+async function cdqSalvarCampo(kit, campo, valor){
+  const v=Math.max(0, parseFloat(String(valor).replace(',','.'))||0);
+  const atual=(cdqDados[_cdqDataSel]||{}).kits||{};
+  const kits={...atual, [kit]:{...(atual[kit]||{}), [campo]:v}};
+  // resposta imediata na tela, sem esperar o servidor
+  cdqDados[_cdqDataSel]={...(cdqDados[_cdqDataSel]||{}), kits};
+  renderCDQ();
+  try{
+    await setDoc(doc(db,'quadraControleDiario',_cdqDataSel),
+      {kits, data:_cdqDataSel, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Erro ao salvar: '+e.message); }
+}
+window.cdqSalvarCampo=cdqSalvarCampo;
 
 /* ══════════════════════════════════════════════════════════════════
    RETORNO DE MERCADORIAS
