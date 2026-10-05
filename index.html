@@ -747,7 +747,12 @@
     .mc-header + .content {
       background: var(--bg-page) !important;
     }
-    </style>
+    
+    /* O PIN é mascarado por CSS, não por type="password": assim o
+       navegador não trata a tela como login e para de oferecer
+       "salvar senha" a cada vez que a pessoa troca de tela. */
+    .pin-mascarado{ -webkit-text-security: disc; text-security: disc; }
+</style>
 </head>
 <body>
 <div class="app-frame">
@@ -1106,11 +1111,13 @@
         <div class="pin-setor" id="pin-setor-nome">Confeitaria</div>
       </div>
       <div style="width:100%;max-width:300px;margin:0 auto;">
-        <input type="password" id="pin-input" inputmode="numeric" placeholder="Digite a senha" autocomplete="off"
+        <input type="text" id="pin-input" inputmode="numeric" placeholder="Digite a senha" autocomplete="off"
+          name="mc-pin" data-lpignore="true" data-form-type="other"
+          class="pin-mascarado"
           style="width:100%;font-size:20px;text-align:center;padding:14px;border-radius:12px;border:none;letter-spacing:3px;box-sizing:border-box;"
           onkeydown="if(event.key==='Enter')verificarPin()" />
         <label style="display:flex;align-items:center;gap:6px;justify-content:center;margin-top:10px;color:#fff;font-size:13px;cursor:pointer;opacity:.9;">
-          <input type="checkbox" id="pin-show" onchange="var i=document.getElementById('pin-input');i.type=this.checked?'text':'password';i.focus();" style="width:16px;height:16px;cursor:pointer;"> mostrar senha
+          <input type="checkbox" id="pin-show" onchange="var i=document.getElementById('pin-input');i.classList.toggle('pin-mascarado',!this.checked);i.focus();" style="width:16px;height:16px;cursor:pointer;"> mostrar senha
         </label>
         <button class="pin-enter-btn" onclick="verificarPin()"
           style="width:100%;margin-top:14px;padding:15px;border-radius:12px;border:none;background:#fff;color:#1e3a8a;font-weight:700;font-size:16px;cursor:pointer;">Entrar →</button>
@@ -23749,7 +23756,7 @@ function amAbrirConfig(){
     '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);">Dias de antecedência</label>'+
     '<input type="number" id="am-cfg-dias" min="0" value="'+(amConfig.prazoMinDias||2)+'" inputmode="numeric" style="width:100%;padding:13px;min-height:48px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;box-sizing:border-box;margin:4px 0 12px;">'+
     '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);">🔒 Senha do admin</label>'+
-    '<input type="password" id="am-cfg-senha" inputmode="numeric" autocomplete="off" style="width:100%;padding:13px;min-height:48px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;box-sizing:border-box;margin:4px 0 14px;">'+
+    '<input type="text" class="pin-mascarado" data-lpignore="true" data-form-type="other" id="am-cfg-senha" inputmode="numeric" autocomplete="off" style="width:100%;padding:13px;min-height:48px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;box-sizing:border-box;margin:4px 0 14px;">'+
     '<div style="display:flex;gap:8px;">'+
       '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'am-cfg-modal\').remove()">Cancelar</button>'+
       '<button class="btn btn-primary" style="flex:1;" onclick="amSalvarConfig()">Salvar</button></div></div>';
@@ -25056,7 +25063,7 @@ function estAbrirMigrar(cod){
     '<div id="est-g-plano" style="margin-bottom:10px;"></div>'+
     (estConfig.senhaMigracao
       ? '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);">🔒 Senha da migração</label>'+
-        '<input type="password" id="est-g-senha" inputmode="numeric" autocomplete="off" style="width:100%;padding:13px;min-height:48px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;box-sizing:border-box;margin:4px 0 10px;">'
+        '<input type="text" class="pin-mascarado" data-lpignore="true" data-form-type="other" id="est-g-senha" inputmode="numeric" autocomplete="off" style="width:100%;padding:13px;min-height:48px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;box-sizing:border-box;margin:4px 0 10px;">'
       : '<div style="font-size:11px;color:#b45309;background:#fef3c7;border-radius:8px;padding:8px;margin-bottom:10px;">Sem senha cadastrada. Defina uma em Configurações para travar esta operação.</div>'),
     'estConfirmarMigrar(\''+escapeJsStr(cod)+'\')');
   estRenderLotes(cod);
