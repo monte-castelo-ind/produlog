@@ -748,10 +748,10 @@
       background: var(--bg-page) !important;
     }
     
-    /* O PIN é mascarado por CSS, não por type="password": assim o
-       navegador não trata a tela como login e para de oferecer
-       "salvar senha" a cada vez que a pessoa troca de tela. */
-    .pin-mascarado{ -webkit-text-security: disc; text-security: disc; }
+    /* O PIN é mascarado pelo próprio código: o campo guarda só pontinhos
+       e o valor real fica numa variável. Nem type="password" nem
+       text-security do CSS — os dois fazem o Chrome achar que é login e
+       oferecer "salvar senha" toda hora. */
 </style>
 </head>
 <body>
@@ -1112,12 +1112,12 @@
       </div>
       <div style="width:100%;max-width:300px;margin:0 auto;">
         <input type="text" id="pin-input" inputmode="numeric" placeholder="Digite a senha" autocomplete="off"
-          name="mc-pin" data-lpignore="true" data-form-type="other"
-          class="pin-mascarado"
+          name="mc-codigo" data-lpignore="true" data-form-type="other" data-1p-ignore="true"
+          oninput="pinDigitou(this)"
           style="width:100%;font-size:20px;text-align:center;padding:14px;border-radius:12px;border:none;letter-spacing:3px;box-sizing:border-box;"
           onkeydown="if(event.key==='Enter')verificarPin()" />
         <label style="display:flex;align-items:center;gap:6px;justify-content:center;margin-top:10px;color:#fff;font-size:13px;cursor:pointer;opacity:.9;">
-          <input type="checkbox" id="pin-show" onchange="var i=document.getElementById('pin-input');i.classList.toggle('pin-mascarado',!this.checked);i.focus();" style="width:16px;height:16px;cursor:pointer;"> mostrar senha
+          <input type="checkbox" id="pin-show" onchange="pinMostrar(this.checked)" style="width:16px;height:16px;cursor:pointer;"> mostrar senha
         </label>
         <button class="pin-enter-btn" onclick="verificarPin()"
           style="width:100%;margin-top:14px;padding:15px;border-radius:12px;border:none;background:#fff;color:#1e3a8a;font-weight:700;font-size:16px;cursor:pointer;">Entrar →</button>
@@ -5280,25 +5280,60 @@ function abrirPin(setor){
   const bg=document.getElementById('pin-bg');
   bg.className='pin-screen '+(CORES[setor]||'');
   document.getElementById('pin-err').textContent='';
-  const inp=document.getElementById('pin-input'); if(inp){ inp.value=''; inp.type='password'; }
-  const sh=document.getElementById('pin-show'); if(sh) sh.checked=false;
+  pinLimpar();
   goTo('s-pin');
   setTimeout(()=>{ const i=document.getElementById('pin-input'); if(i) i.focus(); },150);
 }
+/* ── MÁSCARA DO PIN ──────────────────────────────────────────────
+   O campo mostra pontinhos e o valor real fica aqui. Assim o navegador
+   nunca vê um campo de senha e para de oferecer "salvar palavra-passe"
+   a cada troca de tela. */
+let _pinReal='', _pinVisivel=false;
+
+function pinDigitou(inp){
+  const mostrado=inp.value;
+  const antes=_pinReal;
+  // descobre o que mudou comparando o tamanho
+  if(mostrado.length<antes.length){
+    _pinReal=antes.slice(0, mostrado.length);          // apagou
+  } else {
+    // o que não é pontinho é caractere novo
+    const novos=mostrado.split('').filter(c=>c!=='•').join('');
+    _pinReal=_pinVisivel ? mostrado : (antes+novos);
+  }
+  _pinReal=_pinReal.replace(/[^0-9]/g,'').slice(0,12);
+  inp.value=_pinVisivel ? _pinReal : '•'.repeat(_pinReal.length);
+}
+window.pinDigitou=pinDigitou;
+
+function pinMostrar(ver){
+  _pinVisivel=!!ver;
+  const i=document.getElementById('pin-input');
+  if(i){ i.value=_pinVisivel?_pinReal:'•'.repeat(_pinReal.length); i.focus(); }
+}
+window.pinMostrar=pinMostrar;
+
+function pinLimpar(){
+  _pinReal=''; _pinVisivel=false;
+  const i=document.getElementById('pin-input'); if(i) i.value='';
+  const sh=document.getElementById('pin-show'); if(sh) sh.checked=false;
+}
+window.pinLimpar=pinLimpar;
+
 function verificarPin(){
   const inp=document.getElementById('pin-input');
-  const val=(inp?inp.value:'').trim();
+  const val=String(_pinReal||'').trim();
   // senha mestra de emergência do admin (sempre funciona, mesmo que o Firebase esteja com valor errado)
   const ehAdminMestra = (setorAtivo==='admin' && val==='250406');
   if(val===PINS[setorAtivo] || ehAdminMestra){
     window.setorAtual=setorAtivo; // Para validações de permissão
     if(setorAtivo==='admin'){ adminMode=true; window.adminMode=true; document.body.classList.add('admin-mode'); }
     else { adminMode=false; window.adminMode=false; document.body.classList.remove('admin-mode'); }
-    if(inp) inp.value='';
+    pinLimpar();
     goTo(DESTINOS[setorAtivo]);
   } else {
     document.getElementById('pin-err').textContent='Senha incorreta. Tente novamente.';
-    if(inp){ inp.value=''; inp.focus(); }
+    pinLimpar(); if(inp) inp.focus();
     setTimeout(()=>{ const e=document.getElementById('pin-err'); if(e) e.textContent=''; },1500);
   }
 }
