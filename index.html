@@ -22255,7 +22255,22 @@ function _cdqLinhas(data){
     const disponivel=kgKits+massaVelha;          // o que entrou de massa
     const quebraKg=disponivel-g.embKg;           // o que não virou pacote
     const quebraPct=disponivel>0?(quebraKg/disponivel*100):0;
+    /* Peso real que cada pacote levou.
+       Com UM produto é direto: massa consumida ÷ pacotes embalados.
+       Com VÁRIOS produtos de pesos diferentes não existe um número só,
+       então calculamos o FATOR (massa consumida ÷ massa que deveria ter
+       saído) e aplicamos a cada produto: peso real = peso do pacote ×
+       fator. O fator é o mesmo desvio proporcional para todos. */
+    const prodsComEmb=Object.values(g.produtos).filter(x=>x.emb>0);
+    const fator=g.embKg>0?(disponivel/g.embKg):0;
+    const pesoMedio=(prodsComEmb.length===1 && prodsComEmb[0].emb>0)
+      ? (disponivel/prodsComEmb[0].emb)
+      : 0;
+    const pesoPadrao=prodsComEmb.length===1?prodsComEmb[0].kgPacote:0;
+    // peso real de cada produto, para o detalhe de baixo
+    prodsComEmb.forEach(x=>{ x.pesoReal=fator?(x.kgPacote*fator):0; });
     return {...g, consumidos, massaVelha, obs, bloqueado, kgPorKit, kgKits, disponivel, quebraKg, quebraPct,
+            fator, pesoMedio, pesoPadrao, nProdutos:prodsComEmb.length,
             preenchido:(consumidos>0||massaVelha>0)};
   }).sort((a,b)=>b.disponivel-a.disponivel || a.kit.localeCompare(b.kit,'pt-BR'));
 }
@@ -22305,6 +22320,35 @@ function _cdqRenderLista(datas){
     }).join('');
 }
 
+/* Mostra o peso em gramas quando é menos de 1 kg, senão em quilos */
+function _cdqGramas(kgv){
+  const v=Number(kgv)||0;
+  if(!v) return '—';
+  return v<1 ? (Math.round(v*1000)+' g') : (_fmtKg(v)+' kg');
+}
+window._cdqGramas=_cdqGramas;
+
+/* A célula do peso médio.
+   Um produto: o peso real de cada pacote, com a diferença do padrão.
+   Vários: o fator de desvio, porque não existe um peso único — o
+   detalhe por produto fica no bloco abaixo da tabela. */
+function _cdqCelulaPeso(l){
+  if(!l.preenchido || !l.embKg) return '<span style="color:var(--text-muted);">—</span>';
+  if(l.nProdutos===1){
+    const dif=l.pesoPadrao?((l.pesoMedio-l.pesoPadrao)/l.pesoPadrao*100):0;
+    const cor=Math.abs(dif)>8?'#dc2626':(Math.abs(dif)>4?'#d97706':'#16a34a');
+    return '<strong style="color:'+cor+';font-size:13px;">'+_cdqGramas(l.pesoMedio)+'</strong>'+
+      '<div style="font-size:10px;color:var(--text-muted);">padrão '+_cdqGramas(l.pesoPadrao)+
+      ' <span style="color:'+cor+';">('+(dif>0?'+':'')+_fmtKg(dif)+'%)</span></div>';
+  }
+  const dif=(l.fator-1)*100;
+  const cor=Math.abs(dif)>8?'#dc2626':(Math.abs(dif)>4?'#d97706':'#16a34a');
+  return '<strong style="color:'+cor+';font-size:13px;">'+_fmtKg(l.fator)+'×</strong>'+
+    '<div style="font-size:10px;color:var(--text-muted);">'+l.nProdutos+' produtos '+
+    '<span style="color:'+cor+';">('+(dif>0?'+':'')+_fmtKg(dif)+'%)</span></div>';
+}
+window._cdqCelulaPeso=_cdqCelulaPeso;
+
 function _cdqRenderDia(datas){
   const i=datas.indexOf(_cdqDataSel);
   const ls=_cdqLinhas(_cdqDataSel);
@@ -22349,6 +22393,7 @@ function _cdqRenderDia(datas){
       '<th style="padding:9px 8px;text-align:center;">EMBALADO (KG)</th>'+
       '<th style="padding:9px 8px;text-align:center;">QUEBRA %</th>'+
       '<th style="padding:9px 8px;text-align:center;">QUEBRA KG</th>'+
+      '<th style="padding:9px 8px;text-align:center;">PESO MÉDIO UN</th>'+
     '</tr></thead><tbody>';
 
   // o total só conta os kits preenchidos: misturar quem tem consumo
@@ -22385,6 +22430,8 @@ function _cdqRenderDia(datas){
         '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+l.embPct+' pct</div></td>'+
       '<td style="padding:9px 8px;text-align:center;font-weight:900;color:'+qc+';">'+(l.preenchido?((l.quebraPct>0?'':'+')+kg(Math.abs(l.quebraPct))+'%'):'—')+'</td>'+
       '<td style="padding:9px 8px;text-align:center;font-weight:800;color:'+qc+';">'+(l.preenchido?((l.quebraKg>0?'':'+')+kg(Math.abs(l.quebraKg))):'—')+'</td>'+
+      // peso real por unidade: número direto com 1 produto, fator com vários
+      '<td style="padding:9px 8px;text-align:center;">'+_cdqCelulaPeso(l)+'</td>'+
     '</tr>';
   });
 
@@ -22399,6 +22446,7 @@ function _cdqRenderDia(datas){
     '<td style="padding:10px 8px;text-align:center;">'+kg(tot.embKg)+'</td>'+
     '<td style="padding:10px 8px;text-align:center;">'+(tot.disponivel?((qTotPct>0?'':'+')+kg(Math.abs(qTotPct))+'%'):'—')+'</td>'+
     '<td style="padding:10px 8px;text-align:center;">'+(tot.disponivel?((qTot>0?'':'+')+kg(Math.abs(qTot))):'—')+'</td>'+
+    '<td></td>'+
   '</tr></tbody></table></div>';
 
   h+='<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">'+
@@ -22410,10 +22458,17 @@ function _cdqRenderDia(datas){
   h+=ls.filter(l=>Object.keys(l.produtos).length).map(l=>
     '<div class="card" style="margin-top:10px;">'+
       '<div style="font-size:13px;font-weight:800;margin-bottom:6px;">'+l.kit+'</div>'+
-      Object.values(l.produtos).sort((a,b)=>b.emb-a.emb).map(pp=>
-        '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px dashed var(--border);">'+
-          '<span style="flex:1;min-width:0;">'+pp.nome+' <span style="color:var(--text-muted);font-size:10px;">'+kg(pp.kgPacote)+' kg/pct</span></span>'+
-          '<span style="white-space:nowrap;">'+pp.emb+' pct · <strong>'+kg(pp.emb*pp.kgPacote)+' kg</strong></span></div>').join('')+
+      Object.values(l.produtos).sort((a,b)=>b.emb-a.emb).map(pp=>{
+        const real=pp.pesoReal||0;
+        const dif=real&&pp.kgPacote?((real-pp.kgPacote)/pp.kgPacote*100):0;
+        const cor=!real?'var(--text-muted)':(Math.abs(dif)>8?'#dc2626':(Math.abs(dif)>4?'#d97706':'#16a34a'));
+        return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border);">'+
+          '<span style="flex:1;min-width:0;">'+pp.nome+
+            '<span style="display:block;font-size:10px;color:var(--text-muted);">padrão '+_cdqGramas(pp.kgPacote)+
+            (real?(' · <strong style="color:'+cor+';">real '+_cdqGramas(real)+'</strong>'+
+                   ' <span style="color:'+cor+';">('+(dif>0?'+':'')+kg(dif)+'%)</span>'):'')+'</span></span>'+
+          '<span style="white-space:nowrap;text-align:right;">'+pp.emb+' pct<br><strong>'+kg(pp.emb*pp.kgPacote)+' kg</strong></span></div>';
+      }).join('')+
     '</div>').join('');
   return h;
 }
@@ -23162,7 +23217,7 @@ function retRenderDetalhe(){
 
   rod.innerHTML=(validado
       ? '<div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:9px;">Validado por '+(r.validadoPor||'')+' em '+(r.validadoEm||'')+'</div>'
-      : (!retPodeDestinar()
+      : _retAvisoEstoque(r)+(!retPodeDestinar()
           ? '<div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-bottom:9px;line-height:1.5;">Aguardando a confeitaria conferir e dar destino.<br>'+(falta?(falta+' pacote(s) sem destino.'):'Tudo destinado.')+'</div>'
           : (falta
             ? '<div style="font-size:12px;color:#b45309;font-weight:700;text-align:center;margin-bottom:9px;">Destine todos os pacotes para finalizar</div>'
@@ -23228,17 +23283,85 @@ async function retTirarDestino(idx, di){
 }
 window.retTirarDestino=retTirarDestino;
 
+/* Quais itens do retorno foram destinados a "volta ao estoque".
+   O id do destino é procurado pelo nome também, caso alguém tenha
+   cadastrado um destino próprio do tipo "volta ao estoque". */
+function _retDestinoEhEstoque(destId){
+  if(String(destId)==='estoque') return true;
+  const d=retDestino(destId);
+  return /volta.*estoque|retorna.*estoque|^estoque$/i.test(_normNome(d&&d.nome||''));
+}
+
+/* Mostra, antes de finalizar, o que vai entrar no estoque */
+function _retAvisoEstoque(r){
+  if(typeof retItensQueVoltam!=='function') return '';
+  const itens=retItensQueVoltam(r);
+  if(!itens.length) return '';
+  const dentro=itens.filter(x=>typeof estProd==='function' && estProd(x.cod));
+  const fora=itens.filter(x=>!(typeof estProd==='function' && estProd(x.cod)));
+  const tot=dentro.reduce((t,x)=>t+x.qtd,0);
+  if(!dentro.length && !fora.length) return '';
+  return '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:9px 11px;margin-bottom:9px;">'+
+    (dentro.length?'<div style="font-size:12px;font-weight:700;color:#15803d;">📦 '+tot+' pacote(s) entram no estoque de dentro ao finalizar</div>'+
+      dentro.map(x=>'<div style="font-size:11px;color:#166534;">• '+x.nome+' — '+x.qtd+' pct</div>').join(''):'')+
+    (fora.length?'<div style="font-size:11px;color:var(--text-secondary);margin-top:'+(dentro.length?'5px':'0')+';">Fora do controle de estoque: '+fora.map(x=>x.nome).join(', ')+'</div>':'')+
+  '</div>';
+}
+window._retAvisoEstoque=_retAvisoEstoque;
+
+function retItensQueVoltam(r){
+  const out=[];
+  (r.itens||[]).forEach(it=>{
+    const qtd=(it.destinacoes||[])
+      .filter(d=>_retDestinoEhEstoque(d.destino))
+      .reduce((t,d)=>t+(Number(d.qtd)||0),0);
+    if(qtd>0) out.push({cod:String(it.cod||''), nome:it.nome||'', qtd, validade:it.validade||''});
+  });
+  return out;
+}
+window.retItensQueVoltam=retItensQueVoltam;
+
+/* Dá entrada no estoque de dentro. Produto fora do controle é ignorado
+   em silêncio — só é listado no aviso do fim. */
+async function retEntrarNoEstoque(r, itens){
+  const res={ok:0, fora:[]};
+  if(typeof estProd!=='function' || typeof estGravarMov!=='function') return res;
+  for(const it of itens){
+    const p=estProd(it.cod);
+    if(!p){ res.fora.push(it.nome); continue; }
+    try{
+      await estGravarMov({local:'interno', codigo:it.cod, nome:p.nome||it.nome, pacotes:it.qtd,
+        tipo:'entrada', motivo:'Retorno de mercadoria',
+        obs:(r.cliente||'')+(r.motivo?(' · '+r.motivo):'')+(it.validade?(' · val '+it.validade):'')});
+      res.ok+=it.qtd;
+    }catch(e){ console.error('retorno → estoque', e); res.fora.push(it.nome+' (erro)'); }
+  }
+  return res;
+}
+window.retEntrarNoEstoque=retEntrarNoEstoque;
+
 async function retFinalizarValidacao(){
   if(!retPodeDestinar()){ alert('Só a confeitaria finaliza a validação.'); return; }
   const r=retornos.find(x=>x.firestoreId===_retAberto); if(!r) return;
   if(retFaltaDestinar(r)>0){ alert('Ainda há pacotes sem destino.'); return; }
-  if(!confirm('Finalizar a validação deste retorno?\n\n'+retResumoDestinos(r))) return;
+  // o que volta ao estoque entra no estoque DE DENTRO: o produto já está
+  // na empresa, voltou do caminhão — não passa pelo contêiner
+  const paraEstoque=retItensQueVoltam(r);
+  // só os que estão no controle de estoque entram de fato
+  const controlados=paraEstoque.filter(x=>typeof estProd==='function' && estProd(x.cod));
+  const totVolta=controlados.reduce((t,x)=>t+x.qtd,0);
+  if(!confirm('Finalizar a validação deste retorno?\n\n'+retResumoDestinos(r)+
+    (totVolta?('\n\n📦 '+totVolta+' pacote(s) vão entrar no estoque de dentro:\n'+
+      controlados.map(x=>'• '+x.nome+' — '+x.qtd+' pct').join('\n')):''))) return;
   try{
     await updateDoc(doc(db,'retornos',_retAberto),{
       status:'validado', validadoPor:_demAutor(), validadoEm:agora(), validadoTs:Date.now()
     });
+    const entrou=await retEntrarNoEstoque(r, paraEstoque);
     document.getElementById('ret-det-modal')?.remove();
-    alert('✓ Retorno resolvido.');
+    alert('✓ Retorno resolvido.'+
+      (entrou.ok?('\n\n📦 '+entrou.ok+' pacote(s) entraram no estoque de dentro.'):'')+
+      (entrou.fora.length?('\n\nFora do controle de estoque (nada lançado): '+entrou.fora.join(', ')):''));
   }catch(e){ alert('Erro: '+e.message); }
 }
 window.retFinalizarValidacao=retFinalizarValidacao;
