@@ -22218,6 +22218,22 @@ function _cdqProdutoDe(nome){
 }
 
 /* Uma linha por KIT usado no dia */
+/* Quanto a EMBALAGEM fechou de um produto num dia.
+   O lançamento da quadra guarda o produzido; o embalado de verdade
+   está nos registros da embalagem — eram números diferentes e a
+   quebra saía errada. */
+function _cdqEmbaladoDe(nomeProduto, data){
+  const n=_normNome(nomeProduto||'');
+  let total=0;
+  (registros||[]).forEach(r=>{
+    if(r.data!==data) return;
+    if(_normNome(r.produto||'')!==n) return;
+    total+=laEmbalado(r.embalagem||{});
+  });
+  return total;
+}
+window._cdqEmbaladoDe=_cdqEmbaladoDe;
+
 function _cdqLinhas(data){
   const salvo=(cdqDados[data]||{}).kits||{};
   const porKit={};
@@ -22239,13 +22255,14 @@ function _cdqLinhas(data){
     (r.produtos||[]).forEach(pp=>{
       const nome=pp.nome||'';
       const kgp=Number(pp.kgPacote)||0;
-      const pct=Number(pp.qtdPacotes)||0;
+      const prodPct=Number(pp.qtdPacotes)||0;     // o que a quadra PRODUZIU
+      const embPct=_cdqEmbaladoDe(nome, data);    // o que a embalagem fechou
       const cat=_cdqProdutoDe(nome);
-      g.embKg+=pct*kgp; g.prodKg+=pct*kgp;
-      g.embPct+=pct;    g.prodPct+=pct;
+      g.prodKg+=prodPct*kgp; g.prodPct+=prodPct;
+      g.embKg +=embPct*kgp;  g.embPct +=embPct;
       g.produtos[nome]=g.produtos[nome]||{nome, kgPacote:kgp, unPct:(cat?(Number(cat.qtdPct)||0):0), emb:0, prod:0};
-      g.produtos[nome].emb+=pct;
-      g.produtos[nome].prod+=pct;
+      g.produtos[nome].emb+=embPct;
+      g.produtos[nome].prod+=prodPct;
     });
   });
 
@@ -22492,7 +22509,10 @@ function _cdqRenderDia(datas){
       '<td style="padding:9px 8px;text-align:center;font-weight:700;">'+(l.kgKits?kg(l.kgKits):'—')+'</td>'+
       '<td style="padding:9px 8px;text-align:center;">'+campo('massaVelha', l.massaVelha, 'kg')+'</td>'+
       '<td style="padding:9px 8px;text-align:center;font-weight:700;">'+(l.embKg?kg(l.embKg):'0')+
-        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+l.embPct+' pct</div></td>'+
+        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+l.embPct+' pct'+
+          (l.prodPct && l.prodPct!==l.embPct
+            ? '<br><span style="color:#b45309;">prod. '+l.prodPct+'</span>'
+            : '')+'</div></td>'+
       '<td style="padding:9px 8px;text-align:center;font-weight:900;color:'+qc+';">'+(l.preenchido?((l.quebraPct>0?'':'+')+kg(Math.abs(l.quebraPct))+'%'):'—')+'</td>'+
       '<td style="padding:9px 8px;text-align:center;font-weight:800;color:'+qc+';">'+(l.preenchido?((l.quebraKg>0?'':'+')+kg(Math.abs(l.quebraKg))):'—')+'</td>'+
       // peso real por unidade: número direto com 1 produto, fator com vários
@@ -22534,7 +22554,11 @@ function _cdqRenderDia(datas){
               'un padrão '+_cdqGramas(padrao)+
               (real?(' · <strong style="color:'+cor+';">real '+_cdqGramas(real)+'</strong>'+
                      ' <span style="color:'+cor+';">('+(dif>0?'+':'')+kg(dif)+'%)</span>'):'')+'</span></span>'+
-          '<span style="white-space:nowrap;text-align:right;">'+pp.emb+' pct'+
+          '<span style="white-space:nowrap;text-align:right;">'+
+            '<strong>'+pp.emb+' pct</strong> embalado'+
+            (pp.prod && pp.prod!==pp.emb
+              ? '<br><span style="font-size:10px;color:#b45309;">'+pp.prod+' pct produzido · faltam '+(pp.prod-pp.emb)+'</span>'
+              : '')+
             (pp.unPct?('<br><span style="font-size:10px;color:var(--text-muted);">'+pp.unTotal+' un</span>'):'')+
             '<br><strong>'+kg(pp.emb*pp.kgPacote)+' kg</strong></span></div>';
       }).join('')+
