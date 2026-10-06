@@ -19058,6 +19058,22 @@ function _laSituacao(a){
   return {txt:'🔴 produzir '+a.falta, cor:'#dc2626', det:'nada produzido para liberar'};
 }
 
+/* Copia os ajustes de um grupo no formato "código quantidade",
+   uma linha por produto — pronto para colar no ERP. */
+function laCopiarGrupo(grupo){
+  const lista=laResumoPorProduto().filter(p=>{
+    const t=(typeof _ajRefTipoProduto==='function' && p.cod!=='—') ? _ajRefTipoProduto(p.cod) : 'outro';
+    return t===grupo;
+  });
+  if(!lista.length){ alert('Nada para copiar neste grupo.'); return; }
+  const semCod=lista.filter(p=>!p.cod || p.cod==='—');
+  const txt=lista.filter(p=>p.cod && p.cod!=='—')
+    .map(p=>p.cod+' '+p.saldo).join('\n');
+  if(!txt){ alert('Nenhum produto deste grupo tem código.'); return; }
+  _copiarTexto(txt, lista.length+' produto(s) copiado(s)'+(semCod.length?(' · '+semCod.length+' sem código ficaram de fora'):''));
+}
+window.laCopiarGrupo=laCopiarGrupo;
+
 function renderLaResumo(){
   const el=document.getElementById('la-resumo-content'); if(!el) return;
   const lista=laResumoPorProduto();
@@ -19095,11 +19111,15 @@ function renderLaResumo(){
     const t=(typeof _ajRefTipoProduto==='function' && p.cod!=='—') ? _ajRefTipoProduto(p.cod) : 'outro';
     grupos[t].push(p);
   });
-  const tabela=(titulo, emoji, arr, corHeader)=>{
+  const tabela=(titulo, emoji, arr, corHeader, grupoId)=>{
     if(!arr.length) return '';
     const soma=arr.reduce((t,p)=>t+p.saldo,0);
     return '<div style="flex:1;min-width:280px;">'+
-      '<div style="background:'+corHeader+';color:#fff;font-weight:800;font-size:13px;padding:8px 12px;border-radius:9px 9px 0 0;text-align:center;">'+emoji+' '+titulo+' · '+soma+' pct</div>'+
+      '<div style="background:'+corHeader+';color:#fff;border-radius:9px 9px 0 0;padding:8px 12px;display:flex;align-items:center;gap:8px;">'+
+        '<span style="flex:1;min-width:0;font-weight:800;font-size:13px;text-align:center;">'+emoji+' '+titulo+' · '+soma+' pct</span>'+
+        // copia "código quantidade", uma linha por produto
+        '<button onclick="laCopiarGrupo(\''+escapeJsStr(grupoId)+'\')" title="Copiar código e quantidade" style="flex:0 0 auto;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:7px;padding:4px 9px;font-size:12px;cursor:pointer;font-family:inherit;">📋</button>'+
+      '</div>'+
       '<table style="width:100%;border-collapse:collapse;font-size:12px;background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 9px 9px;overflow:hidden;">'+
       '<thead><tr style="background:#f1f5f9;">'+
         '<th style="text-align:left;padding:6px 8px;font-weight:700;color:var(--text-secondary);width:44px;">Cód</th>'+
@@ -19120,9 +19140,9 @@ function renderLaResumo(){
   };
   html+='<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">Soma de todas as entradas liberadas que ainda esperam a saída.</div>';
   html+='<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;">'+
-    tabela('Salgados / Confeitaria','🥐',grupos.salgado,'var(--mc-azul)')+
-    tabela('Pães','🍞',grupos.pao,'#92400e')+'</div>';
-  if(grupos.outro.length) html+='<div style="margin-top:14px;">'+tabela('Não identificados','❓',grupos.outro,'#dc2626')+'</div>';
+    tabela('Salgados / Confeitaria','🥐',grupos.salgado,'var(--mc-azul)','salgado')+
+    tabela('Pães','🍞',grupos.pao,'#92400e','pao')+'</div>';
+  if(grupos.outro.length) html+='<div style="margin-top:14px;">'+tabela('Não identificados','❓',grupos.outro,'#dc2626','outro')+'</div>';
   el.innerHTML=html;
 }
 window.renderLaResumo=renderLaResumo;
@@ -21009,7 +21029,7 @@ function _ajRefRenderResumo(){
   Object.values(grupos).forEach(arr=>arr.sort((a,b)=>Math.abs(b.saldo)-Math.abs(a.saldo)));
 
   // monta uma tabela para um grupo
-  const tabela=(titulo, emoji, arr, corHeader)=>{
+  const tabela=(titulo, emoji, arr, corHeader, grupoId)=>{
     if(!arr.length) return '';
     let s='<div style="flex:1;min-width:260px;">'+
       '<div style="background:'+corHeader+';color:#fff;font-weight:800;font-size:13px;padding:8px 12px;border-radius:9px 9px 0 0;text-align:center;">'+emoji+' '+titulo+' ('+arr.length+')</div>'+
@@ -22144,10 +22164,21 @@ window.libEntrarNoContainer=libEntrarNoContainer;
 let cdqDados={};          // {data: {kits:{nomeKit:{consumidos, massaVelha}}}}
 let _cdqDataSel='', _cdqModo='lista';
 
+// o que ainda não confirmou no servidor, para o snapshot não reverter
+let _cdqPendentes={};
+
 onSnapshot(collection(db,'quadraControleDiario'), snap=>{
   try{
-    cdqDados={};
-    snap.docs.forEach(d=>{ cdqDados[d.id]=d.data(); });
+    const novo={};
+    snap.docs.forEach(d=>{ novo[d.id]=d.data(); });
+    // reaplica o que o usuário acabou de digitar e ainda está a caminho
+    Object.keys(_cdqPendentes).forEach(data=>{
+      const pend=_cdqPendentes[data]; if(!pend || !Object.keys(pend).length) return;
+      novo[data]=novo[data]||{data, kits:{}};
+      novo[data].kits=novo[data].kits||{};
+      Object.keys(pend).forEach(ch=>{ novo[data].kits[ch]={...(novo[data].kits[ch]||{}), ...pend[ch]}; });
+    });
+    cdqDados=novo;
     if(document.querySelector('.screen.active')?.id==='s-cdq') renderCDQ();
   }catch(e){ console.error('cdq snap',e); }
 });
@@ -22196,15 +22227,24 @@ function _cdqLinhas(data){
     g.produtos[r.produto].prod+=prodPct;
   });
 
-  // kits preenchidos à mão que ainda não têm produto embalado
+  // kits preenchidos à mão que ainda não têm produto embalado.
+  // o nome de exibição vem do campo 'nome' guardado junto, porque a
+  // chave do banco é técnica (kit_grande_premium_6_8)
   Object.keys(salvo).forEach(k=>{
-    const ch=_kitNormNome(k);
-    if(!porKit[ch]) porKit[ch]={kit:k, chave:ch, embKg:0, prodKg:0, embPct:0, prodPct:0, produtos:{}};
+    const nomeReal=(salvo[k] && salvo[k].nome) || k;
+    const ch=_kitNormNome(nomeReal);
+    const jaTem=Object.values(porKit).some(g=>_cdqChave(g.kit)===_cdqChave(nomeReal));
+    if(!jaTem) porKit[ch]={kit:nomeReal, chave:ch, embKg:0, prodKg:0, embPct:0, prodPct:0, produtos:{}};
   });
 
   return Object.values(porKit).map(g=>{
-    const chaveSalva=Object.keys(salvo).find(k=>_kitNormNome(k)===g.chave);
-    const man=(chaveSalva?salvo[chaveSalva]:null)||{};
+    // junta tudo que foi salvo para este kit, em qualquer grafia antiga
+    const man={};
+    Object.keys(salvo).forEach(k=>{
+      const bate=(_cdqChave(k)===_cdqChave(g.kit)) || (_kitNormNome(k)===g.chave) ||
+                 (_kitNormNome(salvo[k]&&salvo[k].nome||'')===g.chave);
+      if(bate) Object.assign(man, salvo[k]);
+    });
     const consumidos=Number(man.consumidos)||0;
     const massaVelha=Number(man.massaVelha)||0;
     const obs=String(man.obs||'');
@@ -22283,6 +22323,16 @@ function _cdqRenderDia(datas){
     '</div>';
   }
 
+  // barra de seleção: aparece quando há kit marcado
+  const nSel=ls.filter(l=>_cdqSel[_cdqChave(l.kit)]).length;
+  h+='<div class="card" style="margin-bottom:10px;'+(nSel?'border:2px solid var(--mc-azul,#2563eb);':'')+'">'+
+    '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">'+
+      '<button onclick="cdqSelTodos(true)" style="background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">☑ Marcar todos</button>'+
+      (nSel?'<button onclick="cdqSelTodos(false)" style="background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Desmarcar</button>':'')+
+      '<span style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">'+(nSel?(nSel+' kit(s) marcado(s)'):'Marque os kits para gerar a mensagem.')+'</span>'+
+      (nSel?'<button onclick="cdqCopiarResumo()" class="btn btn-primary" style="flex:0 0 auto;padding:9px 15px;">📋 Copiar mensagem</button>':'')+
+    '</div></div>';
+
   h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
     '<table style="border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;min-width:760px;">'+
     '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
@@ -22314,7 +22364,9 @@ function _cdqRenderDia(datas){
       'style="width:90px;padding:7px;border:1px solid var(--border-md,#d1d5db);border-radius:7px;font-size:13px;text-align:center;font-family:inherit;">';
     h+='<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
       '<td style="padding:9px 10px;font-weight:700;position:sticky;left:0;background:'+bg+';">'+
-        (l.bloqueado?'<span style="font-size:13px;">🚫 </span>':'')+l.kit+
+        '<label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;">'+
+          '<input type="checkbox"'+(_cdqSel[_cdqChave(l.kit)]?' checked':'')+' onchange="cdqToggleSel(\''+escapeJsStr(l.kit)+'\')" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">'+
+          '<span>'+(l.bloqueado?'🚫 ':'')+l.kit+'</span></label>'+
         '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+kg(l.kgPorKit)+' kg/kit · '+Object.keys(l.produtos).length+' produto(s)</div>'+
         (l.obs?'<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:3px;white-space:normal;max-width:260px;">📝 '+l.obs+'</div>':'')+
         '<button onclick="cdqAbrirObs(\''+escapeJsStr(l.kit)+'\')" style="background:none;border:none;color:var(--mc-azul,#2563eb);font-size:11px;cursor:pointer;padding:3px 0 0;font-family:inherit;">'+
@@ -22365,6 +22417,95 @@ function _cdqRenderDia(datas){
 function escapeHtmlAttr(v){ return String(v||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 window.escapeHtmlAttr=escapeHtmlAttr;
 
+/* ── MENSAGEM DE QUEBRA PARA A PRODUÇÃO ──────────────────────────
+   Monta um resumo pronto para mandar no grupo, com o consumo, o
+   embalado e os produtos que saíram de cada kit. */
+let _cdqSel={};
+
+function cdqToggleSel(kit){
+  const ch=_cdqChave(kit);
+  _cdqSel[ch]=!_cdqSel[ch];
+  renderCDQ();
+}
+window.cdqToggleSel=cdqToggleSel;
+
+function cdqSelTodos(v){
+  _cdqSel={};
+  if(v) _cdqLinhas(_cdqDataSel).forEach(l=>{ _cdqSel[_cdqChave(l.kit)]=true; });
+  renderCDQ();
+}
+window.cdqSelTodos=cdqSelTodos;
+
+function cdqMontarResumo(){
+  const sel=_cdqLinhas(_cdqDataSel).filter(l=>_cdqSel[_cdqChave(l.kit)]);
+  if(!sel.length) return '';
+  const n=v=>_fmtKg(v);
+  let t='*Quebra de produção — '+_cdqDataSel+'*\n';
+  sel.forEach(l=>{
+    t+='\n*'+l.kit+'*\n';
+    t+='Peso do kit: '+n(l.kgPorKit)+' kg\n';
+    t+='Kits consumidos: '+l.consumidos+' = '+n(l.kgKits)+' kg\n';
+    if(l.massaVelha>0) t+='Massa velha: '+n(l.massaVelha)+' kg\n';
+    t+='Total de massa: '+n(l.disponivel)+' kg\n';
+    t+='Embalado: '+n(l.embKg)+' kg\n';
+    t+='Quebra: '+n(Math.abs(l.quebraKg))+' kg ('+n(Math.abs(l.quebraPct))+'%)'+(l.quebraKg<0?' a mais':'')+'\n';
+    const prods=Object.values(l.produtos).filter(p=>p.emb>0).sort((a,b)=>b.emb-a.emb);
+    if(prods.length){
+      t+='\nProdutos embalados:\n';
+      prods.forEach(p=>{ t+='• '+p.nome+' — '+p.emb+' pct ('+n(p.emb*p.kgPacote)+' kg)\n'; });
+    }
+    if(l.obs) t+='\nObs: '+l.obs+'\n';
+  });
+  if(sel.length>1){
+    const tk=sel.reduce((a,l)=>a+l.disponivel,0), te=sel.reduce((a,l)=>a+l.embKg,0);
+    t+='\n*Total dos '+sel.length+' kits*\n';
+    t+='Massa: '+n(tk)+' kg · Embalado: '+n(te)+' kg\n';
+    t+='Quebra: '+n(Math.abs(tk-te))+' kg ('+n(tk>0?Math.abs((tk-te)/tk*100):0)+'%)\n';
+  }
+  return t;
+}
+window.cdqMontarResumo=cdqMontarResumo;
+
+function cdqCopiarResumo(){
+  const txt=cdqMontarResumo();
+  if(!txt){ alert('Marque pelo menos um kit.'); return; }
+  _copiarTexto(txt, 'Mensagem copiada. É só colar no grupo.');
+}
+window.cdqCopiarResumo=cdqCopiarResumo;
+
+/* Copiar texto funcionando também onde a área de transferência é
+   bloqueada: cai para o campo escondido com execCommand. */
+function _copiarTexto(txt, msgOk){
+  const ok=()=>{ if(typeof _plToast==='function') _plToast('✓ '+(msgOk||'Copiado'), '#16a34a'); else alert(msgOk||'Copiado.'); };
+  const manual=()=>{
+    const ta=document.createElement('textarea');
+    ta.value=txt;
+    ta.style.cssText='position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    let deu=false;
+    try{ deu=document.execCommand('copy'); }catch(e){}
+    ta.remove();
+    if(deu) ok(); else _copiarMostrar(txt);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(ok).catch(manual);
+  } else manual();
+}
+window._copiarTexto=_copiarTexto;
+
+/* Quando nem assim dá, mostra o texto para copiar à mão */
+function _copiarMostrar(txt){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3500;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;padding:18px;">'+
+    '<div style="font-size:15px;font-weight:800;margin-bottom:8px;">Copie o texto abaixo</div>'+
+    '<textarea readonly style="width:100%;height:240px;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;">'+txt+'</textarea>'+
+    '<button class="btn btn-secondary" style="width:100%;margin-top:10px;" onclick="this.closest(\'div\').parentElement.remove()">Fechar</button></div>';
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const t=ov.querySelector('textarea'); if(t){ t.focus(); t.select(); } },60);
+}
+window._copiarMostrar=_copiarMostrar;
+
 function cdqProximo(inp){
   const col=inp.dataset.cdqCol, linha=parseInt(inp.dataset.cdqLinha)||0;
   // salva direto: disparar o evento de mudança nem sempre funciona
@@ -22414,30 +22555,54 @@ window.cdqAbrirObs=cdqAbrirObs;
 async function cdqSalvarObs(kit){
   const obs=((document.getElementById('cdq-obs-txt')||{}).value||'').trim();
   const bloqueado=!!(document.getElementById('cdq-obs-bloq')||{}).checked;
-  const atual=(cdqDados[_cdqDataSel]||{}).kits||{};
-  const chave=Object.keys(atual).find(k=>_kitNormNome(k)===_kitNormNome(kit)) || kit;
-  const kits={...atual, [chave]:{...(atual[chave]||{}), obs, bloqueado}};
-  cdqDados[_cdqDataSel]={...(cdqDados[_cdqDataSel]||{}), kits};
+  const ch=_cdqChave(kit), data=_cdqDataSel;
+  const atual=(cdqDados[data]||{}).kits||{};
+  const kits={...atual, [ch]:{...(atual[ch]||{}), nome:kit, obs, bloqueado}};
+  cdqDados[data]={...(cdqDados[data]||{}), kits};
   document.getElementById('cdq-obs-modal')?.remove();
   renderCDQ();
   try{
-    await setDoc(doc(db,'quadraControleDiario',_cdqDataSel),
-      {kits, data:_cdqDataSel, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
-  }catch(e){ alert('Erro ao salvar: '+e.message); }
+    await setDoc(doc(db,'quadraControleDiario',data),
+      {kits:{[ch]:{nome:kit, obs, bloqueado}}, data, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Não consegui salvar a nota: '+e.message); }
 }
 window.cdqSalvarObs=cdqSalvarObs;
 
+/* A chave do kit no banco é sempre a mesma, independente de como o nome
+   está escrito nos produtos. Sem isso, "Kit Grande Premium 6/8" e
+   "KIT GRANDE PREMIUM 6/8" viravam registros diferentes: você digitava
+   num e a tela lia o outro, parecendo que não salvou. */
+function _cdqChave(kit){
+  return _kitNormNome(kit).replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'') || 'kit';
+}
+
+/* Grava só o campo alterado. Antes enviava o objeto inteiro com todos os
+   kits: dois salvamentos seguidos partiam do mesmo estado e o segundo
+   apagava o primeiro — o que fazia preenchimento rápido se perder. */
 async function cdqSalvarCampo(kit, campo, valor){
   const v=Math.max(0, parseFloat(String(valor).replace(',','.'))||0);
-  const atual=(cdqDados[_cdqDataSel]||{}).kits||{};
-  const kits={...atual, [kit]:{...(atual[kit]||{}), [campo]:v}};
-  // resposta imediata na tela, sem esperar o servidor
-  cdqDados[_cdqDataSel]={...(cdqDados[_cdqDataSel]||{}), kits};
+  const ch=_cdqChave(kit);
+  const data=_cdqDataSel;
+
+  // mostra na hora, sem esperar o servidor
+  const atual=(cdqDados[data]||{}).kits||{};
+  const kits={...atual, [ch]:{...(atual[ch]||{}), nome:kit, [campo]:v}};
+  cdqDados[data]={...(cdqDados[data]||{}), kits};
+  _cdqPendentes[data]=_cdqPendentes[data]||{};
+  _cdqPendentes[data][ch]={...(_cdqPendentes[data][ch]||{}), nome:kit, [campo]:v};
   renderCDQ();
+
   try{
-    await setDoc(doc(db,'quadraControleDiario',_cdqDataSel),
-      {kits, data:_cdqDataSel, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
-  }catch(e){ alert('Erro ao salvar: '+e.message); }
+    // merge profundo: mexe só neste campo deste kit
+    await setDoc(doc(db,'quadraControleDiario',data),
+      {kits:{[ch]:{nome:kit, [campo]:v}}, data, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+    if(_cdqPendentes[data] && _cdqPendentes[data][ch]){
+      delete _cdqPendentes[data][ch][campo];
+      if(!Object.keys(_cdqPendentes[data][ch]).filter(k=>k!=='nome').length) delete _cdqPendentes[data][ch];
+    }
+  }catch(e){
+    alert('Não consegui salvar "'+kit+'".\n\n'+e.message+'\n\nO valor está na tela, mas não foi gravado.');
+  }
 }
 window.cdqSalvarCampo=cdqSalvarCampo;
 
