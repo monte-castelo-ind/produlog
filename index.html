@@ -22198,6 +22198,9 @@ onSnapshot(collection(db,'quadraControleDiario'), snap=>{
 /* Dias com produção da quadra, do mais recente para o mais antigo */
 function _cdqDatas(){
   const ds=new Set();
+  // a quadra lança em quadraRegistros, que já traz kit, produtos e o
+  // peso do kit usado no dia
+  (quadraRegistros||[]).forEach(r=>{ if(r.data) ds.add(r.data); });
   (registros||[]).forEach(r=>{ if(_cdqEhQuadra(r) && r.data) ds.add(r.data); });
   Object.keys(cdqDados||{}).forEach(d=>ds.add(d));
   return [...ds].sort((a,b)=>estDataNum(b)-estDataNum(a));
@@ -22219,11 +22222,39 @@ function _cdqLinhas(data){
   const salvo=(cdqDados[data]||{}).kits||{};
   const porKit={};
 
-  // o que foi embalado no dia, somado por kit, convertido em quilos
+  // o que a quadra lançou no dia: cada lançamento traz o kit, os kits
+  // consumidos, a massa velha e o PESO DO KIT daquele momento
+  (quadraRegistros||[]).forEach(r=>{
+    if(r.data!==data || !r.kit) return;
+    const chave=_kitNormNome(r.kit);
+    if(!porKit[chave]) porKit[chave]={kit:r.kit, chave, embKg:0, prodKg:0, embPct:0, prodPct:0, produtos:{},
+                                      lancNumKits:0, lancMassaVelha:0, kgPorKitLanc:0, lancamentos:0};
+    const g=porKit[chave];
+    g.lancamentos++;
+    g.lancNumKits+=Number(r.numKits)||0;
+    g.lancMassaVelha+=Number(r.massaVelha)||0;
+    // peso do kit congelado no lançamento: se a receita mudar depois,
+    // a quebra do passado continua certa
+    if(Number(r.kgPorKit)>0) g.kgPorKitLanc=Number(r.kgPorKit);
+    (r.produtos||[]).forEach(pp=>{
+      const nome=pp.nome||'';
+      const kgp=Number(pp.kgPacote)||0;
+      const pct=Number(pp.qtdPacotes)||0;
+      const cat=_cdqProdutoDe(nome);
+      g.embKg+=pct*kgp; g.prodKg+=pct*kgp;
+      g.embPct+=pct;    g.prodPct+=pct;
+      g.produtos[nome]=g.produtos[nome]||{nome, kgPacote:kgp, unPct:(cat?(Number(cat.qtdPct)||0):0), emb:0, prod:0};
+      g.produtos[nome].emb+=pct;
+      g.produtos[nome].prod+=pct;
+    });
+  });
+
+  // registros soltos da confeitaria que usem kit da quadra (caso raro)
   (registros||[]).forEach(r=>{
     if(r.data!==data || !_cdqEhQuadra(r)) return;
     const p=_cdqProdutoDe(r.produto);
     if(!p || !p.kit) return;
+    if((quadraRegistros||[]).some(q=>q.data===data && (q.produtos||[]).some(x=>_normNome(x.nome||'')===_normNome(r.produto)))) return;
     const kg=(Number(p.kgPacote)||0);
     const embPct=laEmbalado(r.embalagem||{});
     const prodPct=Number(r.qtd)||0;
@@ -22257,11 +22288,22 @@ function _cdqLinhas(data){
                  (_kitNormNome(salvo[k]&&salvo[k].nome||'')===g.chave);
       if(bate) Object.assign(man, salvo[k]);
     });
-    const consumidos=Number(man.consumidos)||0;
-    const massaVelha=Number(man.massaVelha)||0;
+    // o que a quadra já lançou vale como padrão; o campo manual só
+    // entra quando ela não lançou nada
+    const consumidos=(man.consumidos!==undefined&&man.consumidos!==null&&man.consumidos!=='')
+      ? (Number(man.consumidos)||0) : (g.lancNumKits||0);
+    const massaVelha=(man.massaVelha!==undefined&&man.massaVelha!==null&&man.massaVelha!=='')
+      ? (Number(man.massaVelha)||0) : (g.lancMassaVelha||0);
     const obs=String(man.obs||'');
     const bloqueado=man.bloqueado===true;
-    const kgPorKit=(typeof _kitKgPorKit==='function')?_kitKgPorKit(g.kit):0;
+    /* Peso do kit: usa o que foi gravado no lançamento daquele dia.
+       Se a receita mudar depois, a quebra do passado não muda junto.
+       Só cai na receita atual quando o lançamento não guardou o peso
+       (registros antigos ou preenchimento manual sem lançamento). */
+    const kgPorKitAtual=(typeof _kitKgPorKit==='function')?_kitKgPorKit(g.kit):0;
+    const kgPorKit=(man.kgPorKit>0) ? Number(man.kgPorKit)
+                 : (g.kgPorKitLanc>0 ? g.kgPorKitLanc : kgPorKitAtual);
+    const pesoCongelado=(man.kgPorKit>0 || g.kgPorKitLanc>0);
     const kgKits=consumidos*kgPorKit;
     const disponivel=kgKits+massaVelha;          // o que entrou de massa
     const quebraKg=disponivel-g.embKg;           // o que não virou pacote
@@ -22289,6 +22331,7 @@ function _cdqLinhas(data){
     const semUnidade=prodsComEmb.some(x=>x.semUnidade);
     return {...g, consumidos, massaVelha, obs, bloqueado, kgPorKit, kgKits, disponivel, quebraKg, quebraPct,
             fator, pesoMedio, pesoPadrao, semUnidade, nProdutos:prodsComEmb.length,
+            pesoCongelado, kgPorKitAtual, lancamentos:(g.lancamentos||0),
             preenchido:(consumidos>0||massaVelha>0)};
   }).sort((a,b)=>b.disponivel-a.disponivel || a.kit.localeCompare(b.kit,'pt-BR'));
 }
@@ -22435,7 +22478,12 @@ function _cdqRenderDia(datas){
         '<label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;">'+
           '<input type="checkbox"'+(_cdqSel[_cdqChave(l.kit)]?' checked':'')+' onchange="cdqToggleSel(\''+escapeJsStr(l.kit)+'\')" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">'+
           '<span>'+(l.bloqueado?'🚫 ':'')+l.kit+'</span></label>'+
-        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+kg(l.kgPorKit)+' kg/kit · '+Object.keys(l.produtos).length+' produto(s)</div>'+
+        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+kg(l.kgPorKit)+' kg/kit'+
+          // avisa quando a receita mudou depois do lançamento
+          (l.pesoCongelado && l.kgPorKitAtual>0 && Math.abs(l.kgPorKitAtual-l.kgPorKit)>0.01
+            ? ' <span title="A receita foi alterada depois. Aqui vale o peso do dia." style="color:#7c3aed;">⏱ hoje '+kg(l.kgPorKitAtual)+'</span>'
+            : '')+
+          ' · '+Object.keys(l.produtos).length+' produto(s)</div>'+
         (l.obs?'<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:3px;white-space:normal;max-width:260px;">📝 '+l.obs+'</div>':'')+
         '<button onclick="cdqAbrirObs(\''+escapeJsStr(l.kit)+'\')" style="background:none;border:none;color:var(--mc-azul,#2563eb);font-size:11px;cursor:pointer;padding:3px 0 0;font-family:inherit;">'+
           (l.obs||l.bloqueado?'✏️ editar nota':'+ nota')+'</button>'+
@@ -22677,10 +22725,19 @@ async function cdqSalvarCampo(kit, campo, valor){
   _cdqPendentes[data][ch]={...(_cdqPendentes[data][ch]||{}), nome:kit, [campo]:v};
   renderCDQ();
 
+  // congela o peso do kit junto com o valor digitado: se a receita
+  // mudar depois, a quebra deste dia continua a mesma
+  const extra={nome:kit, [campo]:v};
+  const jaTem=(atual[ch]||{}).kgPorKit;
+  if(!jaTem){
+    const linha=_cdqLinhas(data).find(x=>_cdqChave(x.kit)===ch);
+    const peso=linha?linha.kgPorKit:((typeof _kitKgPorKit==='function')?_kitKgPorKit(kit):0);
+    if(peso>0) extra.kgPorKit=peso;
+  }
   // guarda no aparelho antes de enviar: se a gravação não chegar ao
   // servidor (sem internet, aba fechada no meio), o valor não se perde
-  _cdqGuardarLocal(data, ch, {nome:kit, [campo]:v});
-  _cdqEnviar(data, ch, {nome:kit, [campo]:v}, kit);
+  _cdqGuardarLocal(data, ch, extra);
+  _cdqEnviar(data, ch, extra, kit);
 }
 
 /* ── BACKUP LOCAL ────────────────────────────────────────────────
