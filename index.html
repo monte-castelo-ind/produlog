@@ -22165,13 +22165,24 @@ let cdqDados={};          // {data: {kits:{nomeKit:{consumidos, massaVelha}}}}
 let _cdqDataSel='', _cdqModo='lista';
 
 // o que ainda não confirmou no servidor, para o snapshot não reverter
+/* O ID do documento não pode ter barra: "24/09/2026" virava o caminho
+   quadraControleDiario/24/09/2026, ou seja, uma subcoleção aninhada que
+   a leitura da coleção nunca enxergava. Era por isso que os valores
+   sumiam ao recarregar. */
+function _cdqDocId(dataBR){ return String(dataBR||'').replace(/\//g,'-'); }
+
 let _cdqPendentes={};
 let _cdqJaTentou=false;
 
 onSnapshot(collection(db,'quadraControleDiario'), snap=>{
   try{
     const novo={};
-    snap.docs.forEach(d=>{ novo[d.id]=d.data(); });
+    snap.docs.forEach(d=>{
+      const v=d.data()||{};
+      // a chave na memória continua sendo a data normal (24/09/2026)
+      const dataBR=v.data || String(d.id).replace(/-/g,'/');
+      novo[dataBR]={...v, data:dataBR};
+    });
     // reaplica o que o usuário acabou de digitar e ainda está a caminho
     Object.keys(_cdqPendentes).forEach(data=>{
       const pend=_cdqPendentes[data]; if(!pend || !Object.keys(pend).length) return;
@@ -22223,7 +22234,7 @@ function _cdqLinhas(data){
     const g=porKit[chave];
     g.embKg+=embPct*kg; g.prodKg+=prodPct*kg;
     g.embPct+=embPct;   g.prodPct+=prodPct;
-    g.produtos[r.produto]=g.produtos[r.produto]||{nome:r.produto, kgPacote:kg, emb:0, prod:0};
+    g.produtos[r.produto]=g.produtos[r.produto]||{nome:r.produto, kgPacote:kg, unPct:(Number(p.qtdPct)||0), emb:0, prod:0};
     g.produtos[r.produto].emb+=embPct;
     g.produtos[r.produto].prod+=prodPct;
   });
@@ -22263,14 +22274,21 @@ function _cdqLinhas(data){
        fator. O fator é o mesmo desvio proporcional para todos. */
     const prodsComEmb=Object.values(g.produtos).filter(x=>x.emb>0);
     const fator=g.embKg>0?(disponivel/g.embKg):0;
-    const pesoMedio=(prodsComEmb.length===1 && prodsComEmb[0].emb>0)
-      ? (disponivel/prodsComEmb[0].emb)
-      : 0;
-    const pesoPadrao=prodsComEmb.length===1?prodsComEmb[0].kgPacote:0;
-    // peso real de cada produto, para o detalhe de baixo
-    prodsComEmb.forEach(x=>{ x.pesoReal=fator?(x.kgPacote*fator):0; });
+    // peso por UNIDADE, não por pacote: divide pelas unidades que cabem
+    // em cada pacote (qtdPct do cadastro). Sem esse dado, cai no pacote.
+    prodsComEmb.forEach(x=>{
+      const un=Number(x.unPct)||0;
+      x.unTotal = un ? x.emb*un : x.emb;          // unidades embaladas
+      x.pesoUnPadrao = un ? (x.kgPacote/un) : x.kgPacote;
+      x.pesoUnReal = fator ? (x.pesoUnPadrao*fator) : 0;
+      x.semUnidade = !un;                          // avisa que faltou cadastrar
+    });
+    const umSo=prodsComEmb.length===1?prodsComEmb[0]:null;
+    const pesoMedio=(umSo && umSo.unTotal) ? (disponivel/umSo.unTotal) : 0;
+    const pesoPadrao=umSo?umSo.pesoUnPadrao:0;
+    const semUnidade=prodsComEmb.some(x=>x.semUnidade);
     return {...g, consumidos, massaVelha, obs, bloqueado, kgPorKit, kgKits, disponivel, quebraKg, quebraPct,
-            fator, pesoMedio, pesoPadrao, nProdutos:prodsComEmb.length,
+            fator, pesoMedio, pesoPadrao, semUnidade, nProdutos:prodsComEmb.length,
             preenchido:(consumidos>0||massaVelha>0)};
   }).sort((a,b)=>b.disponivel-a.disponivel || a.kit.localeCompare(b.kit,'pt-BR'));
 }
@@ -22295,10 +22313,7 @@ function _cdqVoltarLista(){ _cdqModo='lista'; renderCDQ(); }
 window._cdqVoltarLista=_cdqVoltarLista;
 
 function _cdqRenderLista(datas){
-  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
-      '<span class="mc-section-header" style="flex:1;">Escolha o dia</span>'+
-      '<button onclick="cdqDiagnostico()" title="Ver o que está gravado no servidor" style="background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit;">🔍 gravado</button>'+
-    '</div>'+
+  return '<div class="mc-section-header">Escolha o dia</div>'+
     datas.slice(0,60).map(d=>{
       const ls=_cdqLinhas(d);
       const falta=ls.filter(l=>!l.preenchido).length;
@@ -22334,18 +22349,20 @@ window._cdqGramas=_cdqGramas;
    detalhe por produto fica no bloco abaixo da tabela. */
 function _cdqCelulaPeso(l){
   if(!l.preenchido || !l.embKg) return '<span style="color:var(--text-muted);">—</span>';
+  // sem "unidades por pacote" cadastrado o número sai por pacote
+  const aviso=l.semUnidade?'<div style="font-size:9px;color:#b45309;">por pacote · falta cadastrar un/pct</div>':'';
   if(l.nProdutos===1){
     const dif=l.pesoPadrao?((l.pesoMedio-l.pesoPadrao)/l.pesoPadrao*100):0;
     const cor=Math.abs(dif)>8?'#dc2626':(Math.abs(dif)>4?'#d97706':'#16a34a');
     return '<strong style="color:'+cor+';font-size:13px;">'+_cdqGramas(l.pesoMedio)+'</strong>'+
       '<div style="font-size:10px;color:var(--text-muted);">padrão '+_cdqGramas(l.pesoPadrao)+
-      ' <span style="color:'+cor+';">('+(dif>0?'+':'')+_fmtKg(dif)+'%)</span></div>';
+      ' <span style="color:'+cor+';">('+(dif>0?'+':'')+_fmtKg(dif)+'%)</span></div>'+aviso;
   }
   const dif=(l.fator-1)*100;
   const cor=Math.abs(dif)>8?'#dc2626':(Math.abs(dif)>4?'#d97706':'#16a34a');
   return '<strong style="color:'+cor+';font-size:13px;">'+_fmtKg(l.fator)+'×</strong>'+
     '<div style="font-size:10px;color:var(--text-muted);">'+l.nProdutos+' produtos '+
-    '<span style="color:'+cor+';">('+(dif>0?'+':'')+_fmtKg(dif)+'%)</span></div>';
+    '<span style="color:'+cor+';">('+(dif>0?'+':'')+_fmtKg(dif)+'%)</span></div>'+aviso;
 }
 window._cdqCelulaPeso=_cdqCelulaPeso;
 
@@ -22459,15 +22476,19 @@ function _cdqRenderDia(datas){
     '<div class="card" style="margin-top:10px;">'+
       '<div style="font-size:13px;font-weight:800;margin-bottom:6px;">'+l.kit+'</div>'+
       Object.values(l.produtos).sort((a,b)=>b.emb-a.emb).map(pp=>{
-        const real=pp.pesoReal||0;
-        const dif=real&&pp.kgPacote?((real-pp.kgPacote)/pp.kgPacote*100):0;
+        const real=pp.pesoUnReal||0, padrao=pp.pesoUnPadrao||0;
+        const dif=real&&padrao?((real-padrao)/padrao*100):0;
         const cor=!real?'var(--text-muted)':(Math.abs(dif)>8?'#dc2626':(Math.abs(dif)>4?'#d97706':'#16a34a'));
         return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border);">'+
           '<span style="flex:1;min-width:0;">'+pp.nome+
-            '<span style="display:block;font-size:10px;color:var(--text-muted);">padrão '+_cdqGramas(pp.kgPacote)+
-            (real?(' · <strong style="color:'+cor+';">real '+_cdqGramas(real)+'</strong>'+
-                   ' <span style="color:'+cor+';">('+(dif>0?'+':'')+kg(dif)+'%)</span>'):'')+'</span></span>'+
-          '<span style="white-space:nowrap;text-align:right;">'+pp.emb+' pct<br><strong>'+kg(pp.emb*pp.kgPacote)+' kg</strong></span></div>';
+            '<span style="display:block;font-size:10px;color:var(--text-muted);">'+
+              (pp.unPct?(pp.unPct+' un/pct · '):'<span style="color:#b45309;">sem un/pct · </span>')+
+              'un padrão '+_cdqGramas(padrao)+
+              (real?(' · <strong style="color:'+cor+';">real '+_cdqGramas(real)+'</strong>'+
+                     ' <span style="color:'+cor+';">('+(dif>0?'+':'')+kg(dif)+'%)</span>'):'')+'</span></span>'+
+          '<span style="white-space:nowrap;text-align:right;">'+pp.emb+' pct'+
+            (pp.unPct?('<br><span style="font-size:10px;color:var(--text-muted);">'+pp.unTotal+' un</span>'):'')+
+            '<br><strong>'+kg(pp.emb*pp.kgPacote)+' kg</strong></span></div>';
       }).join('')+
     '</div>').join('');
   return h;
@@ -22570,47 +22591,7 @@ window._copiarMostrar=_copiarMostrar;
 /* ── DIAGNÓSTICO: o que está gravado de verdade ──────────────────
    Mostra o conteúdo bruto da coleção, sem filtro nenhum. Serve para
    saber se o dado chegou ao servidor ou se nunca foi gravado. */
-function cdqDiagnostico(){
-  const dias=Object.keys(cdqDados||{}).sort((a,b)=>estDataNum(b)-estDataNum(a));
-  const ov=document.createElement('div');
-  ov.id='cdq-diag';
-  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
-  let corpo='';
-  if(!dias.length){
-    corpo='<div style="padding:22px;text-align:center;color:var(--text-secondary);font-size:13px;">'+
-      'Nenhum dia gravado no servidor.<br><br>Se você preencheu e os valores sumiram, eles não chegaram a ser salvos.</div>';
-  } else {
-    corpo=dias.map(d=>{
-      const kits=(cdqDados[d]||{}).kits||{};
-      const nomes=Object.keys(kits);
-      return '<div class="card" style="margin-bottom:8px;">'+
-        '<div style="font-size:14px;font-weight:800;">'+d+' <span style="font-size:11px;font-weight:400;color:var(--text-muted);">'+nomes.length+' kit(s)</span></div>'+
-        (cdqDados[d].atualizadoEm?'<div style="font-size:10px;color:var(--text-muted);">salvo em '+cdqDados[d].atualizadoEm+(cdqDados[d].autor?(' por '+cdqDados[d].autor):'')+'</div>':'')+
-        (nomes.length
-          ? nomes.map(k=>{
-              const v=kits[k]||{};
-              const campos=Object.keys(v).filter(x=>x!=='nome').map(x=>x+': '+JSON.stringify(v[x])).join(' · ');
-              return '<div style="font-size:11px;padding:4px 0;border-bottom:1px dashed var(--border);">'+
-                '<strong>'+(v.nome||k)+'</strong>'+
-                '<div style="color:var(--text-muted);">chave: '+k+'</div>'+
-                '<div style="color:var(--text-secondary);">'+(campos||'(sem valores)')+'</div></div>';
-            }).join('')
-          : '<div style="font-size:11px;color:#b45309;padding:4px 0;">documento existe mas está sem kits</div>')+
-      '</div>';
-    }).join('');
-  }
-  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
-    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
-      '<div style="font-size:17px;font-weight:800;">🔍 O que está gravado</div>'+
-      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">Conteúdo bruto do servidor, sem filtro.</div></div>'+
-    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+corpo+'</div>'+
-    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
-      '<button class="btn btn-secondary" style="flex:1;" onclick="_copiarTexto(JSON.stringify(cdqDados,null,2),\'Diagnóstico copiado\')">📋 Copiar</button>'+
-      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'cdq-diag\').remove()">Fechar</button></div>'+
-  '</div>';
-  document.body.appendChild(ov);
-}
-window.cdqDiagnostico=cdqDiagnostico;
+
 
 function cdqProximo(inp){
   const col=inp.dataset.cdqCol, linha=parseInt(inp.dataset.cdqLinha)||0;
@@ -22732,7 +22713,7 @@ function _cdqTirarLocal(data, ch, campos){
 
 async function _cdqEnviar(data, ch, campos, nomeKit){
   try{
-    await setDoc(doc(db,'quadraControleDiario',data),
+    await setDoc(doc(db,'quadraControleDiario',_cdqDocId(data)),
       {kits:{[ch]:campos}, data, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
     // confirmou: pode tirar da fila
     _cdqTirarLocal(data, ch, campos);
