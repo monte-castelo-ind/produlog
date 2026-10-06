@@ -22166,6 +22166,7 @@ let _cdqDataSel='', _cdqModo='lista';
 
 // o que ainda não confirmou no servidor, para o snapshot não reverter
 let _cdqPendentes={};
+let _cdqJaTentou=false;
 
 onSnapshot(collection(db,'quadraControleDiario'), snap=>{
   try{
@@ -22261,6 +22262,8 @@ function _cdqLinhas(data){
 
 function renderCDQ(){
   const el=document.getElementById('cdq-content'); if(!el) return;
+  // tenta mandar o que ficou guardado no aparelho
+  if(!_cdqJaTentou){ _cdqJaTentou=true; setTimeout(()=>cdqReenviarPendentes(), 400); }
   const datas=_cdqDatas();
   if(!datas.length){ el.innerHTML=_vazio('Nenhuma produção da quadra registrada.'); return; }
   if(_cdqModo==='lista'){ el.innerHTML=_cdqRenderLista(datas); return; }
@@ -22277,7 +22280,10 @@ function _cdqVoltarLista(){ _cdqModo='lista'; renderCDQ(); }
 window._cdqVoltarLista=_cdqVoltarLista;
 
 function _cdqRenderLista(datas){
-  return '<div class="mc-section-header">Escolha o dia</div>'+
+  return '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
+      '<span class="mc-section-header" style="flex:1;">Escolha o dia</span>'+
+      '<button onclick="cdqDiagnostico()" title="Ver o que está gravado no servidor" style="background:none;border:1px solid var(--border);color:var(--text-secondary);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;font-family:inherit;">🔍 gravado</button>'+
+    '</div>'+
     datas.slice(0,60).map(d=>{
       const ls=_cdqLinhas(d);
       const falta=ls.filter(l=>!l.preenchido).length;
@@ -22506,6 +22512,51 @@ function _copiarMostrar(txt){
 }
 window._copiarMostrar=_copiarMostrar;
 
+/* ── DIAGNÓSTICO: o que está gravado de verdade ──────────────────
+   Mostra o conteúdo bruto da coleção, sem filtro nenhum. Serve para
+   saber se o dado chegou ao servidor ou se nunca foi gravado. */
+function cdqDiagnostico(){
+  const dias=Object.keys(cdqDados||{}).sort((a,b)=>estDataNum(b)-estDataNum(a));
+  const ov=document.createElement('div');
+  ov.id='cdq-diag';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+  let corpo='';
+  if(!dias.length){
+    corpo='<div style="padding:22px;text-align:center;color:var(--text-secondary);font-size:13px;">'+
+      'Nenhum dia gravado no servidor.<br><br>Se você preencheu e os valores sumiram, eles não chegaram a ser salvos.</div>';
+  } else {
+    corpo=dias.map(d=>{
+      const kits=(cdqDados[d]||{}).kits||{};
+      const nomes=Object.keys(kits);
+      return '<div class="card" style="margin-bottom:8px;">'+
+        '<div style="font-size:14px;font-weight:800;">'+d+' <span style="font-size:11px;font-weight:400;color:var(--text-muted);">'+nomes.length+' kit(s)</span></div>'+
+        (cdqDados[d].atualizadoEm?'<div style="font-size:10px;color:var(--text-muted);">salvo em '+cdqDados[d].atualizadoEm+(cdqDados[d].autor?(' por '+cdqDados[d].autor):'')+'</div>':'')+
+        (nomes.length
+          ? nomes.map(k=>{
+              const v=kits[k]||{};
+              const campos=Object.keys(v).filter(x=>x!=='nome').map(x=>x+': '+JSON.stringify(v[x])).join(' · ');
+              return '<div style="font-size:11px;padding:4px 0;border-bottom:1px dashed var(--border);">'+
+                '<strong>'+(v.nome||k)+'</strong>'+
+                '<div style="color:var(--text-muted);">chave: '+k+'</div>'+
+                '<div style="color:var(--text-secondary);">'+(campos||'(sem valores)')+'</div></div>';
+            }).join('')
+          : '<div style="font-size:11px;color:#b45309;padding:4px 0;">documento existe mas está sem kits</div>')+
+      '</div>';
+    }).join('');
+  }
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🔍 O que está gravado</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">Conteúdo bruto do servidor, sem filtro.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+corpo+'</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="_copiarTexto(JSON.stringify(cdqDados,null,2),\'Diagnóstico copiado\')">📋 Copiar</button>'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'cdq-diag\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.cdqDiagnostico=cdqDiagnostico;
+
 function cdqProximo(inp){
   const col=inp.dataset.cdqCol, linha=parseInt(inp.dataset.cdqLinha)||0;
   // salva direto: disparar o evento de mudança nem sempre funciona
@@ -22561,10 +22612,8 @@ async function cdqSalvarObs(kit){
   cdqDados[data]={...(cdqDados[data]||{}), kits};
   document.getElementById('cdq-obs-modal')?.remove();
   renderCDQ();
-  try{
-    await setDoc(doc(db,'quadraControleDiario',data),
-      {kits:{[ch]:{nome:kit, obs, bloqueado}}, data, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
-  }catch(e){ alert('Não consegui salvar a nota: '+e.message); }
+  _cdqGuardarLocal(data, ch, {nome:kit, obs, bloqueado});
+  await _cdqEnviar(data, ch, {nome:kit, obs, bloqueado}, kit);
 }
 window.cdqSalvarObs=cdqSalvarObs;
 
@@ -22592,18 +22641,80 @@ async function cdqSalvarCampo(kit, campo, valor){
   _cdqPendentes[data][ch]={...(_cdqPendentes[data][ch]||{}), nome:kit, [campo]:v};
   renderCDQ();
 
+  // guarda no aparelho antes de enviar: se a gravação não chegar ao
+  // servidor (sem internet, aba fechada no meio), o valor não se perde
+  _cdqGuardarLocal(data, ch, {nome:kit, [campo]:v});
+  _cdqEnviar(data, ch, {nome:kit, [campo]:v}, kit);
+}
+
+/* ── BACKUP LOCAL ────────────────────────────────────────────────
+   O Firestore confirma a escrita só quando o servidor responde. Se a
+   pessoa fecha o app antes disso, o valor aparecia na tela mas nunca
+   era gravado — e sumia ao voltar. Aqui tudo passa primeiro pelo
+   aparelho e é reenviado até confirmar. */
+const _CDQ_LOCAL='cdq_pendentes_v1';
+
+function _cdqLerLocal(){
+  try{ return JSON.parse(localStorage.getItem(_CDQ_LOCAL)||'{}'); }catch(e){ return {}; }
+}
+function _cdqGravarLocal(obj){
+  try{ localStorage.setItem(_CDQ_LOCAL, JSON.stringify(obj)); }catch(e){}
+}
+function _cdqGuardarLocal(data, ch, campos){
+  const loc=_cdqLerLocal();
+  loc[data]=loc[data]||{};
+  loc[data][ch]={...(loc[data][ch]||{}), ...campos};
+  _cdqGravarLocal(loc);
+}
+function _cdqTirarLocal(data, ch, campos){
+  const loc=_cdqLerLocal();
+  if(!loc[data] || !loc[data][ch]) return;
+  Object.keys(campos).forEach(k=>{ if(k!=='nome') delete loc[data][ch][k]; });
+  if(!Object.keys(loc[data][ch]).filter(k=>k!=='nome').length) delete loc[data][ch];
+  if(!Object.keys(loc[data]).length) delete loc[data];
+  _cdqGravarLocal(loc);
+}
+
+async function _cdqEnviar(data, ch, campos, nomeKit){
   try{
-    // merge profundo: mexe só neste campo deste kit
     await setDoc(doc(db,'quadraControleDiario',data),
-      {kits:{[ch]:{nome:kit, [campo]:v}}, data, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+      {kits:{[ch]:campos}, data, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+    // confirmou: pode tirar da fila
+    _cdqTirarLocal(data, ch, campos);
     if(_cdqPendentes[data] && _cdqPendentes[data][ch]){
-      delete _cdqPendentes[data][ch][campo];
+      Object.keys(campos).forEach(k=>{ if(k!=='nome') delete _cdqPendentes[data][ch][k]; });
       if(!Object.keys(_cdqPendentes[data][ch]).filter(k=>k!=='nome').length) delete _cdqPendentes[data][ch];
     }
+    return true;
   }catch(e){
-    alert('Não consegui salvar "'+kit+'".\n\n'+e.message+'\n\nO valor está na tela, mas não foi gravado.');
+    console.error('cdq enviar', e);
+    if(nomeKit) alert('Não consegui salvar "'+nomeKit+'" agora.\n\n'+e.message+
+      '\n\nO valor ficou guardado neste aparelho e será reenviado sozinho.');
+    return false;
   }
 }
+
+/* Reenvia o que ficou para trás. Roda ao abrir a tela e quando a
+   internet volta. */
+async function cdqReenviarPendentes(){
+  const loc=_cdqLerLocal();
+  const dias=Object.keys(loc);
+  if(!dias.length) return 0;
+  let ok=0;
+  for(const data of dias){
+    for(const ch of Object.keys(loc[data]||{})){
+      // devolve para a tela enquanto não confirma
+      _cdqPendentes[data]=_cdqPendentes[data]||{};
+      _cdqPendentes[data][ch]={...(_cdqPendentes[data][ch]||{}), ...loc[data][ch]};
+      if(await _cdqEnviar(data, ch, loc[data][ch], null)) ok++;
+    }
+  }
+  if(ok) renderCDQ();
+  return ok;
+}
+window.cdqReenviarPendentes=cdqReenviarPendentes;
+
+window.addEventListener('online', ()=>{ cdqReenviarPendentes(); });
 window.cdqSalvarCampo=cdqSalvarCampo;
 
 /* ══════════════════════════════════════════════════════════════════
