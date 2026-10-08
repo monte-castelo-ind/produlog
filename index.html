@@ -22251,7 +22251,17 @@ onSnapshot(collection(db,'cfPedidosSemana'), snap=>{
   try{
     cfSemanas=snap.docs.map(d=>({firestoreId:d.id,...d.data()}))
       .sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
-    if(document.querySelector('.screen.active')?.id==='s-cfped') renderCfPed();
+    if(document.querySelector('.screen.active')?.id!=='s-cfped') return;
+    /* Cada gravação volta pelo servidor e cairia aqui, redesenhando a
+       tabela no meio da digitação — os campos eram destruídos e o valor
+       seguinte ia para a linha errada. Enquanto alguém está com um
+       campo aberto, só os totais são repintados. */
+    const focado=document.activeElement;
+    if(focado && focado.dataset && focado.dataset.cfCod!==undefined){
+      _cfAtualizarTotais();
+      return;
+    }
+    renderCfPed();
   }catch(e){ console.error('cfPedidosSemana snap',e); }
 });
 
@@ -22403,13 +22413,20 @@ window.cfSetQtd=cfSetQtd;
 /* Enter desce para a mesma loja do produto de baixo */
 function cfProximo(inp){
   const cod=inp.dataset.cfCod, i=inp.dataset.cfLoja;
+  // move o foco ANTES de gravar: assim o campo de destino já está
+  // selecionado quando a resposta do servidor chegar
+  const daColuna=[...document.querySelectorAll('[data-cf-loja="'+i+'"]')];
+  const pos=daColuna.findIndex(x=>x===inp);
+  let prox=daColuna[pos+1];
+  // no fim da coluna, vai para o topo da loja seguinte; se não houver,
+  // apenas sai do campo — sem isso o valor seguinte caía no mesmo lugar
+  if(!prox){
+    const outra=[...document.querySelectorAll('[data-cf-loja="'+((parseInt(i)||0)+1)+'"]')];
+    prox=outra[0];
+  }
   cfSetQtd(cod, parseInt(i)||0, inp.value);
-  setTimeout(()=>{
-    const todos=[...document.querySelectorAll('[data-cf-loja="'+i+'"]')];
-    const pos=todos.findIndex(x=>x.dataset.cfCod===cod);
-    const prox=todos[pos+1];
-    if(prox){ prox.focus(); prox.select&&prox.select(); }
-  }, 80);
+  if(prox){ prox.focus(); prox.select&&prox.select(); }
+  else inp.blur();
 }
 window.cfProximo=cfProximo;
 
