@@ -1820,11 +1820,6 @@
         <div style="flex:1;"><div class="hb-title">Plano de Produção</div><div class="hb-desc">Cronograma da semana</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
-      <button class="home-btn" id="cf-emb-card" onclick="goTo('s-emb-cf')" style="border-left-color:#7c3aed;margin-bottom:4px;">
-        <div class="hb-icon" id="cf-emb-icon" style="background:#ede9fe;">🤝</div>
-        <div style="flex:1;"><div class="hb-title">Cliente C&amp;F <span id="cf-emb-pill" style="display:none;background:#d97706;color:#fff;font-size:12px;font-weight:800;border-radius:99px;padding:2px 10px;margin-left:6px;vertical-align:middle;">🔔 0</span></div><div class="hb-desc" id="cf-emb-badge">Produção e abertura de pacotes</div></div>
-        <span style="color:var(--text-secondary);font-size:20px;">›</span>
-      </button>
       <button class="home-btn" onclick="goTo('s-exp-manual')" style="border-left-color:var(--mc-laranja);margin-bottom:4px;">
         <div class="hb-icon" style="background:#fef3c7;">📥</div>
         <div style="flex:1;"><div class="hb-title">Expedição já pegou</div><div class="hb-desc">Lançar produto pego antes da embalagem</div></div>
@@ -4679,31 +4674,7 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="estoque-emb-form-content"></div>
   </div>
 
-  <!-- EMBALAGEM: CLIENTE C&F -->
-  <div class="screen" id="s-emb-cf">
-    <div class="mc-header">
-      <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
-        <div class="mc-brand-text">
-          <div class="mc-brand-name">Monte Castelo</div>
-          <div class="mc-brand-sub">Embalagem</div>
-        </div>
-      </div>
-      <div class="mc-divider-v"></div>
-      <div class="mc-page-info">
-        <div class="mc-page-title">🤝 Cliente C&amp;F</div>
-        <div class="mc-page-sub">Produção e abertura de pacotes</div>
-      </div>
-    </div>
-    <div class="content">
-      <div id="cf-form"></div>
-      <div id="cf-list"></div>
-    </div>
-  </div>
-
-
-<!-- ADMIN STATUS PANEL -->
+  <!-- ADMIN STATUS PANEL -->
   <div class="screen" id="s-adm-status">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
@@ -5294,7 +5265,6 @@ function atualizarTela(){
   if(tela==='s-coz-home') renderCozHome();
   if(tela==='s-emb-home') renderEmbalagem(); // embManual listener triggers this
   if(tela==='s-emb-sel-data') renderSelDataEmb();
-  if(tela==='s-emb-cf') renderCF();
   if(tela==='s-exp-home') renderExpedicao();
   if(tela==='s-exp-manual') renderExpManual();
   if(tela==='s-mp-home') renderMP();
@@ -5468,7 +5438,6 @@ function goTo(id, semHistorico){
   if(id==='s-conf-massas') renderConfMassas();
   if(id==='s-coz-reg') renderCozReg();
   if(id==='s-emb-home') renderEmbalagem();
-  if(id==='s-emb-cf'){ renderCFForm(); renderCF(); }
   if(id==='s-emb-sel-data') _cfAtualizarBadge();
   if(id==='s-emb-manual'){ const b=document.getElementById('emb-manual-btn');if(b){b.textContent='Adicionar ao checklist ✓';b.disabled=false;} }
   if(id==='s-exp-home') renderExpedicao();
@@ -22329,7 +22298,14 @@ function _cfRenderLista(){
         '<span style="flex:1;min-width:0;">'+
           '<span style="display:block;font-size:15px;font-weight:800;">'+(sem.nome||'(sem nome)')+'</span>'+
           '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
-            nLojas+' loja(s) · '+nProd+' produto(s) · '+soma+' pct no total</span></span>'+
+            nLojas+' loja(s) · '+nProd+' produto(s) · '+soma+' pct no total'+
+            (sem.entrega?(' · <strong style="color:var(--mc-azul,#2563eb);">entrega '+sem.entrega+'</strong>'):'')+'</span>'+
+          // deixa evidente, antes de abrir, o que já está com a embalagem
+          (sem.enviado
+            ? '<span style="display:inline-flex;align-items:center;gap:5px;background:#f0fdf4;border:1px solid #16a34a;border-radius:99px;padding:3px 10px;margin-top:5px;font-size:11px;font-weight:800;color:#15803d;">'+
+                '📤 NA EMBALAGEM · '+_cfFeitos(sem)+'/'+nProd+' feitos</span>'
+            : '<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg-page);border:1px solid var(--border);border-radius:99px;padding:3px 10px;margin-top:5px;font-size:11px;font-weight:700;color:var(--text-secondary);">✏️ só no admin</span>')+
+        '</span>'+
         '<span style="font-size:18px;color:var(--text-muted);">›</span></div>'+
       (window.adminMode===true
         ? '<button onclick="cfExcluirSemana(\''+escapeJsStr(sem.firestoreId)+'\')" style="width:100%;margin-top:8px;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Excluir</button>'
@@ -22586,6 +22562,53 @@ async function cfSalvarComoFazer(cod, tipo, dia){
 }
 window.cfSalvarComoFazer=cfSalvarComoFazer;
 
+/* O admin vê exatamente a tela da embalagem, sem precisar trocar de
+   login — só para conferir, sem poder marcar nada. */
+function cfVerComoEmbalagem(){
+  const sem=_cfSem(); if(!sem) return;
+  const ov=document.createElement('div');
+  ov.id='cf-ver-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3300;display:flex;align-items:center;justify-content:center;padding:12px;';
+  const antes=_embCfSel;
+  _embCfSel=sem.firestoreId;
+  let corpo='';
+  try{ corpo=_embCfTabela(sem); }catch(e){ corpo='<div style="padding:20px;color:#c00;">Erro ao montar: '+e.message+'</div>'; }
+  _embCfSel=antes;
+  // tira os botões de marcar: aqui é só leitura
+  corpo=corpo.replace(/onclick="embCfCheck\([^)]*\)"/g, 'disabled title="Só a embalagem marca"')
+             .replace(/onclick="embCfVoltar\(\)"[^>]*>[^<]*<\/button>/, '');
+  ov.innerHTML='<div style="background:var(--bg-page);border-radius:16px;max-width:900px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:16px 18px 10px;border-bottom:1px solid var(--border);background:#fff;border-radius:16px 16px 0 0;">'+
+      '<div style="font-size:16px;font-weight:800;">👁 Como a embalagem está vendo</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">Somente leitura. Quem marca é a embalagem.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+corpo+'</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);background:#fff;border-radius:0 0 16px 16px;">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'cf-ver-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.cfVerComoEmbalagem=cfVerComoEmbalagem;
+
+/* A embalagem tira o pedido da fila quando termina. Não apaga nada: o
+   pedido continua no admin, que pode mandar de volta se precisar. */
+async function embCfConcluir(){
+  const sem=(cfSemanas||[]).find(x=>x.firestoreId===_embCfSel); if(!sem) return;
+  const tot=Object.keys(sem.itens||{}).length;
+  const f=_cfFeitos(sem);
+  const falta=tot-f;
+  if(!confirm('Tirar "'+(sem.nome||'')+'" da sua lista?'+
+    (falta?('\n\n⚠️ Ainda faltam '+falta+' produto(s) sem marcar.'):'\n\nTodos os produtos estão marcados.')+
+    '\n\nO pedido continua salvo com o admin.')) return;
+  try{
+    await setDoc(doc(db,'cfPedidosSemana',_embCfSel),
+      {enviado:false, concluidoEm:agora(), concluidoPor:_demAutor()},{merge:true});
+    _embCfSel='';
+    renderEmbCf();
+    alert('✓ Tirado da sua lista.');
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.embCfConcluir=embCfConcluir;
+
 function _cfRenderGrade(sem){
   const lojas=sem.lojas||[];
   const itens=sem.itens||{};
@@ -22610,12 +22633,19 @@ function _cfRenderGrade(sem){
     '</div>'+
     // envio para a embalagem
     (sem.enviado
-      ? '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:9px 11px;margin-top:10px;">'+
-          '<div style="font-size:12px;font-weight:700;color:#15803d;">✓ Enviado para a embalagem</div>'+
-          '<div style="font-size:11px;color:#166534;margin-top:2px;">'+(sem.enviadoEm||'')+(sem.enviadoPor?(' por '+sem.enviadoPor):'')+
+      ? '<div style="background:#f0fdf4;border:2px solid #16a34a;border-radius:11px;padding:12px;margin-top:10px;">'+
+          '<div style="font-size:14px;font-weight:900;color:#15803d;">📤 ESTE PEDIDO ESTÁ COM A EMBALAGEM</div>'+
+          (sem.entrega?'<div style="font-size:15px;font-weight:800;color:#15803d;margin-top:4px;">📅 Entregar até '+sem.entrega+'</div>':'')+
+          '<div style="font-size:11px;color:#166534;margin-top:3px;">enviado '+(sem.enviadoEm||'')+(sem.enviadoPor?(' por '+sem.enviadoPor):'')+
             ' · '+_cfFeitos(sem)+' de '+Object.keys(sem.itens||{}).length+' marcados</div>'+
-          '<button onclick="cfDesfazerEnvio()" style="width:100%;margin-top:7px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px;font-size:11px;cursor:pointer;font-family:inherit;">Tirar da embalagem</button></div>'
-      : '<button onclick="cfEnviarEmbalagem()" class="btn btn-primary" style="width:100%;margin-top:10px;">📤 Enviar para a embalagem</button>')+
+          '<div style="font-size:11px;color:#166534;margin-top:4px;line-height:1.5;">Alterações feitas aqui aparecem na hora para eles. Para mexer sem que vejam, tire da embalagem primeiro.</div>'+
+          '<div style="display:flex;gap:7px;margin-top:9px;">'+
+            '<button onclick="cfVerComoEmbalagem()" style="flex:1;background:#fff;border:1px solid #16a34a;color:#15803d;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">👁 Ver como eles veem</button>'+
+            '<button onclick="cfDesfazerEnvio()" style="flex:1;background:#fff;border:1px solid #d97706;color:#b45309;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Tirar da embalagem</button>'+
+          '</div></div>'
+      : '<div style="margin-top:10px;">'+
+          '<div style="font-size:11px;color:var(--text-secondary);text-align:center;margin-bottom:7px;">✏️ Só você está vendo este pedido.</div>'+
+          '<button onclick="cfEnviarEmbalagem()" class="btn btn-primary" style="width:100%;">📤 Enviar para a embalagem</button></div>')+
   '</div>';
 
   if(!lojas.length) return h+'<div class="card" style="text-align:center;padding:26px;">'+
@@ -22720,24 +22750,55 @@ function _cfFeitos(sem){
   return Object.keys((sem||{}).itens||{}).filter(c=>ch[c]).length;
 }
 
-async function cfEnviarEmbalagem(){
+function cfEnviarEmbalagem(){
   const sem=_cfSem(); if(!sem) return;
   const prod=Object.keys(sem.itens||{});
   if(!prod.length){ alert('Inclua produtos antes de enviar.'); return; }
   const semComo=prod.filter(c=>!_cfComoFazer(sem,c));
-  if(semComo.length && !confirm(semComo.length+' produto(s) estão sem definir como fazer:\n\n'+
-    semComo.slice(0,6).map(c=>'• '+_cfNomeProduto(c)).join('\n')+(semComo.length>6?'\n…':'')+
-    '\n\nEnviar assim mesmo?')) return;
-  if(!confirm('Enviar "'+(sem.nome||'')+'" para a embalagem?\n\n'+prod.length+' produto(s). Eles verão a tabela e marcam conforme forem fazendo.')) return;
-  await _cfGravar({enviado:true, enviadoEm:agora(), enviadoPor:_demAutor()});
-  alert('✓ Enviado. A embalagem já pode ver.');
+  // a data mais próxima entre as lojas serve de sugestão
+  const datas=(sem.lojas||[]).map(l=>l.data).filter(Boolean)
+    .sort((a,b)=>estDataNum(a)-estDataNum(b));
+  const sug=datas[0]||'';
+  const ov=document.createElement('div');
+  ov.id='cf-env-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:440px;width:100%;padding:18px;">'+
+    '<div style="font-size:17px;font-weight:800;">📤 Enviar para a embalagem</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+(sem.nome||'')+' · '+prod.length+' produto(s)</div>'+
+    (semComo.length
+      ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:9px 11px;margin-top:12px;">'+
+          '<div style="font-size:12px;font-weight:700;color:#b45309;">⚠️ '+semComo.length+' produto(s) sem definir como fazer</div>'+
+          '<div style="font-size:11px;color:#78350f;margin-top:2px;">'+semComo.slice(0,4).map(c=>_cfNomeProduto(c)).join(', ')+(semComo.length>4?'…':'')+'</div></div>'
+      : '')+
+    '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);display:block;margin-top:14px;">Data de entrega <span style="color:#dc2626;">*</span></label>'+
+    '<div style="font-size:11px;color:var(--text-muted);margin-bottom:5px;">Até quando a embalagem precisa ter tudo pronto.</div>'+
+    '<input type="date" id="cf-env-data" value="'+(sug?estBRparaISO(sug):'')+'" style="width:100%;padding:12px;min-height:50px;border:2px solid var(--mc-azul,#2563eb);border-radius:9px;font-size:16px;box-sizing:border-box;margin-bottom:14px;">'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'cf-env-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="cfConfirmarEnvio()">Enviar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
 }
+window.cfEnviarEmbalagem=cfEnviarEmbalagem;
+
+async function cfConfirmarEnvio(){
+  const iso=(document.getElementById('cf-env-data')||{}).value||'';
+  if(!iso){ alert('Informe a data de entrega.'); return; }
+  const entrega=estISOparaBR(iso);
+  document.getElementById('cf-env-modal')?.remove();
+  await _cfGravar({enviado:true, entrega, enviadoEm:agora(), enviadoPor:_demAutor()});
+  alert('✓ Enviado para a embalagem.\n\nEntrega: '+entrega);
+}
+window.cfConfirmarEnvio=cfConfirmarEnvio;
 window.cfEnviarEmbalagem=cfEnviarEmbalagem;
 
 async function cfDesfazerEnvio(){
   const sem=_cfSem(); if(!sem) return;
   const feitos=_cfFeitos(sem);
-  if(!confirm('Tirar da embalagem?'+(feitos?('\n\n'+feitos+' produto(s) já foram marcados — as marcas ficam guardadas.'):''))) return;
+  if(!confirm('Tirar "'+(sem.nome||'')+'" da embalagem?\n\n'+
+    'Ele some da lista deles e volta a ser só seu, para ajustar à vontade.'+
+    (feitos?('\n\n'+feitos+' produto(s) já marcados — as marcas ficam guardadas para quando você enviar de novo.'):'')+
+    '\n\nO pedido não é apagado.')) return;
   await _cfGravar({enviado:false});
 }
 window.cfDesfazerEnvio=cfDesfazerEnvio;
@@ -22763,6 +22824,10 @@ function renderEmbCf(){
         return '<button onclick="embCfVer(\''+escapeJsStr(sem.firestoreId)+'\')" class="card" style="display:flex;align-items:center;gap:10px;width:100%;margin-bottom:8px;cursor:pointer;text-align:left;font-family:inherit;">'+
           '<span style="flex:1;min-width:0;">'+
             '<span style="display:block;font-size:15px;font-weight:800;">'+(sem.nome||'')+'</span>'+
+            (sem.entrega
+              ? '<span style="display:block;font-size:13px;font-weight:800;color:'+
+                  ((cfDiasAteEntrega(sem.entrega)||0)<0?'#dc2626':'#16a34a')+';margin-top:2px;">📅 entregar até '+sem.entrega+'</span>'
+              : '')+
             '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
               (sem.lojas||[]).map(l=>l.nome).filter(Boolean).join(', ')+'</span></span>'+
           '<span style="text-align:right;white-space:nowrap;">'+
@@ -22795,26 +22860,41 @@ function _embCfTabela(sem){
   const feitos=_cfFeitos(sem);
 
   let h='<button onclick="embCfVoltar()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">&lsaquo; Todos os pedidos</button>';
+
+  // a data de entrega em destaque: é o que não pode passar batido
+  if(sem.entrega){
+    const d=cfDiasAteEntrega(sem.entrega);
+    const atrasado=d!==null && d<0, hoje0=d===0, perto=d!==null && d>0 && d<=1;
+    const cor=atrasado?'#dc2626':(hoje0?'#d97706':(perto?'#d97706':'#16a34a'));
+    const fundo=atrasado?'#fef2f2':(hoje0||perto?'#fffbeb':'#f0fdf4');
+    h+='<div style="background:'+fundo+';border:2px solid '+cor+';border-radius:14px;padding:16px;margin-bottom:12px;text-align:center;">'+
+      '<div style="font-size:12px;font-weight:800;color:'+cor+';letter-spacing:1px;">ENTREGAR ATÉ</div>'+
+      '<div style="font-size:30px;font-weight:900;color:'+cor+';line-height:1.15;margin-top:3px;">'+sem.entrega+'</div>'+
+      '<div style="font-size:14px;font-weight:700;color:'+cor+';margin-top:2px;">'+
+        (d===null?'' : (atrasado?('⏰ atrasado '+Math.abs(d)+' dia(s)') : (hoje0?'é hoje!' : (d===1?'é amanhã' : 'faltam '+d+' dias'))))+'</div>'+
+    '</div>';
+  }
+
   h+='<div class="card" style="margin-bottom:12px;">'+
     '<div style="font-size:16px;font-weight:800;">'+(sem.nome||'')+'</div>'+
-    '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+feitos+' de '+codigos.length+' produto(s) feitos</div>'+
-    '<div style="height:7px;background:var(--bg-page);border-radius:99px;margin-top:8px;overflow:hidden;">'+
+    '<div style="font-size:13px;color:var(--text-secondary);margin-top:3px;">'+feitos+' de '+codigos.length+' produto(s) feitos</div>'+
+    '<div style="height:9px;background:var(--bg-page);border-radius:99px;margin-top:8px;overflow:hidden;">'+
       '<div style="height:100%;width:'+(codigos.length?Math.round(feitos/codigos.length*100):0)+'%;background:#16a34a;transition:width .2s;"></div></div>'+
   '</div>';
 
   h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
     '<table class="cf-tab" style="border-collapse:collapse;font-size:14px;white-space:nowrap;margin:0 auto;">'+
     '<thead>'+
-      '<tr style="background:#475569;color:#fff;font-size:10px;">'+
-        '<th style="padding:7px 14px;text-align:left;position:sticky;left:0;background:#475569;"></th>'+
-        lojas.map(l=>'<th style="padding:7px 10px;text-align:center;">'+(l.data||'')+'</th>').join('')+
+      '<tr style="background:#475569;color:#fff;">'+
+        '<th style="padding:9px 16px;text-align:left;position:sticky;left:0;background:#475569;"></th>'+
+        lojas.map(l=>'<th style="padding:9px 14px;text-align:center;font-size:14px;font-weight:600;">'+(l.data||'—')+'</th>').join('')+
         '<th></th><th></th>'+
       '</tr>'+
-      '<tr style="background:#334155;color:#fff;font-size:11px;">'+
-        '<th style="padding:11px 14px;text-align:left;position:sticky;left:0;background:#334155;">PRODUTO</th>'+
-        lojas.map((l,i)=>'<th style="padding:11px 10px;text-align:center;">'+(l.nome||('loja '+(i+1)))+'</th>').join('')+
-        '<th style="padding:11px 10px;text-align:center;">TOTAL</th>'+
-        '<th style="padding:11px 10px;text-align:center;">FEITO</th>'+
+      '<tr style="background:#334155;color:#fff;">'+
+        '<th style="padding:13px 16px;text-align:left;position:sticky;left:0;background:#334155;font-size:13px;">PRODUTO</th>'+
+        lojas.map((l,i)=>'<th style="padding:13px 14px;text-align:center;font-size:16px;font-weight:800;">'+(l.nome||('loja '+(i+1)))+'</th>').join('')+
+        '<th style="padding:13px 12px;text-align:center;font-size:13px;">TOTAL</th>'+
+        '<th style="padding:13px 12px;text-align:center;font-size:13px;">FEITO</th>'+
       '</tr>'+
     '</thead><tbody>';
 
@@ -22841,9 +22921,12 @@ function _embCfTabela(sem){
   h+='</tbody></table></div>';
 
   if(feitos===codigos.length && codigos.length){
-    h+='<div class="card" style="margin-top:12px;background:#f0fdf4;border:1px solid #bbf7d0;text-align:center;">'+
+    h+='<div class="card" style="margin-top:12px;background:#f0fdf4;border:2px solid #16a34a;text-align:center;">'+
       '<div style="font-size:28px;">✅</div>'+
-      '<div style="font-size:15px;font-weight:800;color:#15803d;margin-top:5px;">Pedido todo feito</div></div>';
+      '<div style="font-size:15px;font-weight:800;color:#15803d;margin-top:5px;">Pedido todo feito</div>'+
+      '<button onclick="embCfConcluir()" class="btn btn-primary" style="width:100%;margin-top:10px;">Tirar da minha lista</button></div>';
+  } else if(codigos.length){
+    h+='<button onclick="embCfConcluir()" style="width:100%;margin-top:12px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;">Tirar da minha lista</button>';
   }
   return h;
 }
