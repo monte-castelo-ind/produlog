@@ -93,6 +93,18 @@ tbody tr:hover{background:#f9fafb}
 .cliente-row{display:flex;justify-content:space-between;padding:4px 0;font-size:12px;border-bottom:1px dashed var(--border)}
 .cliente-row:last-child{border-bottom:none}
 textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:11px}
+
+    /* Coluna C&F: produção à parte dos dias da semana, por isso a cor
+       própria — ajuda a não confundir na hora de preencher. */
+    th.col-cf{ background:#7c3aed !important; color:#fff !important; }
+    td.col-cf{ background:#f5f3ff; }
+    td.col-cf input{ background:#fff; border-color:#c4b5fd !important; }
+    tbody tr:hover td.col-cf{ background:#ede9fe !important; }
+
+    /* Linha sob o mouse: com muitos produtos, ajuda a seguir a linha
+       até o fim sem se perder de coluna. */
+    tbody tr{ transition:background .12s; }
+    tbody tr:hover td{ background:#dbeafe !important; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
 </head>
@@ -142,6 +154,7 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
     <option value="Qui">Qui</option>
     <option value="Sex">Sex</option>
     <option value="Sáb">Sáb</option>
+    <option value="C&amp;F">C&amp;F</option>
   </select>
   <input type="text" id="busca" class="search-box" placeholder="🔍 Buscar...">
   <button class="btn btn-primary" onclick="abrirProducoesAnteriores()" style="background:#9333ea">📅 Produções Anteriores</button>
@@ -176,6 +189,7 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
           <th class="num" data-coldia="Qui">Qui</th>
           <th class="num" data-coldia="Sex">Sex</th>
           <th class="num" data-coldia="Sáb">Sáb</th>
+          <th class="num col-cf" data-coldia="C&amp;F">C&amp;F</th>
           <th class="num">Total</th>
           <th class="num">Saldo</th>
           <th class="num">% cob</th>
@@ -293,7 +307,11 @@ const prodAntAutoMap = {}; // NOVO: produção anterior AUTOMÁTICA por código 
 let _registrosCache = null; // cache dos registros do Produlog (busca 1x; evita delay/race a cada filtro)
 const diasSimulIgnorar = new Set(); // NOVO: dias da semana a DESCONSIDERAR na simulação (estoque começa no 1º dia considerado)
 
-const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb'];
+// C&F é uma coluna de produção à parte: entra nos totais e nos
+// relatórios, mas não tem venda média nem desconto de estoque,
+// porque não é um dia da semana.
+const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb','C&F'];
+const DIAS_VENDA = ['Seg','Ter','Qua','Qui','Sex','Sáb'];
 function mult(){ return parseFloat(document.getElementById('mult').value)||2; }
 function calcIdeal(p){ return Math.round((p.totalPeriodo||0)/4 * mult()); }
 function calcPlanoTotal(cod){ 
@@ -515,7 +533,7 @@ async function render(){
     });
     const picoPct = (p.totalPeriodo||0) > 0 ? Math.round((maxQtd / (p.totalPeriodo||1)) * 100) : 0;
     
-    const diasInputs = DIAS.map(d => '<td class="num" data-coldia="'+d+'"><input type="number" class="day-input" data-cod="'+p.cod+'" data-dia="'+d+'" value="'+(pl[d]||'')+'" placeholder="0"></td>').join('');
+    const diasInputs = DIAS.map(d => '<td class="num'+(d==='C&F'?' col-cf':'')+'" data-coldia="'+d+'"><input type="number" class="day-input" data-cod="'+p.cod+'" data-dia="'+d+'" value="'+(pl[d]||'')+'" placeholder="0"></td>').join('');
     
     return '<tr>'+
       '<td class="cod" data-cod="'+p.cod+'">'+p.cod+' '+(temFaltaEstoque(p.cod)?'<span style="color:var(--mc-vermelho);cursor:pointer;font-weight:700" title="Clique para ver simulação" onclick="abrirSimulacao(\''+p.cod+'\')">🔴</span>':'<span style="color:var(--mc-verde);cursor:pointer;font-weight:700" title="Clique para ver simulação" onclick="abrirSimulacao(\''+p.cod+'\')">🟢</span>')+' </td>'+
@@ -687,7 +705,7 @@ window.abrirDescontarVenda = () => {
   html += '</div>';
 
   html += '<div style="display:flex;flex-direction:column;gap:8px;">';
-  DIAS.forEach(dia => {
+  DIAS_VENDA.forEach(dia => {
     const isSelected = diasDescontar.has(dia);
     // venda média total daquele dia somando todos os produtos do setor ativo (referência)
     const totalDiaSetor = produtos
@@ -842,7 +860,7 @@ window.abrirSimulacao = (cod) => {
   html += '<div style="margin-bottom:12px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;">';
   html += '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">➖ Desconsiderar venda dos dias <span style="font-weight:400;color:#6b7280;">(a venda desses dias não é descontada; a produção planejada continua valendo)</span></div>';
   html += '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
-  DIAS.forEach(d => {
+  DIAS_VENDA.forEach(d => {
     const on = diasSimulIgnorar.has(d);
     html += '<button onclick="toggleDiaSimul(\''+cod+'\',\''+d+'\')" style="padding:5px 11px;border-radius:6px;border:1px solid '+(on?'#dc2626':'#d1d5db')+';background:'+(on?'#fee2e2':'#fff')+';color:'+(on?'#991b1b':'#374151')+';font-weight:600;font-size:12px;cursor:pointer;font-family:inherit;">'+d+'</button>';
   });
