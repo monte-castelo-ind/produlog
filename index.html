@@ -760,6 +760,13 @@
     .ajcont-tab tbody tr:hover{ background:#dbeafe !important; }
     .ajcont-tab tbody tr:hover td{ background:#dbeafe !important; }
     .ajcont-tab td{ background:inherit; }
+
+    /* Grade de pedidos C&F: linhas um pouco mais altas e destaque ao
+       passar o mouse, porque são muitas lojas e muitos produtos. */
+    .cf-tab tbody tr{ transition:background .12s; }
+    .cf-tab tbody tr:hover td{ background:#ede9fe !important; }
+    .cf-tab td{ background:inherit; }
+    .cf-tab input:focus{ outline:2px solid var(--mc-azul,#2563eb); outline-offset:-1px; }
 </style>
 </head>
 <body>
@@ -22304,11 +22311,13 @@ function _cfRenderLista(){
 }
 
 /* ── EDIÇÃO DA GRADE ─────────────────────────────────────────────── */
-async function _cfGravar(campos){
+async function _cfGravar(campos, semRedesenhar){
   if(!_cfSemSel) return;
   const i=cfSemanas.findIndex(x=>x.firestoreId===_cfSemSel);
   if(i>=0) cfSemanas[i]={...cfSemanas[i], ...campos};
-  renderCfPed();
+  // ao digitar, redesenhar a tabela inteira destrói os campos e a
+  // digitação seguinte acaba indo para outra linha
+  if(!semRedesenhar) renderCfPed();
   try{
     await setDoc(doc(db,'cfPedidosSemana',_cfSemSel),
       {...campos, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
@@ -22362,8 +22371,33 @@ async function cfSetQtd(cod, i, valor){
   const linha={...(itens[cod]||{})};
   if(v) linha[chave]=v; else delete linha[chave];
   itens[cod]=linha;
-  await _cfGravar({itens});
+  await _cfGravar({itens}, true);     // não mexe nos campos
+  _cfAtualizarTotais();               // só repinta os números
 }
+
+/* Recalcula os totais da tela sem recriar os campos */
+function _cfAtualizarTotais(){
+  const sem=_cfSem(); if(!sem) return;
+  const lojas=sem.lojas||[];
+  const totLoja=lojas.map(()=>0);
+  let geral=0;
+  Object.keys(sem.itens||{}).forEach(cod=>{
+    const t=cfTotalProduto(sem, cod);
+    const cel=document.querySelector('[data-cf-tot="'+cod+'"]');
+    if(cel) cel.textContent=t||'';
+    lojas.forEach((l,i)=>{
+      const v=Number((sem.itens[cod]||{})[_cfChaveLoja(l,i)])||0;
+      totLoja[i]+=v; geral+=v;
+    });
+  });
+  totLoja.forEach((v,i)=>{
+    const cel=document.querySelector('[data-cf-totloja="'+i+'"]');
+    if(cel) cel.textContent=v||'';
+  });
+  const g=document.querySelector('[data-cf-totgeral]');
+  if(g) g.textContent=geral;
+}
+window._cfAtualizarTotais=_cfAtualizarTotais;
 window.cfSetQtd=cfSetQtd;
 
 /* Enter desce para a mesma loja do produto de baixo */
@@ -22490,7 +22524,7 @@ function _cfRenderGrade(sem){
   }
 
   h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
-    '<table class="cf-tab" style="border-collapse:collapse;font-size:12px;white-space:nowrap;margin:0 auto;">'+
+    '<table class="cf-tab" style="border-collapse:collapse;font-size:14px;white-space:nowrap;margin:0 auto;">'+
     '<thead>'+
       // a data de entrega fica acima do nome da loja, como na planilha
       '<tr style="background:#475569;color:#fff;font-size:10px;">'+
@@ -22501,13 +22535,13 @@ function _cfRenderGrade(sem){
         '<th style="padding:7px 6px;"></th>'+
       '</tr>'+
       '<tr style="background:#334155;color:#fff;font-size:10px;">'+
-        '<th style="padding:9px 10px;text-align:left;position:sticky;left:0;background:#334155;">PRODUTO</th>'+
-        lojas.map((l,i)=>'<th style="padding:9px 6px;text-align:center;">'+
+        '<th style="padding:11px 14px;text-align:left;position:sticky;left:0;background:#334155;font-size:11px;">PRODUTO</th>'+
+        lojas.map((l,i)=>'<th style="padding:11px 10px;text-align:center;font-size:11px;">'+
           '<div style="display:flex;align-items:center;gap:5px;justify-content:center;">'+
             '<span>'+(l.nome||'loja '+(i+1))+'</span>'+
             '<button onclick="cfTirarLoja('+i+')" title="Tirar loja" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:12px;padding:0;font-family:inherit;">✕</button>'+
           '</div></th>').join('')+
-        '<th style="padding:9px 6px;text-align:center;">TOTAL</th>'+
+        '<th style="padding:11px 10px;text-align:center;font-size:11px;">TOTAL</th>'+
       '</tr>'+
     '</thead><tbody>';
 
@@ -22522,31 +22556,31 @@ function _cfRenderGrade(sem){
     const linha=itens[cod]||{};
     const tot=cfTotalProduto(sem, cod);
     h+='<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
-      '<td style="padding:8px 10px;font-weight:600;position:sticky;left:0;background:inherit;">'+
-        '<div style="display:flex;align-items:center;gap:7px;">'+
+      '<td style="padding:9px 14px;font-weight:600;position:sticky;left:0;background:inherit;">'+
+        '<div style="display:flex;align-items:center;gap:9px;">'+
           '<button onclick="cfTirarProduto(\''+escapeJsStr(cod)+'\')" title="Tirar produto" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:13px;padding:0;font-family:inherit;">✕</button>'+
-          '<span>'+_cfNomeProduto(cod)+'<div style="font-size:10px;color:var(--text-muted);font-weight:400;">cód '+cod+'</div></span></div></td>'+
+          '<span>'+_cfNomeProduto(cod)+'<div style="font-size:11px;color:var(--text-muted);font-weight:400;">cód '+cod+'</div></span></div></td>'+
       lojas.map((l,i)=>{
         const chave=_cfChaveLoja(l,i);
         const v=Number(linha[chave])||0;
         totLoja[i]+=v;
-        return '<td style="padding:8px 6px;text-align:center;">'+
+        return '<td style="padding:9px 10px;text-align:center;">'+
           '<input type="number" step="1" min="0" value="'+(v||'')+'" placeholder="0" '+
             'id="cf-'+escapeHtmlAttr(cod)+'-'+i+'" data-cf-cod="'+escapeHtmlAttr(cod)+'" data-cf-loja="'+i+'" '+
             'onchange="cfSetQtd(\''+escapeJsStr(cod)+'\','+i+',this.value)" '+
             'onkeydown="if(event.key===\'Enter\'){event.preventDefault();cfProximo(this);}" '+
-            'style="width:72px;padding:6px;border:1px solid var(--border-md,#d1d5db);border-radius:7px;font-size:13px;text-align:center;font-family:inherit;"></td>';
+            'style="width:92px;padding:10px 8px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:16px;font-weight:600;text-align:center;font-family:inherit;"></td>';
       }).join('')+
-      '<td style="padding:8px 6px;text-align:center;font-weight:900;color:var(--mc-azul,#2563eb);">'+(tot||'')+'</td>'+
+      '<td data-cf-tot="'+escapeHtmlAttr(cod)+'" style="padding:9px 7px;text-align:center;font-weight:900;font-size:14px;color:var(--mc-azul,#2563eb);">'+(tot||'')+'</td>'+
     '</tr>';
   });
 
   if(codigos.length){
     const somaGeral=totLoja.reduce((a,b)=>a+b,0);
     h+='<tr style="background:#e2e8f0;font-weight:800;border-top:2px solid #94a3b8;">'+
-      '<td style="padding:9px 10px;position:sticky;left:0;background:#e2e8f0;">TOTAL</td>'+
-      totLoja.map(v=>'<td style="padding:9px 6px;text-align:center;">'+(v||'')+'</td>').join('')+
-      '<td style="padding:9px 6px;text-align:center;color:var(--mc-azul,#2563eb);">'+somaGeral+'</td></tr>';
+      '<td style="padding:10px 14px;position:sticky;left:0;background:#e2e8f0;font-size:14px;">TOTAL</td>'+
+      totLoja.map((v,i)=>'<td data-cf-totloja="'+i+'" style="padding:10px 7px;text-align:center;font-size:14px;">'+(v||'')+'</td>').join('')+
+      '<td data-cf-totgeral style="padding:10px 7px;text-align:center;font-size:15px;color:var(--mc-azul,#2563eb);">'+somaGeral+'</td></tr>';
   }
   h+='</tbody></table></div>';
 
