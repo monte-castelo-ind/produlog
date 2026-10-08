@@ -1830,6 +1830,11 @@
         <div style="flex:1;"><div class="hb-title">Expedição já pegou</div><div class="hb-desc">Lançar produto pego antes da embalagem</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
+      <button class="home-btn" onclick="embCfAbrir()" style="border-left-color:#7c3aed;margin-bottom:4px;">
+        <div class="hb-icon" style="background:#ede9fe;">🤝</div>
+        <div style="flex:1;"><div class="hb-title">Pedidos C&amp;F</div><div class="hb-desc">Tabela por loja · marque conforme for fazendo</div></div>
+        <span style="color:var(--text-secondary);font-size:20px;">›</span>
+      </button>
       <button class="home-btn" onclick="cdcAbrir('setor')" style="border-left-color:var(--mc-roxo,#7c3aed);margin-bottom:4px;">
         <div class="hb-icon" style="background:#ede9fe;">📊</div>
         <div style="flex:1;"><div class="hb-title">Controle Diário</div><div class="hb-desc">Produzido, embalado e quebra por dia</div></div>
@@ -2468,6 +2473,17 @@
       <div class="mc-page-info"><div class="mc-page-title">✏️ Alterações do embalado</div><div class="mc-page-sub">Mudanças depois de finalizado</div></div>
     </div>
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="emb-alt-content"></div>
+  </div>
+
+  <!-- EMBALAGEM: PEDIDOS C&F EM TABELA -->
+  <div class="screen" id="s-emb-cfped">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Embalagem</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title">🤝 Pedidos C&amp;F</div><div class="mc-page-sub">Marque conforme for fazendo</div></div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="embcf-content"></div>
   </div>
 
   <!-- ADMIN: PEDIDOS C&F POR LOJA -->
@@ -5502,6 +5518,7 @@ function goTo(id, semHistorico){
   if(id==='s-cdq' && typeof renderCDQ==='function') renderCDQ();
   if(id==='s-ajcont' && typeof renderAjCont==='function') renderAjCont();
   if(id==='s-cfped' && typeof renderCfPed==='function') renderCfPed();
+  if(id==='s-emb-cfped' && typeof renderEmbCf==='function') renderEmbCf();
   if(id==='s-perdas') renderPerdas();
   if(id==='s-carreg-edit') renderCarregEdit();
   if(id==='s-carreg-conf') renderCarregConf();
@@ -22251,7 +22268,9 @@ onSnapshot(collection(db,'cfPedidosSemana'), snap=>{
   try{
     cfSemanas=snap.docs.map(d=>({firestoreId:d.id,...d.data()}))
       .sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
-    if(document.querySelector('.screen.active')?.id!=='s-cfped') return;
+    const telaAtiva=document.querySelector('.screen.active')?.id;
+    if(telaAtiva==='s-emb-cfped'){ if(typeof renderEmbCf==='function') renderEmbCf(); return; }
+    if(telaAtiva!=='s-cfped') return;
     /* Cada gravação volta pelo servidor e cairia aqui, redesenhando a
        tabela no meio da digitação — os campos eram destruídos e o valor
        seguinte ia para a linha errada. Enquanto alguém está com um
@@ -22507,6 +22526,66 @@ async function cfTirarProduto(cod){
 }
 window.cfTirarProduto=cfTirarProduto;
 
+/* Como o produto vai ser atendido: produzido num dia da semana ou
+   aberto de pacote maior. Definido à mão, produto por produto. */
+const CF_DIAS=['Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+function _cfComoFazer(sem, cod){
+  return ((sem||{}).comoFazer||{})[cod]||null;
+}
+
+function _cfComoFazerTexto(c){
+  if(!c) return '';
+  if(c.tipo==='abrir') return '📦 Abrir pacote';
+  return '🏭 Produzir' + (c.dia?(' · '+c.dia):'');
+}
+
+function _cfCelulaComoFazer(sem, cod){
+  const c=_cfComoFazer(sem, cod);
+  const cor=!c?'var(--text-muted)':(c.tipo==='abrir'?'#d97706':'#16a34a');
+  const fundo=!c?'#fff':(c.tipo==='abrir'?'#fffbeb':'#f0fdf4');
+  return '<button onclick="cfDefinirComoFazer(\''+escapeJsStr(cod)+'\')" '+
+    'style="background:'+fundo+';border:1px solid '+(c?cor:'var(--border-md,#cbd5e1)')+';color:'+cor+';border-radius:8px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">'+
+    (c?_cfComoFazerTexto(c):'+ definir')+'</button>';
+}
+
+function cfDefinirComoFazer(cod){
+  const sem=_cfSem(); if(!sem) return;
+  const atual=_cfComoFazer(sem, cod)||{};
+  const ov=document.createElement('div');
+  ov.id='cf-como-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:430px;width:100%;padding:18px;">'+
+    '<div style="font-size:17px;font-weight:800;">'+_cfNomeProduto(cod)+'</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+cfTotalProduto(sem, cod)+' pacote(s) no pedido</div>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin:14px 0 7px;">Como vai ser atendido?</div>'+
+    '<button onclick="cfSalvarComoFazer(\''+escapeJsStr(cod)+'\',\'abrir\',\'\')" '+
+      'style="display:block;width:100%;text-align:left;background:'+(atual.tipo==='abrir'?'#fffbeb':'#fff')+';border:2px solid '+(atual.tipo==='abrir'?'#d97706':'var(--border)')+';border-radius:10px;padding:12px;margin-bottom:9px;cursor:pointer;font-family:inherit;">'+
+      '<span style="font-size:14px;font-weight:700;">📦 Abrir pacote</span>'+
+      '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">Sai de pacote maior, sem produção nova</span></button>'+
+    '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin:12px 0 7px;">🏭 Produzir no dia</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+      CF_DIAS.map(d=>'<button onclick="cfSalvarComoFazer(\''+escapeJsStr(cod)+'\',\'producao\',\''+d+'\')" '+
+        'style="flex:1;min-width:62px;background:'+(atual.tipo==='producao'&&atual.dia===d?'#16a34a':'#fff')+';color:'+(atual.tipo==='producao'&&atual.dia===d?'#fff':'var(--text-primary)')+';border:1px solid '+(atual.tipo==='producao'&&atual.dia===d?'#16a34a':'var(--border)')+';border-radius:9px;padding:11px 6px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">'+d+'</button>').join('')+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;">'+
+      (atual.tipo?'<button onclick="cfSalvarComoFazer(\''+escapeJsStr(cod)+'\',\'\',\'\')" style="flex:1;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;">Limpar</button>':'')+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'cf-como-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.cfDefinirComoFazer=cfDefinirComoFazer;
+
+async function cfSalvarComoFazer(cod, tipo, dia){
+  const sem=_cfSem(); if(!sem) return;
+  const comoFazer={...(sem.comoFazer||{})};
+  if(!tipo) delete comoFazer[cod];
+  else comoFazer[cod]={tipo, dia:dia||'', em:agora(), por:_demAutor()};
+  document.getElementById('cf-como-modal')?.remove();
+  await _cfGravar({comoFazer});
+}
+window.cfSalvarComoFazer=cfSalvarComoFazer;
+
 function _cfRenderGrade(sem){
   const lojas=sem.lojas||[];
   const itens=sem.itens||{};
@@ -22529,6 +22608,14 @@ function _cfRenderGrade(sem){
       '<button onclick="cfAddLoja()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Loja</button>'+
       '<button onclick="cfAddProduto()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Produto</button>'+
     '</div>'+
+    // envio para a embalagem
+    (sem.enviado
+      ? '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:9px 11px;margin-top:10px;">'+
+          '<div style="font-size:12px;font-weight:700;color:#15803d;">✓ Enviado para a embalagem</div>'+
+          '<div style="font-size:11px;color:#166534;margin-top:2px;">'+(sem.enviadoEm||'')+(sem.enviadoPor?(' por '+sem.enviadoPor):'')+
+            ' · '+_cfFeitos(sem)+' de '+Object.keys(sem.itens||{}).length+' marcados</div>'+
+          '<button onclick="cfDesfazerEnvio()" style="width:100%;margin-top:7px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px;font-size:11px;cursor:pointer;font-family:inherit;">Tirar da embalagem</button></div>'
+      : '<button onclick="cfEnviarEmbalagem()" class="btn btn-primary" style="width:100%;margin-top:10px;">📤 Enviar para a embalagem</button>')+
   '</div>';
 
   if(!lojas.length) return h+'<div class="card" style="text-align:center;padding:26px;">'+
@@ -22559,11 +22646,12 @@ function _cfRenderGrade(sem){
             '<button onclick="cfTirarLoja('+i+')" title="Tirar loja" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:12px;padding:0;font-family:inherit;">✕</button>'+
           '</div></th>').join('')+
         '<th style="padding:11px 10px;text-align:center;font-size:11px;">TOTAL</th>'+
+        '<th style="padding:11px 10px;text-align:center;font-size:11px;">COMO FAZER</th>'+
       '</tr>'+
     '</thead><tbody>';
 
   if(!codigos.length){
-    h+='<tr><td colspan="'+(lojas.length+2)+'" style="padding:22px;text-align:center;color:var(--text-secondary);">'+
+    h+='<tr><td colspan="'+(lojas.length+3)+'" style="padding:22px;text-align:center;color:var(--text-secondary);">'+
       (q?'Nenhum produto encontrado.':'Nenhum produto ainda. Use "+ Produto".')+'</td></tr>';
   }
 
@@ -22589,6 +22677,7 @@ function _cfRenderGrade(sem){
             'style="width:92px;padding:10px 8px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:16px;font-weight:600;text-align:center;font-family:inherit;"></td>';
       }).join('')+
       '<td data-cf-tot="'+escapeHtmlAttr(cod)+'" style="padding:9px 7px;text-align:center;font-weight:900;font-size:14px;color:var(--mc-azul,#2563eb);">'+(tot||'')+'</td>'+
+      '<td style="padding:9px 10px;text-align:center;">'+_cfCelulaComoFazer(sem, cod)+'</td>'+
     '</tr>';
   });
 
@@ -22624,6 +22713,156 @@ function _cfChaveLoja(loja, i){
   const base=_normNome(loja&&loja.nome||('loja'+i)).toLowerCase();
   return base.replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'') || ('loja'+i);
 }
+
+/* Quantos produtos a embalagem já marcou */
+function _cfFeitos(sem){
+  const ch=(sem||{}).checks||{};
+  return Object.keys((sem||{}).itens||{}).filter(c=>ch[c]).length;
+}
+
+async function cfEnviarEmbalagem(){
+  const sem=_cfSem(); if(!sem) return;
+  const prod=Object.keys(sem.itens||{});
+  if(!prod.length){ alert('Inclua produtos antes de enviar.'); return; }
+  const semComo=prod.filter(c=>!_cfComoFazer(sem,c));
+  if(semComo.length && !confirm(semComo.length+' produto(s) estão sem definir como fazer:\n\n'+
+    semComo.slice(0,6).map(c=>'• '+_cfNomeProduto(c)).join('\n')+(semComo.length>6?'\n…':'')+
+    '\n\nEnviar assim mesmo?')) return;
+  if(!confirm('Enviar "'+(sem.nome||'')+'" para a embalagem?\n\n'+prod.length+' produto(s). Eles verão a tabela e marcam conforme forem fazendo.')) return;
+  await _cfGravar({enviado:true, enviadoEm:agora(), enviadoPor:_demAutor()});
+  alert('✓ Enviado. A embalagem já pode ver.');
+}
+window.cfEnviarEmbalagem=cfEnviarEmbalagem;
+
+async function cfDesfazerEnvio(){
+  const sem=_cfSem(); if(!sem) return;
+  const feitos=_cfFeitos(sem);
+  if(!confirm('Tirar da embalagem?'+(feitos?('\n\n'+feitos+' produto(s) já foram marcados — as marcas ficam guardadas.'):''))) return;
+  await _cfGravar({enviado:false});
+}
+window.cfDesfazerEnvio=cfDesfazerEnvio;
+
+/* ── TELA DA EMBALAGEM ───────────────────────────────────────────
+   Mesma tabela, mas só de leitura: a única coisa que eles mexem é o
+   check de cada produto. */
+let _embCfSel='';
+
+function embCfAbrir(){ _embCfSel=''; goTo('s-emb-cfped'); }
+window.embCfAbrir=embCfAbrir;
+
+function renderEmbCf(){
+  const el=document.getElementById('embcf-content'); if(!el) return;
+  const enviados=(cfSemanas||[]).filter(x=>x.enviado);
+  if(!_embCfSel){
+    if(!enviados.length){ el.innerHTML=_vazio('Nenhum pedido C&F na fila.','Quando o admin enviar, aparece aqui.'); return; }
+    el.innerHTML='<div class="mc-section-header">Pedidos a fazer</div>'+
+      enviados.map(sem=>{
+        const tot=Object.keys(sem.itens||{}).length;
+        const f=_cfFeitos(sem);
+        const falta=tot-f;
+        return '<button onclick="embCfVer(\''+escapeJsStr(sem.firestoreId)+'\')" class="card" style="display:flex;align-items:center;gap:10px;width:100%;margin-bottom:8px;cursor:pointer;text-align:left;font-family:inherit;">'+
+          '<span style="flex:1;min-width:0;">'+
+            '<span style="display:block;font-size:15px;font-weight:800;">'+(sem.nome||'')+'</span>'+
+            '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
+              (sem.lojas||[]).map(l=>l.nome).filter(Boolean).join(', ')+'</span></span>'+
+          '<span style="text-align:right;white-space:nowrap;">'+
+            '<span style="display:block;font-size:18px;font-weight:900;color:'+(falta?'#d97706':'#16a34a')+';">'+(falta||'✓')+'</span>'+
+            '<span style="display:block;font-size:10px;color:var(--text-muted);">'+(falta?'a fazer':'tudo feito')+'</span></span>'+
+          '<span style="font-size:18px;color:var(--text-muted);">›</span></button>';
+      }).join('');
+    return;
+  }
+  const sem=(cfSemanas||[]).find(x=>x.firestoreId===_embCfSel);
+  if(!sem || !sem.enviado){ _embCfSel=''; renderEmbCf(); return; }
+  el.innerHTML=_embCfTabela(sem);
+}
+window.renderEmbCf=renderEmbCf;
+
+function embCfVer(id){ _embCfSel=id; renderEmbCf(); }
+window.embCfVer=embCfVer;
+function embCfVoltar(){ _embCfSel=''; renderEmbCf(); }
+window.embCfVoltar=embCfVoltar;
+
+function _embCfTabela(sem){
+  const lojas=sem.lojas||[];
+  const itens=sem.itens||{};
+  const checks=sem.checks||{};
+  const codigos=Object.keys(itens).sort((a,b)=>{
+    // o que falta fazer vem primeiro
+    const fa=checks[a]?1:0, fb=checks[b]?1:0;
+    return fa-fb || _normNome(_cfNomeProduto(a)).localeCompare(_normNome(_cfNomeProduto(b)),'pt-BR');
+  });
+  const feitos=_cfFeitos(sem);
+
+  let h='<button onclick="embCfVoltar()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">&lsaquo; Todos os pedidos</button>';
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<div style="font-size:16px;font-weight:800;">'+(sem.nome||'')+'</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+feitos+' de '+codigos.length+' produto(s) feitos</div>'+
+    '<div style="height:7px;background:var(--bg-page);border-radius:99px;margin-top:8px;overflow:hidden;">'+
+      '<div style="height:100%;width:'+(codigos.length?Math.round(feitos/codigos.length*100):0)+'%;background:#16a34a;transition:width .2s;"></div></div>'+
+  '</div>';
+
+  h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
+    '<table class="cf-tab" style="border-collapse:collapse;font-size:14px;white-space:nowrap;margin:0 auto;">'+
+    '<thead>'+
+      '<tr style="background:#475569;color:#fff;font-size:10px;">'+
+        '<th style="padding:7px 14px;text-align:left;position:sticky;left:0;background:#475569;"></th>'+
+        lojas.map(l=>'<th style="padding:7px 10px;text-align:center;">'+(l.data||'')+'</th>').join('')+
+        '<th></th><th></th>'+
+      '</tr>'+
+      '<tr style="background:#334155;color:#fff;font-size:11px;">'+
+        '<th style="padding:11px 14px;text-align:left;position:sticky;left:0;background:#334155;">PRODUTO</th>'+
+        lojas.map((l,i)=>'<th style="padding:11px 10px;text-align:center;">'+(l.nome||('loja '+(i+1)))+'</th>').join('')+
+        '<th style="padding:11px 10px;text-align:center;">TOTAL</th>'+
+        '<th style="padding:11px 10px;text-align:center;">FEITO</th>'+
+      '</tr>'+
+    '</thead><tbody>';
+
+  codigos.forEach((cod,n)=>{
+    const feito=checks[cod]===true;
+    const bg=feito?'#f0fdf4':(n%2?'#fafbfc':'#fff');
+    const como=_cfComoFazer(sem, cod);
+    const tot=cfTotalProduto(sem, cod);
+    h+='<tr style="background:'+bg+';border-top:1px solid #f1f5f9;'+(feito?'opacity:.7;':'')+'">'+
+      '<td style="padding:11px 14px;font-weight:600;position:sticky;left:0;background:inherit;'+(feito?'text-decoration:line-through;':'')+'">'+
+        _cfNomeProduto(cod)+
+        '<div style="font-size:11px;font-weight:700;color:'+(como?(como.tipo==='abrir'?'#d97706':'#16a34a'):'var(--text-muted)')+';margin-top:2px;text-decoration:none;">'+
+          (como?_cfComoFazerTexto(como):'(sem definição)')+'</div></td>'+
+      lojas.map((l,i)=>{
+        const v=Number((itens[cod]||{})[_cfChaveLoja(l,i)])||0;
+        return '<td style="padding:11px 10px;text-align:center;font-size:16px;font-weight:'+(v?'700':'400')+';color:'+(v?'var(--text-primary)':'var(--text-muted)')+';">'+(v||'—')+'</td>';
+      }).join('')+
+      '<td style="padding:11px 10px;text-align:center;font-weight:900;font-size:16px;color:var(--mc-azul,#2563eb);">'+tot+'</td>'+
+      '<td style="padding:11px 10px;text-align:center;">'+
+        '<button onclick="embCfCheck(\''+escapeJsStr(cod)+'\')" title="'+(feito?'Feito':'Marcar como feito')+'" '+
+          'style="width:38px;height:38px;border-radius:10px;border:2px solid '+(feito?'#16a34a':'#cbd5e1')+';background:'+(feito?'#16a34a':'#fff')+';color:#fff;cursor:pointer;font-size:19px;font-weight:900;line-height:1;">'+(feito?'✓':'')+'</button></td>'+
+    '</tr>';
+  });
+  h+='</tbody></table></div>';
+
+  if(feitos===codigos.length && codigos.length){
+    h+='<div class="card" style="margin-top:12px;background:#f0fdf4;border:1px solid #bbf7d0;text-align:center;">'+
+      '<div style="font-size:28px;">✅</div>'+
+      '<div style="font-size:15px;font-weight:800;color:#15803d;margin-top:5px;">Pedido todo feito</div></div>';
+  }
+  return h;
+}
+
+async function embCfCheck(cod){
+  const sem=(cfSemanas||[]).find(x=>x.firestoreId===_embCfSel); if(!sem) return;
+  const checks={...(sem.checks||{})};
+  const quem={...(sem.checksPor||{})};
+  if(checks[cod]){ delete checks[cod]; delete quem[cod]; }
+  else { checks[cod]=true; quem[cod]={por:_demAutor(), em:agora()}; }
+  const i=cfSemanas.findIndex(x=>x.firestoreId===_embCfSel);
+  if(i>=0) cfSemanas[i]={...cfSemanas[i], checks, checksPor:quem};
+  renderEmbCf();
+  try{
+    await setDoc(doc(db,'cfPedidosSemana',_embCfSel),
+      {checks, checksPor:quem, atualizadoEm:agora()},{merge:true});
+  }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+window.embCfCheck=embCfCheck;
 
 function cfVerSemana(id){ _cfSemSel=id; _cfBusca=''; renderCfPed(); }
 window.cfVerSemana=cfVerSemana;
