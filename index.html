@@ -2463,6 +2463,17 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="emb-alt-content"></div>
   </div>
 
+  <!-- ADMIN: PEDIDOS C&F POR LOJA -->
+  <div class="screen" id="s-cfped">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title">🤝 Pedidos C&amp;F</div><div class="mc-page-sub">Por loja e data de entrega</div></div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="cfped-content"></div>
+  </div>
+
   <!-- AJUSTES DE CONTAGEM (ELIGO x contagem) -->
   <div class="screen" id="s-ajcont">
     <div class="mc-header">
@@ -2489,6 +2500,15 @@
   <div class="screen" id="s-ret">
     <div class="mc-header">
       <button class="mc-header-back" onclick="retVoltar()">‹</button>
+
+      <button class="mc-sector-card" style="border-left:4px solid #7c3aed;margin-bottom:10px;" onclick="cfPedAbrir()">
+        <div class="mc-sector-icon" style="background:#ede9fe;">🤝</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Pedidos C&amp;F</div>
+          <div class="mc-sector-desc">Quantidades por loja e data de entrega</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
       <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">↩️ Retorno de Mercadorias</div><div class="mc-page-sub">Produtos que voltaram das rotas</div></div>
@@ -5475,6 +5495,7 @@ function goTo(id, semHistorico){
   if(id==='s-cdc') renderCDC();
   if(id==='s-cdq' && typeof renderCDQ==='function') renderCDQ();
   if(id==='s-ajcont' && typeof renderAjCont==='function') renderAjCont();
+  if(id==='s-cfped' && typeof renderCfPed==='function') renderCfPed();
   if(id==='s-perdas') renderPerdas();
   if(id==='s-carreg-edit') renderCarregEdit();
   if(id==='s-carreg-conf') renderCarregConf();
@@ -22209,6 +22230,380 @@ async function libEntrarNoContainer(reg, qtd, validade, setor){
   }catch(e){ console.error('entrada no contêiner',e); alert('A liberação foi registrada, mas não consegui dar entrada no contêiner: '+e.message); }
 }
 window.libEntrarNoContainer=libEntrarNoContainer;
+
+/* ══════════════════════════════════════════════════════════════════
+   PEDIDOS C&F POR LOJA
+   Uma grade por semana: produtos nas linhas, lojas nas colunas, cada
+   loja com a sua data de entrega. O total de cada produto é puxado
+   depois pelo planejamento, como quantidade a sair.
+   Coleção: cfPedidosSemana/{id}
+   ══════════════════════════════════════════════════════════════════ */
+let cfSemanas=[];
+let _cfSemSel='', _cfBusca='';
+
+onSnapshot(collection(db,'cfPedidosSemana'), snap=>{
+  try{
+    cfSemanas=snap.docs.map(d=>({firestoreId:d.id,...d.data()}))
+      .sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+    if(document.querySelector('.screen.active')?.id==='s-cfped') renderCfPed();
+  }catch(e){ console.error('cfPedidosSemana snap',e); }
+});
+
+function cfPedAbrir(){ _cfSemSel=''; goTo('s-cfped'); }
+window.cfPedAbrir=cfPedAbrir;
+
+function _cfSem(){ return cfSemanas.find(x=>x.firestoreId===_cfSemSel)||null; }
+
+/* Total de um produto somando todas as lojas */
+function cfTotalProduto(sem, cod){
+  const it=((sem||{}).itens||{})[cod]||{};
+  return Object.keys(it).reduce((t,loja)=>t+(Number(it[loja])||0),0);
+}
+
+/* Todos os produtos com pedido, para o planejamento consumir */
+function cfTotaisDaSemana(sem){
+  const out={};
+  Object.keys((sem||{}).itens||{}).forEach(cod=>{
+    const t=cfTotalProduto(sem, cod);
+    if(t) out[cod]=t;
+  });
+  return out;
+}
+window.cfTotaisDaSemana=cfTotaisDaSemana;
+
+function renderCfPed(){
+  const el=document.getElementById('cfped-content'); if(!el) return;
+  if(!_cfSemSel){ el.innerHTML=_cfRenderLista(); return; }
+  const sem=_cfSem();
+  if(!sem){ _cfSemSel=''; el.innerHTML=_cfRenderLista(); return; }
+  el.innerHTML=_cfRenderGrade(sem);
+}
+window.renderCfPed=renderCfPed;
+
+function _cfRenderLista(){
+  let h='<button onclick="cfNovaSemana()" class="btn btn-primary" style="width:100%;margin-bottom:12px;padding:14px;font-size:15px;">+ Novo pedido C&amp;F</button>';
+  if(!cfSemanas.length) return h+_vazio('Nenhum pedido C&F ainda.','Crie um para lançar as quantidades por loja.');
+  h+='<div class="mc-section-header">Pedidos salvos</div>';
+  h+=cfSemanas.map(sem=>{
+    const nLojas=(sem.lojas||[]).length;
+    const totais=cfTotaisDaSemana(sem);
+    const nProd=Object.keys(totais).length;
+    const soma=Object.values(totais).reduce((a,b)=>a+b,0);
+    return '<div class="card" style="margin-bottom:8px;">'+
+      '<div onclick="cfVerSemana(\''+escapeJsStr(sem.firestoreId)+'\')" style="cursor:pointer;display:flex;align-items:center;gap:10px;">'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:15px;font-weight:800;">'+(sem.nome||'(sem nome)')+'</span>'+
+          '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
+            nLojas+' loja(s) · '+nProd+' produto(s) · '+soma+' pct no total</span></span>'+
+        '<span style="font-size:18px;color:var(--text-muted);">›</span></div>'+
+      (window.adminMode===true
+        ? '<button onclick="cfExcluirSemana(\''+escapeJsStr(sem.firestoreId)+'\')" style="width:100%;margin-top:8px;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Excluir</button>'
+        : '')+
+    '</div>';
+  }).join('');
+  return h;
+}
+
+/* ── EDIÇÃO DA GRADE ─────────────────────────────────────────────── */
+async function _cfGravar(campos){
+  if(!_cfSemSel) return;
+  const i=cfSemanas.findIndex(x=>x.firestoreId===_cfSemSel);
+  if(i>=0) cfSemanas[i]={...cfSemanas[i], ...campos};
+  renderCfPed();
+  try{
+    await setDoc(doc(db,'cfPedidosSemana',_cfSemSel),
+      {...campos, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+
+async function cfAddLoja(){
+  const sem=_cfSem(); if(!sem) return;
+  const nome=prompt('Nome da loja:','');
+  if(nome===null) return;
+  if(!String(nome).trim()){ alert('Informe o nome.'); return; }
+  const lojas=[...(sem.lojas||[]), {nome:String(nome).trim(), data:''}];
+  await _cfGravar({lojas});
+}
+window.cfAddLoja=cfAddLoja;
+
+async function cfTirarLoja(i){
+  const sem=_cfSem(); if(!sem) return;
+  const l=(sem.lojas||[])[i]; if(!l) return;
+  const chave=_cfChaveLoja(l,i);
+  // quanto seria perdido
+  let qtd=0;
+  Object.keys(sem.itens||{}).forEach(c=>{ qtd+=Number((sem.itens[c]||{})[chave])||0; });
+  if(!confirm('Tirar a loja "'+(l.nome||'')+'"?'+(qtd?('\n\n'+qtd+' pacote(s) lançados nela serão apagados.'):''))) return;
+  const lojas=(sem.lojas||[]).filter((_,k)=>k!==i);
+  const itens={};
+  Object.keys(sem.itens||{}).forEach(c=>{
+    const linha={...(sem.itens[c]||{})};
+    delete linha[chave];
+    itens[c]=linha;
+  });
+  await _cfGravar({lojas, itens});
+}
+window.cfTirarLoja=cfTirarLoja;
+
+async function cfSetLojaData(i, iso){
+  const sem=_cfSem(); if(!sem) return;
+  const lojas=[...(sem.lojas||[])];
+  if(!lojas[i]) return;
+  lojas[i]={...lojas[i], data: iso?estISOparaBR(iso):''};
+  await _cfGravar({lojas});
+}
+window.cfSetLojaData=cfSetLojaData;
+
+async function cfSetQtd(cod, i, valor){
+  const sem=_cfSem(); if(!sem) return;
+  const l=(sem.lojas||[])[i]; if(!l) return;
+  const chave=_cfChaveLoja(l,i);
+  const v=Math.max(0, parseInt(valor)||0);
+  const itens={...(sem.itens||{})};
+  const linha={...(itens[cod]||{})};
+  if(v) linha[chave]=v; else delete linha[chave];
+  itens[cod]=linha;
+  await _cfGravar({itens});
+}
+window.cfSetQtd=cfSetQtd;
+
+/* Enter desce para a mesma loja do produto de baixo */
+function cfProximo(inp){
+  const cod=inp.dataset.cfCod, i=inp.dataset.cfLoja;
+  cfSetQtd(cod, parseInt(i)||0, inp.value);
+  setTimeout(()=>{
+    const todos=[...document.querySelectorAll('[data-cf-loja="'+i+'"]')];
+    const pos=todos.findIndex(x=>x.dataset.cfCod===cod);
+    const prox=todos[pos+1];
+    if(prox){ prox.focus(); prox.select&&prox.select(); }
+  }, 80);
+}
+window.cfProximo=cfProximo;
+
+async function cfRenomear(){
+  const sem=_cfSem(); if(!sem) return;
+  const nome=prompt('Nome do pedido:', sem.nome||'');
+  if(nome===null || !String(nome).trim()) return;
+  await _cfGravar({nome:String(nome).trim()});
+}
+window.cfRenomear=cfRenomear;
+
+/* Escolher os produtos que entram na grade */
+function cfAddProduto(){
+  const sem=_cfSem(); if(!sem) return;
+  const ov=document.createElement('div');
+  ov.id='cf-prod-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:500px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">+ Produto</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">Busque pelo nome ou c&oacute;digo. S&oacute; os que voc&ecirc; adicionar aparecem na grade.</div>'+
+      '<input type="text" id="cf-prod-busca" oninput="cfProdSugestoes(this.value)" placeholder="🔍 Buscar produto" autocomplete="off" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;margin-top:10px;"></div>'+
+    '<div id="cf-prod-sug" style="flex:1;overflow-y:auto;padding:10px 16px;"></div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'cf-prod-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  cfProdSugestoes('');
+  setTimeout(()=>document.getElementById('cf-prod-busca')?.focus(),60);
+}
+window.cfAddProduto=cfAddProduto;
+
+function cfProdSugestoes(v){
+  const box=document.getElementById('cf-prod-sug'); if(!box) return;
+  const sem=_cfSem(); if(!sem) return;
+  const q=_normNome(v||'');
+  const todas=[].concat(
+    (typeof PRODUTOS!=='undefined'?PRODUTOS:[]),
+    (typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[]));
+  const ja=Object.keys(sem.itens||{});
+  const achados=todas.filter(p=>{
+    const c=String(p.cod||'').trim();
+    if(!c) return false;
+    if(!q) return false;
+    return _normNome(p.nome||'').includes(q) || c.includes(String(v).trim());
+  }).slice(0,30);
+  box.innerHTML = !q
+    ? '<div style="font-size:12px;color:var(--text-muted);padding:10px;">Digite para buscar.</div>'
+    : (achados.length
+        ? achados.map(p=>{
+            const c=String(p.cod).trim();
+            const dentro=ja.includes(c);
+            return '<button type="button"'+(dentro?' disabled':'')+' onclick="cfIncluirProduto(\''+escapeJsStr(c)+'\')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:'+(dentro?'var(--bg-page)':'#fff')+';border:1px solid var(--border);border-radius:9px;padding:10px 11px;margin-bottom:6px;cursor:'+(dentro?'default':'pointer')+';font-family:inherit;opacity:'+(dentro?'.55':'1')+';">'+
+              '<span style="flex:1;min-width:0;"><span style="display:block;font-size:13px;font-weight:600;">'+(p.nome||'')+'</span>'+
+              '<span style="display:block;font-size:11px;color:var(--text-secondary);">cód '+c+'</span></span>'+
+              '<span style="font-size:11px;font-weight:700;color:'+(dentro?'var(--text-muted)':'var(--mc-azul,#2563eb)')+';">'+(dentro?'já está':'+ incluir')+'</span></button>';
+          }).join('')
+        : '<div style="font-size:12px;color:var(--text-secondary);padding:10px;">Nada encontrado.</div>');
+}
+window.cfProdSugestoes=cfProdSugestoes;
+
+async function cfIncluirProduto(cod){
+  const sem=_cfSem(); if(!sem) return;
+  const itens={...(sem.itens||{})};
+  if(!itens[cod]) itens[cod]={};
+  await _cfGravar({itens});
+  cfProdSugestoes((document.getElementById('cf-prod-busca')||{}).value||'');
+}
+window.cfIncluirProduto=cfIncluirProduto;
+
+async function cfTirarProduto(cod){
+  const sem=_cfSem(); if(!sem) return;
+  const tot=cfTotalProduto(sem, cod);
+  if(tot && !confirm('Tirar '+_cfNomeProduto(cod)+'?\n\n'+tot+' pacote(s) lançados serão apagados.')) return;
+  const itens={...(sem.itens||{})};
+  delete itens[cod];
+  await _cfGravar({itens});
+}
+window.cfTirarProduto=cfTirarProduto;
+
+function _cfRenderGrade(sem){
+  const lojas=sem.lojas||[];
+  const itens=sem.itens||{};
+  const q=_normNome(_cfBusca||'');
+  const codigos=Object.keys(itens).filter(cod=>{
+    if(!q) return true;
+    const nome=_cfNomeProduto(cod);
+    return _normNome(nome).includes(q) || String(cod).includes(_cfBusca.trim());
+  }).sort((a,b)=>_normNome(_cfNomeProduto(a)).localeCompare(_normNome(_cfNomeProduto(b)),'pt-BR'));
+
+  let h='<button onclick="cfVoltarLista()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">&lsaquo; Todos os pedidos</button>';
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-size:16px;font-weight:800;">'+(sem.nome||'')+'</div>'+
+        '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+lojas.length+' loja(s) · '+Object.keys(itens).length+' produto(s)</div></div>'+
+      '<button onclick="cfRenomear()" title="Renomear" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:inherit;">✏️</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;">'+
+      '<button onclick="cfAddLoja()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Loja</button>'+
+      '<button onclick="cfAddProduto()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Produto</button>'+
+    '</div>'+
+  '</div>';
+
+  if(!lojas.length) return h+'<div class="card" style="text-align:center;padding:26px;">'+
+    '<div style="font-size:34px;">🏪</div>'+
+    '<div style="font-size:15px;font-weight:800;margin-top:8px;">Comece pelas lojas</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:5px;line-height:1.5;">Cada loja vira uma coluna, com a sua data de entrega.</div></div>';
+
+  if(Object.keys(itens).length>6){
+    h+='<input type="text" id="cf-busca" value="'+String(_cfBusca).replace(/"/g,'&quot;')+'" oninput="cfBuscar(this.value)" placeholder="🔍 Buscar produto" autocomplete="off" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin-bottom:10px;">';
+  }
+
+  h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
+    '<table class="cf-tab" style="border-collapse:collapse;font-size:12px;white-space:nowrap;margin:0 auto;">'+
+    '<thead>'+
+      // a data de entrega fica acima do nome da loja, como na planilha
+      '<tr style="background:#475569;color:#fff;font-size:10px;">'+
+        '<th style="padding:7px 10px;text-align:left;position:sticky;left:0;background:#475569;"></th>'+
+        lojas.map((l,i)=>'<th style="padding:7px 6px;text-align:center;">'+
+          '<input type="date" value="'+(l.data?estBRparaISO(l.data):'')+'" onchange="cfSetLojaData('+i+',this.value)" '+
+            'style="width:122px;padding:3px;border:1px solid rgba(255,255,255,.3);border-radius:5px;font-size:11px;background:rgba(255,255,255,.12);color:#fff;font-family:inherit;"></th>').join('')+
+        '<th style="padding:7px 6px;"></th>'+
+      '</tr>'+
+      '<tr style="background:#334155;color:#fff;font-size:10px;">'+
+        '<th style="padding:9px 10px;text-align:left;position:sticky;left:0;background:#334155;">PRODUTO</th>'+
+        lojas.map((l,i)=>'<th style="padding:9px 6px;text-align:center;">'+
+          '<div style="display:flex;align-items:center;gap:5px;justify-content:center;">'+
+            '<span>'+(l.nome||'loja '+(i+1))+'</span>'+
+            '<button onclick="cfTirarLoja('+i+')" title="Tirar loja" style="background:none;border:none;color:#fca5a5;cursor:pointer;font-size:12px;padding:0;font-family:inherit;">✕</button>'+
+          '</div></th>').join('')+
+        '<th style="padding:9px 6px;text-align:center;">TOTAL</th>'+
+      '</tr>'+
+    '</thead><tbody>';
+
+  if(!codigos.length){
+    h+='<tr><td colspan="'+(lojas.length+2)+'" style="padding:22px;text-align:center;color:var(--text-secondary);">'+
+      (q?'Nenhum produto encontrado.':'Nenhum produto ainda. Use "+ Produto".')+'</td></tr>';
+  }
+
+  const totLoja=lojas.map(()=>0);
+  codigos.forEach((cod,n2)=>{
+    const bg=n2%2?'#fafbfc':'#fff';
+    const linha=itens[cod]||{};
+    const tot=cfTotalProduto(sem, cod);
+    h+='<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
+      '<td style="padding:8px 10px;font-weight:600;position:sticky;left:0;background:inherit;">'+
+        '<div style="display:flex;align-items:center;gap:7px;">'+
+          '<button onclick="cfTirarProduto(\''+escapeJsStr(cod)+'\')" title="Tirar produto" style="background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:13px;padding:0;font-family:inherit;">✕</button>'+
+          '<span>'+_cfNomeProduto(cod)+'<div style="font-size:10px;color:var(--text-muted);font-weight:400;">cód '+cod+'</div></span></div></td>'+
+      lojas.map((l,i)=>{
+        const chave=_cfChaveLoja(l,i);
+        const v=Number(linha[chave])||0;
+        totLoja[i]+=v;
+        return '<td style="padding:8px 6px;text-align:center;">'+
+          '<input type="number" step="1" min="0" value="'+(v||'')+'" placeholder="0" '+
+            'id="cf-'+escapeHtmlAttr(cod)+'-'+i+'" data-cf-cod="'+escapeHtmlAttr(cod)+'" data-cf-loja="'+i+'" '+
+            'onchange="cfSetQtd(\''+escapeJsStr(cod)+'\','+i+',this.value)" '+
+            'onkeydown="if(event.key===\'Enter\'){event.preventDefault();cfProximo(this);}" '+
+            'style="width:72px;padding:6px;border:1px solid var(--border-md,#d1d5db);border-radius:7px;font-size:13px;text-align:center;font-family:inherit;"></td>';
+      }).join('')+
+      '<td style="padding:8px 6px;text-align:center;font-weight:900;color:var(--mc-azul,#2563eb);">'+(tot||'')+'</td>'+
+    '</tr>';
+  });
+
+  if(codigos.length){
+    const somaGeral=totLoja.reduce((a,b)=>a+b,0);
+    h+='<tr style="background:#e2e8f0;font-weight:800;border-top:2px solid #94a3b8;">'+
+      '<td style="padding:9px 10px;position:sticky;left:0;background:#e2e8f0;">TOTAL</td>'+
+      totLoja.map(v=>'<td style="padding:9px 6px;text-align:center;">'+(v||'')+'</td>').join('')+
+      '<td style="padding:9px 6px;text-align:center;color:var(--mc-azul,#2563eb);">'+somaGeral+'</td></tr>';
+  }
+  h+='</tbody></table></div>';
+
+  h+='<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">'+
+    'O total de cada produto é o que o planejamento vai puxar, como quantidade a sair da produção.</div>';
+  return h;
+}
+
+/* Nome do produto nas bases do app */
+function _cfNomeProduto(cod){
+  const c=String(cod).trim();
+  const todas=[].concat(
+    (typeof PRODUTOS!=='undefined'?PRODUTOS:[]),
+    (typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[]));
+  const p=todas.find(x=>String(x.cod||'').trim()===c);
+  return p?(p.nome||('cód '+c)):('cód '+c);
+}
+
+/* A coluna é identificada pelo nome da loja, não pela posição: assim
+   reordenar ou tirar uma loja não embaralha as quantidades */
+function _cfChaveLoja(loja, i){
+  // _normNome devolve em maiúsculas, então o toLowerCase vem antes:
+  // sem ele "Aven. Estado" virava "_" e as quantidades se perdiam
+  const base=_normNome(loja&&loja.nome||('loja'+i)).toLowerCase();
+  return base.replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'') || ('loja'+i);
+}
+
+function cfVerSemana(id){ _cfSemSel=id; _cfBusca=''; renderCfPed(); }
+window.cfVerSemana=cfVerSemana;
+function cfVoltarLista(){ _cfSemSel=''; renderCfPed(); }
+window.cfVoltarLista=cfVoltarLista;
+function cfBuscar(v){ _cfBusca=v||''; renderCfPed(); const i=document.getElementById('cf-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
+window.cfBuscar=cfBuscar;
+
+async function cfNovaSemana(){
+  const hojeBr=hoje();
+  const nome=prompt('Nome do pedido:', 'Pedido C&F semana '+hojeBr);
+  if(nome===null) return;
+  if(!String(nome).trim()){ alert('Informe um nome.'); return; }
+  try{
+    const ref=doc(collection(db,'cfPedidosSemana'));
+    await setDoc(ref,{nome:String(nome).trim(), lojas:[], itens:{},
+      criadoEm:agora(), criadoPor:_demAutor(), timestamp:Date.now()});
+    _cfSemSel=ref.id; renderCfPed();
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.cfNovaSemana=cfNovaSemana;
+
+async function cfExcluirSemana(id){
+  if(window.adminMode!==true){ alert('Só o admin pode excluir.'); return; }
+  const sem=cfSemanas.find(x=>x.firestoreId===id); if(!sem) return;
+  if(!confirm('Excluir "'+(sem.nome||'')+'"?\\n\\nNão dá para desfazer.')) return;
+  try{ await deleteDoc(doc(db,'cfPedidosSemana',id)); if(_cfSemSel===id) _cfSemSel=''; }
+  catch(e){ alert('Erro: '+e.message); }
+}
+window.cfExcluirSemana=cfExcluirSemana;
 
 /* ══════════════════════════════════════════════════════════════════
    AJUSTES DE CONTAGEM — ELIGO × app
