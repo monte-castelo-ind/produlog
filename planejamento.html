@@ -159,6 +159,7 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
   <input type="text" id="busca" class="search-box" placeholder="🔍 Buscar...">
   <button class="btn btn-primary" onclick="abrirProducoesAnteriores()" style="background:#9333ea">📅 Produções Anteriores</button>
   <button class="btn btn-primary" onclick="abrirDescontarVenda()" style="background:#ea580c">📉 Descontar Venda</button>
+  <button class="btn btn-primary" onclick="abrirIncluirCF()" style="background:#7c3aed" title="Puxar um pedido C&amp;F para a coluna C&amp;F">🤝 Incluir C&amp;F</button>
   <button class="btn btn-primary" onclick="abrirModalVendas()">📥 Importar Vendas</button>
   <button class="btn btn-success" onclick="abrirModalEstoque()">📦 Importar Estoque</button>
   <button class="btn btn-primary" onclick="gerarRelatorio()" style="background:var(--mc-roxo)">📄 Gerar Plano de Produção</button>
@@ -241,6 +242,16 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
   </div>
 </div>
 
+
+<div id="modal-cf-incluir" class="modal">
+  <div class="modal-content" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title">🤝 Incluir pedido C&amp;F</div>
+      <button class="modal-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body" id="cf-incluir-body" style="max-height:60vh;overflow-y:auto"></div>
+  </div>
+</div>
 <div id="modal-historico" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -690,9 +701,85 @@ window.fecharModal = () => {
   document.getElementById('modal-estoque').classList.remove('show');
   document.getElementById('modal-detalhe').classList.remove('show');
   document.getElementById('modal-historico').classList.remove('show');
+  document.getElementById('modal-cf-incluir')?.classList.remove('show');
   document.getElementById('modal-simulacao').classList.remove('show');
   document.getElementById('modal-producoes').classList.remove('show');
   document.getElementById('modal-descontar').classList.remove('show');
+};
+
+/* ── INCLUIR PEDIDO C&F ──────────────────────────────────────────
+   Puxa um pedido salvo no ProduLog e joga o total de cada produto na
+   coluna C&F, como NEGATIVO: aquela quantidade vai sair da produção,
+   então o plano precisa descontá-la. */
+window.abrirIncluirCF = async () => {
+  const body=document.getElementById('cf-incluir-body');
+  document.getElementById('modal-cf-incluir').classList.add('show');
+  if(body) body.innerHTML='<div style="padding:20px;text-align:center;color:#666;">Carregando pedidos...</div>';
+  try{
+    const snap=await getDocs(collection(db,'cfPedidosSemana'));
+    const lista=snap.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+    if(!lista.length){
+      body.innerHTML='<div style="padding:20px;text-align:center;color:#666;">Nenhum pedido C&F cadastrado.<br><span style="font-size:12px;">Lance os pedidos no ProduLog, em Admin → Pedidos C&F.</span></div>';
+      return;
+    }
+    body.innerHTML=lista.map(p=>{
+      const itens=p.itens||{};
+      const totais={};
+      Object.keys(itens).forEach(cod=>{
+        const t=Object.values(itens[cod]||{}).reduce((a,b)=>a+(Number(b)||0),0);
+        if(t) totais[cod]=t;
+      });
+      const nProd=Object.keys(totais).length;
+      const soma=Object.values(totais).reduce((a,b)=>a+b,0);
+      const lojas=(p.lojas||[]).map(l=>l.nome).filter(Boolean).join(', ');
+      return '<button onclick="incluirCF(\''+p.id+'\')" style="display:block;width:100%;text-align:left;background:#fff;border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;font-family:inherit;">'+
+        '<div style="font-size:15px;font-weight:700;">'+(p.nome||'(sem nome)')+'</div>'+
+        '<div style="font-size:12px;color:#666;margin-top:3px;">'+nProd+' produto(s) · '+soma+' pct no total</div>'+
+        (lojas?'<div style="font-size:11px;color:#888;margin-top:2px;">'+lojas+'</div>':'')+
+      '</button>';
+    }).join('');
+  }catch(e){
+    body.innerHTML='<div style="padding:20px;color:#c00;">Erro ao buscar: '+e.message+'</div>';
+  }
+};
+
+window.incluirCF = async (id) => {
+  try{
+    const snap=await getDoc(doc(db,'cfPedidosSemana',id));
+    if(!snap.exists()){ alert('Pedido não encontrado.'); return; }
+    const p=snap.data()||{};
+    const itens=p.itens||{};
+    const totais={};
+    Object.keys(itens).forEach(cod=>{
+      const t=Object.values(itens[cod]||{}).reduce((a,b)=>a+(Number(b)||0),0);
+      if(t) totais[cod]=t;
+    });
+    const codigos=Object.keys(totais);
+    if(!codigos.length){ alert('Esse pedido não tem quantidade lançada.'); return; }
+
+    // só entram os produtos que existem no plano do setor atual
+    const noPlano=codigos.filter(c=>produtos.some(x=>String(x.cod)===String(c) && x.setor===setorAtivo));
+    const fora=codigos.filter(c=>!noPlano.includes(c));
+    if(!noPlano.length){
+      alert('Nenhum produto deste pedido está no plano de '+setorAtivo+'.');
+      return;
+    }
+    if(!confirm('Incluir '+noPlano.length+' produto(s) na coluna C&F?\n\n'+
+      'As quantidades entram como NEGATIVO, para o plano considerar a saída.'+
+      (fora.length?('\n\n'+fora.length+' produto(s) do pedido não estão no plano de '+setorAtivo+' e serão ignorados.'):''))) return;
+
+    noPlano.forEach(cod=>{
+      if(!plano[cod]) plano[cod]={};
+      plano[cod]['C&F'] = -Math.abs(totais[cod]);   // sai da produção
+    });
+    // o plano vive em memória até a pessoa clicar em Salvar Plano,
+    // igual ao que acontece quando ela digita nas células
+    render();
+    fecharModal();
+    alert('✓ '+noPlano.length+' produto(s) incluídos na coluna C&F.\n\n'+
+      'Clique em "Salvar Plano" para gravar.');
+  }catch(e){ alert('Erro: '+e.message); }
 };
 
 // NOVO: Abrir modal de desconto de venda por dia da semana
