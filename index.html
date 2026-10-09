@@ -22381,7 +22381,7 @@ window.libEntrarNoContainer=libEntrarNoContainer;
    Coleção: pautaAssuntos
    ══════════════════════════════════════════════════════════════════ */
 let pautaAssuntos=[];
-let _pautaFiltro='abertos', _pautaCat='', _pautaBusca='', _pautaSel='';
+let _pautaFiltro='abertos', _pautaCat='', _pautaBusca='', _pautaSel='', _pautaComQuem='';
 
 const PAUTA_CATEGORIAS=[
   {id:'processo',  nome:'Processo',      icone:'⚙️', cor:'#2563eb'},
@@ -22449,6 +22449,16 @@ function _pautaListaHTML(){
       [['abertos','Em aberto'],['atrasados','Atrasados'],['resolvidos','Resolvidos'],['todos','Todos']].map(([id,nome])=>
         '<button onclick="pautaSetFiltro(\''+id+'\')" style="background:'+(_pautaFiltro===id?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_pautaFiltro===id?'#fff':'var(--text-secondary)')+';border:1px solid '+(_pautaFiltro===id?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:99px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">'+nome+'</button>').join('')+
     '</div>'+
+    // de quem é a vez
+    '<div style="display:flex;gap:6px;margin-top:8px;">'+
+      PAUTA_PESSOAS.map(x=>{
+        const n=todos.filter(a=>a.comQuem===x.id && a.situacao!=='resolvido').length;
+        const on=_pautaComQuem===x.id;
+        return '<button onclick="pautaSetComQuemFiltro(\''+x.id+'\')" style="flex:1;background:'+(on?x.cor:x.bg)+';color:'+(on?'#fff':x.cor)+';border:1px solid '+x.cor+(on?'':'55')+';border-radius:9px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">'+
+          x.letra+' · '+x.nome+(n?(' ('+n+')'):'')+'</button>';
+      }).join('')+
+      (_pautaComQuem?'<button onclick="pautaSetComQuemFiltro(\'\')" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px 12px;font-size:12px;cursor:pointer;font-family:inherit;">✕</button>':'')+
+    '</div>'+
     '<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;">'+
       '<button onclick="pautaSetCat(\'\')" style="background:'+(!_pautaCat?'var(--text-primary)':'#fff')+';color:'+(!_pautaCat?'#fff':'var(--text-secondary)')+';border:1px solid var(--border);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">todas</button>'+
       PAUTA_CATEGORIAS.map(c=>{
@@ -22469,8 +22479,10 @@ function _pautaListaHTML(){
     const prazo=_pautaPrazoTexto(a);
     const resolvido=a.situacao==='resolvido';
     const nNotas=(a.notas||[]).length;
-    return '<button onclick="pautaVer(\''+escapeJsStr(a.firestoreId)+'\')" class="card" style="display:block;width:100%;text-align:left;margin-bottom:8px;cursor:pointer;font-family:inherit;border-left:4px solid '+(resolvido?'#cbd5e1':pri.cor)+';'+(resolvido?'opacity:.65;':'')+'">'+
-      '<div style="display:flex;align-items:flex-start;gap:9px;">'+
+    const p=_pautaPessoa(a.comQuem);
+    return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+(resolvido?'#cbd5e1':(p?p.cor:pri.cor))+';'+
+        (resolvido?'opacity:.65;':(p?('background:'+p.bg+';border-color:'+p.borda+';'):''))+'">'+
+      '<div onclick="pautaVer(\''+escapeJsStr(a.firestoreId)+'\')" style="display:flex;align-items:flex-start;gap:9px;cursor:pointer;">'+
         '<span style="flex:1;min-width:0;">'+
           '<span style="display:block;font-size:15px;font-weight:800;line-height:1.3;'+(resolvido?'text-decoration:line-through;':'')+'">'+(a.titulo||'')+'</span>'+
           (a.descricao?'<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.45;">'+String(a.descricao).slice(0,110)+(a.descricao.length>110?'…':'')+'</span>':'')+
@@ -22485,7 +22497,20 @@ function _pautaListaHTML(){
           '<span style="display:block;font-size:12px;font-weight:800;color:'+prazo.cor+';">'+prazo.txt+'</span>'+
           (!resolvido?'<span style="display:block;font-size:10px;font-weight:700;color:'+pri.cor+';background:'+pri.bg+';border-radius:99px;padding:1px 8px;margin-top:4px;">'+pri.nome+'</span>':'')+
         '</span>'+
-      '</div></button>';
+      '</div>'+
+      // de quem é a vez: um toque marca, outro tira
+      (resolvido?'' :
+        '<div style="display:flex;align-items:center;gap:6px;margin-top:9px;padding-top:9px;border-top:1px solid '+(p?p.borda:'var(--border)')+';">'+
+          '<span style="flex:1;min-width:0;font-size:11px;color:'+(p?p.cor:'var(--text-muted)')+';font-weight:'+(p?'700':'400')+';">'+
+            (p?('⏳ com '+p.nome):'de quem é a vez?')+'</span>'+
+          PAUTA_PESSOAS.map(x=>{
+            const on=a.comQuem===x.id;
+            return '<button onclick="event.stopPropagation();pautaSetComQuem(\''+escapeJsStr(a.firestoreId)+'\',\''+x.id+'\')" '+
+              'title="'+(on?('Com '+x.nome+' — toque para tirar'):('Passar para '+x.nome))+'" '+
+              'style="width:32px;height:32px;border-radius:9px;border:2px solid '+x.cor+(on?'':'44')+';background:'+(on?x.cor:'#fff')+';color:'+(on?'#fff':x.cor)+';font-size:14px;font-weight:900;cursor:pointer;font-family:inherit;line-height:1;">'+x.letra+'</button>';
+          }).join('')+
+        '</div>')+
+    '</div>';
   }).join('');
   return h;
 }
@@ -22512,6 +22537,21 @@ function _pautaDetalhe(a){
       '<button onclick="pautaEditar()" class="btn btn-secondary" style="flex:1;">✏️ Editar</button>'+
       '<button onclick="pautaExcluir()" style="flex:0 0 auto;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:0 14px;font-size:13px;cursor:pointer;font-family:inherit;">🗑</button>'+
     '</div>'+
+  '</div>';
+
+  // de quem é a vez
+  const pes=_pautaPessoa(a.comQuem);
+  h+='<div class="card" style="margin-bottom:12px;'+(pes?('background:'+pes.bg+';border-color:'+pes.borda+';'):'')+'">'+
+    '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:7px;">DE QUEM É A VEZ</div>'+
+    '<div style="display:flex;gap:6px;">'+
+      PAUTA_PESSOAS.map(x=>{
+        const on=a.comQuem===x.id;
+        return '<button onclick="pautaSetComQuem(\''+escapeJsStr(a.firestoreId)+'\',\''+x.id+'\')" style="flex:1;background:'+(on?x.cor:'#fff')+';color:'+(on?'#fff':x.cor)+';border:1px solid '+x.cor+(on?'':'55')+';border-radius:9px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">'+x.letra+' · '+x.nome+'</button>';
+      }).join('')+
+    '</div>'+
+    (pes
+      ? '<div style="font-size:11px;color:'+pes.cor+';margin-top:7px;">⏳ Aguardando o '+pes.nome+(a.comQuemEm?(' desde '+a.comQuemEm):'')+'. Toque de novo para tirar.</div>'
+      : '<div style="font-size:11px;color:var(--text-muted);margin-top:7px;">Marque quando o assunto depender de alguém antes da próxima conversa.</div>')+
   '</div>';
 
   // situação: um toque para mudar
@@ -22718,12 +22758,33 @@ function pautaBuscar(v){ _pautaBusca=v||''; renderPauta(); const i=document.getE
 window.pautaBuscar=pautaBuscar;
 function pautaSetFiltro(f){ _pautaFiltro=f; renderPauta(); }
 window.pautaSetFiltro=pautaSetFiltro;
+function pautaSetComQuemFiltro(id){ _pautaComQuem=(_pautaComQuem===id?'':id); renderPauta(); }
+window.pautaSetComQuemFiltro=pautaSetComQuemFiltro;
 function pautaSetCat(c){ _pautaCat=(_pautaCat===c?'':c); renderPauta(); }
 window.pautaSetCat=pautaSetCat;
 function pautaVer(id){ _pautaSel=id; renderPauta(); }
 window.pautaVer=pautaVer;
 function pautaVoltar(){ _pautaSel=''; renderPauta(); }
 window.pautaVoltar=pautaVoltar;
+
+/* De quem é a vez: alguns assuntos dependem de uma ação do Jonathan ou
+   do Patrick antes da próxima conversa. A cor do bloco mostra isso de
+   relance. */
+const PAUTA_PESSOAS=[
+  {id:'jonathan', letra:'J', nome:'Jonathan', cor:'#2563eb', bg:'#eff6ff', borda:'#bfdbfe'},
+  {id:'patrick',  letra:'P', nome:'Patrick',  cor:'#ea580c', bg:'#fff7ed', borda:'#fed7aa'}
+];
+function _pautaPessoa(id){ return PAUTA_PESSOAS.find(p=>p.id===id)||null; }
+
+async function pautaSetComQuem(id, quem){
+  const a=pautaAssuntos.find(x=>x.firestoreId===id); if(!a) return;
+  const novo=(a.comQuem===quem)?'':quem;   // clicar de novo tira a marca
+  try{
+    await updateDoc(doc(db,'pautaAssuntos',id),
+      {comQuem:novo, comQuemEm:novo?agora():'', comQuemPor:novo?_demAutor():'', atualizadoEm:agora()});
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.pautaSetComQuem=pautaSetComQuem;
 
 function _pautaCat2(id){ return PAUTA_CATEGORIAS.find(c=>c.id===id)||PAUTA_CATEGORIAS[PAUTA_CATEGORIAS.length-1]; }
 function _pautaPri(id){ return PAUTA_PRIORIDADES.find(c=>c.id===id)||PAUTA_PRIORIDADES[1]; }
@@ -22760,6 +22821,7 @@ function pautaLista(){
       if(a.situacao==='resolvido' || d===null || d>=0) return false;
     }
     if(_pautaCat && a.categoria!==_pautaCat) return false;
+    if(_pautaComQuem && a.comQuem!==_pautaComQuem) return false;
     if(q && !_normNome((a.titulo||'')+' '+(a.descricao||'')+' '+(a.responsavel||'')).includes(q)) return false;
     return true;
   }).sort((a,b)=>{
