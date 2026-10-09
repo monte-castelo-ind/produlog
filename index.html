@@ -1631,6 +1631,14 @@
           </div>
           <span class="mc-sector-arrow">›</span>
         </button>
+        <button class="mc-sector-card" onclick="qualAbrir()">
+          <div class="mc-sector-icon" style="background:#cffafe;">🔬</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Controle de Qualidade</div>
+            <div class="mc-sector-desc">Amostras e teste dos produtos embalados</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
         <button class="mc-sector-card" onclick="goTo('s-estoque-coz')">
           <div class="mc-sector-icon green">📦</div>
           <div class="mc-sector-info">
@@ -3313,6 +3321,14 @@
         <span class="mc-sector-arrow">›</span>
       </button>
       <div class="mc-section-header" style="margin-top:18px;">📊 Acompanhamento<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">conferir o que foi produzido e as diferenças</span></div>
+      <button class="mc-sector-card" onclick="qualAbrir()">
+        <div class="mc-sector-icon" style="background:#cffafe;">🔬</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Controle de Qualidade</div>
+          <div class="mc-sector-desc">Amostras e teste dos produtos embalados</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-roxo,#7c3aed);margin-bottom:10px;" onclick="cdcAbrir('admin')">
         <div class="mc-sector-icon" style="background:#ede9fe;">📊</div>
         <div class="mc-sector-info">
@@ -4374,6 +4390,17 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="prioridade-form-content"></div>
   </div>
 
+  <!-- CONTROLE DE QUALIDADE -->
+  <div class="screen" id="s-qual">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Qualidade</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title">🔬 Controle de Qualidade</div><div class="mc-page-sub">Amostras e teste dos produtos</div></div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="qual-content"></div>
+  </div>
+
   <!-- ASSUNTOS PENDENTES -->
   <div class="screen" id="s-pauta">
     <div class="mc-header">
@@ -4420,7 +4447,15 @@
 
       <div class="mc-section-header" style="margin-top:18px;">📊 Acompanhamento</div>
       <div class="mc-sector-grid">
-        <button class="mc-sector-card" onclick="cdcAbrir('admin')">
+        <button class="mc-sector-card" onclick="qualAbrir()">
+        <div class="mc-sector-icon" style="background:#cffafe;">🔬</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Controle de Qualidade</div>
+          <div class="mc-sector-desc">Amostras e teste dos produtos embalados</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <button class="mc-sector-card" onclick="cdcAbrir('admin')">
           <div class="mc-sector-icon purple">📊</div>
           <div class="mc-sector-info">
             <div class="mc-sector-title">Controle Diário Confeitaria</div>
@@ -5539,6 +5574,7 @@ function voltar(){
      nível antes de sair. Sem isso, abrir um assunto e voltar jogava a
      pessoa para fora, em vez de devolver à lista. */
   if(atual==='s-pauta'     && typeof _pautaSel!=='undefined' && _pautaSel){ pautaVoltar(); return; }
+  if(atual==='s-qual'      && typeof _qualDia!=='undefined' && _qualDia){ qualVoltar(); return; }
   if(atual==='s-cfped'     && typeof _cfSemSel!=='undefined' && _cfSemSel){ cfVoltarLista(); return; }
   if(atual==='s-emb-cfped' && typeof _embCfSel!=='undefined' && _embCfSel){ embCfVoltar(); return; }
   if(atual==='s-ajcont'    && typeof _ajContSel!=='undefined' && _ajContSel){ ajContVoltar(); return; }
@@ -5637,6 +5673,7 @@ function goTo(id, semHistorico){
   if(id==='s-ajcont' && typeof renderAjCont==='function') renderAjCont();
   if(id==='s-cfped' && typeof renderCfPed==='function') renderCfPed();
   if(id==='s-pauta' && typeof renderPauta==='function') renderPauta();
+  if(id==='s-qual' && typeof renderQual==='function') renderQual();
   if(id==='s-emb-cfped' && typeof renderEmbCf==='function') renderEmbCf();
   if(id==='s-perdas') renderPerdas();
   if(id==='s-carreg-edit') renderCarregEdit();
@@ -22372,6 +22409,559 @@ async function libEntrarNoContainer(reg, qtd, validade, setor){
   }catch(e){ console.error('entrada no contêiner',e); alert('A liberação foi registrada, mas não consegui dar entrada no contêiner: '+e.message); }
 }
 window.libEntrarNoContainer=libEntrarNoContainer;
+
+/* ══════════════════════════════════════════════════════════════════
+   CONTROLE DE QUALIDADE
+   Para cada produto embalado: separar a amostra (vigilância) e fazer o
+   teste — fritar ou assar e avaliar se saiu no padrão.
+   Os dias vêm do que foi EMBALADO, em formato de calendário.
+   Coleção: qualidade/{dia-tipo}  →  {itens:{cod:{amostra, teste...}}}
+   ══════════════════════════════════════════════════════════════════ */
+let qualDados={};
+let _qualTipo='salgado', _qualDia='', _qualMes='';
+
+const QUAL_AVALIACOES=[
+  {id:'ok',        nome:'Dentro do padrão', icone:'✓',  cor:'#16a34a', bg:'#f0fdf4'},
+  {id:'observacao',nome:'Com observação',   icone:'⚠',  cor:'#d97706', bg:'#fffbeb'},
+  {id:'fora',      nome:'Fora do padrão',   icone:'✕',  cor:'#dc2626', bg:'#fef2f2'}
+];
+
+const QUAL_PROBLEMAS=[
+  {id:'maior',       nome:'Maior que o padrão'},
+  {id:'menor',       nome:'Menor que o padrão'},
+  {id:'recheio_mais',nome:'Recheio demais'},
+  {id:'recheio_menos',nome:'Recheio de menos'},
+  {id:'aparencia',   nome:'Aparência ruim'},
+  {id:'massa',       nome:'Problema na massa'},
+  {id:'cor',         nome:'Cor fora do normal'},
+  {id:'sabor',       nome:'Sabor alterado'},
+  {id:'selagem',     nome:'Mal selado / abrindo'},
+  {id:'peso',        nome:'Peso fora'}
+];
+
+onSnapshot(collection(db,'qualidade'), snap=>{
+  try{
+    qualDados={};
+    snap.docs.forEach(d=>{ qualDados[d.id]=d.data(); });
+    if(document.querySelector('.screen.active')?.id==='s-qual') renderQual();
+  }catch(e){ console.error('qualidade snap',e); }
+});
+
+function qualAbrir(){ _qualDia=''; _qualMes=''; goTo('s-qual'); }
+window.qualAbrir=qualAbrir;
+
+function renderQual(){
+  const el=document.getElementById('qual-content'); if(!el) return;
+  if(_qualDia){ el.innerHTML=_qualRenderDia(); return; }
+  el.innerHTML=_qualRenderCalendario();
+}
+window.renderQual=renderQual;
+
+function qualSetTipo(t){ _qualTipo=t; _qualDia=''; _qualMes=''; renderQual(); }
+window.qualSetTipo=qualSetTipo;
+function qualSetMes(m){ _qualMes=m; renderQual(); }
+window.qualSetMes=qualSetMes;
+function qualVerDia(d){ _qualDia=d; renderQual(); }
+window.qualVerDia=qualVerDia;
+function qualVoltar(){ _qualDia=''; renderQual(); }
+window.qualVoltar=qualVoltar;
+
+function _qualRenderCalendario(){
+  const meses=qualMeses(_qualTipo);
+  if(!_qualMes && meses.length) _qualMes=meses[0];
+  const dias=qualDiasDoMes(_qualMes, _qualTipo);
+
+  // abas pão / salgado
+  let h='<div style="display:flex;gap:7px;margin-bottom:12px;">'+
+    [['salgado','🥐 Salgados'],['pao','🍞 Pães']].map(([id,nome])=>
+      '<button onclick="qualSetTipo(\''+id+'\')" style="flex:1;background:'+(_qualTipo===id?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_qualTipo===id?'#fff':'var(--text-secondary)')+';border:1px solid '+(_qualTipo===id?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">'+nome+'</button>').join('')+
+  '</div>';
+
+  if(!dias.length) return h+_vazio('Nenhuma produção embalada aqui.','Os dias aparecem conforme a embalagem finaliza.');
+
+  // resumo do mês
+  let totPend=0, totDias=0;
+  dias.forEach(d=>{ const p=qualPendentes(d,_qualTipo); if(p.pendentes){ totPend+=p.pendentes; totDias++; } });
+  h+='<div class="card" style="margin-bottom:12px;'+(totPend?'background:#fffbeb;border:1px solid #fde68a;':'')+'">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
+      '<span style="flex:1;min-width:0;">'+
+        '<span style="display:block;font-size:14px;font-weight:800;color:'+(totPend?'#b45309':'#15803d')+';">'+
+          (totPend?('⚠ '+totPend+' produto(s) pendentes'):'✓ Tudo em dia')+'</span>'+
+        '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
+          (totPend?(totDias+' dia(s) com pendência neste mês'):'nenhuma pendência neste mês')+'</span></span>'+
+    '</div></div>';
+
+  // seletor de mês
+  if(meses.length>1){
+    h+='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;">'+
+      meses.slice(0,12).map(m=>{
+        const on=_qualMes===m;
+        const nd=qualDiasDoMes(m,_qualTipo);
+        let pend=0; nd.forEach(d=>{ pend+=qualPendentes(d,_qualTipo).pendentes; });
+        return '<button onclick="qualSetMes(\''+m+'\')" style="flex:0 0 auto;background:'+(on?'var(--text-primary)':'#fff')+';color:'+(on?'#fff':'var(--text-secondary)')+';border:1px solid var(--border);border-radius:99px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">'+
+          _qualMesNome(m)+(pend?(' <span style="color:'+(on?'#fde68a':'#d97706')+';">'+pend+'</span>'):'')+'</button>';
+      }).join('')+
+    '</div>';
+  }
+
+  // os dias em blocos
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;">'+
+    dias.map(d=>{
+      const p=qualPendentes(d,_qualTipo);
+      const tudoOk=p.pendentes===0;
+      const cor=tudoOk?'#16a34a':'#d97706';
+      const fundo=tudoOk?'#f0fdf4':'#fffbeb';
+      const borda=tudoOk?'#bbf7d0':'#fde68a';
+      const dd=String(d).split('/');
+      return '<button onclick="qualVerDia(\''+escapeJsStr(d)+'\')" style="background:'+fundo+';border:2px solid '+borda+';border-radius:12px;padding:11px 8px;cursor:pointer;font-family:inherit;text-align:center;">'+
+        '<div style="font-size:22px;font-weight:900;color:'+cor+';line-height:1;">'+dd[0]+'</div>'+
+        '<div style="font-size:10px;color:var(--text-muted);margin-top:1px;">'+_qualDiaSemana(d)+'</div>'+
+        '<div style="font-size:11px;font-weight:700;color:'+cor+';margin-top:6px;line-height:1.3;">'+
+          (tudoOk?('✓ '+p.total+' feitos'):(p.pendentes+' pendente'+(p.pendentes>1?'s':'')))+'</div>'+
+      '</button>';
+    }).join('')+
+  '</div>';
+  return h;
+}
+
+/* ── TESTE DO PRODUTO ────────────────────────────────────────────── */
+/* ── FOTO DO TESTE ───────────────────────────────────────────────
+   A foto é reduzida e comprimida antes de guardar, porque vai junto do
+   registro no banco (limite de 1 MB por documento). 800px e qualidade
+   média dão cerca de 80 KB, o bastante para documentar o problema. */
+const QUAL_FOTO_LADO=800;
+const QUAL_FOTO_MAX=220*1024;   // acima disso, comprime mais
+
+function _qualComprimir(file){
+  return new Promise((resolve, reject)=>{
+    if(!file || !/^image\//.test(file.type||'')){ reject(new Error('Escolha uma imagem.')); return; }
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      try{
+        let {width:w, height:h}=img;
+        const maior=Math.max(w,h);
+        if(maior>QUAL_FOTO_LADO){ const f=QUAL_FOTO_LADO/maior; w=Math.round(w*f); h=Math.round(h*f); }
+        const c=document.createElement('canvas');
+        c.width=w; c.height=h;
+        const ctx=c.getContext('2d');
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);   // fundo branco para PNG transparente
+        ctx.drawImage(img, 0, 0, w, h);
+        // baixa a qualidade até caber
+        let q=0.72, out=c.toDataURL('image/jpeg', q);
+        while(out.length>QUAL_FOTO_MAX && q>0.3){ q-=0.1; out=c.toDataURL('image/jpeg', q); }
+        URL.revokeObjectURL(url);
+        if(out.length>QUAL_FOTO_MAX*1.5){ reject(new Error('A imagem ficou grande demais. Tente outra foto.')); return; }
+        resolve(out);
+      }catch(e){ URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Não consegui ler a imagem.')); };
+    img.src=url;
+  });
+}
+
+async function qualEscolherFoto(inp){
+  const f=(inp.files||[])[0];
+  inp.value='';
+  if(!f) return;
+  const ov=document.getElementById('qual-teste'); if(!ov) return;
+  const area=document.getElementById('qt-foto-area');
+  if(area) area.innerHTML='<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:13px;">Preparando a foto...</div>';
+  try{
+    const dataUrl=await _qualComprimir(f);
+    ov.dataset.foto=dataUrl;
+    _qtPintarFoto();
+  }catch(e){
+    alert(e.message||'Não consegui usar essa imagem.');
+    _qtPintarFoto();
+  }
+}
+window.qualEscolherFoto=qualEscolherFoto;
+
+function qualTirarFoto(){
+  const ov=document.getElementById('qual-teste'); if(!ov) return;
+  if(!confirm('Tirar a foto deste teste?')) return;
+  ov.dataset.foto='';
+  _qtPintarFoto();
+}
+window.qualTirarFoto=qualTirarFoto;
+
+function _qtPintarFoto(){
+  const ov=document.getElementById('qual-teste'); if(!ov) return;
+  const area=document.getElementById('qt-foto-area'); if(!area) return;
+  const f=ov.dataset.foto||'';
+  area.innerHTML = f
+    ? '<div style="position:relative;">'+
+        '<img src="'+f+'" alt="foto do produto" style="width:100%;max-height:260px;object-fit:contain;background:#f1f5f9;border-radius:10px;display:block;">'+
+        '<button onclick="qualTirarFoto()" style="position:absolute;top:8px;right:8px;background:rgba(15,23,42,.8);border:none;color:#fff;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;">🗑 tirar</button>'+
+        '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;text-align:center;">'+Math.round(f.length/1024)+' KB</div>'+
+      '</div>'
+    : '<label style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:20px;border:2px dashed var(--border-md,#cbd5e1);border-radius:10px;cursor:pointer;">'+
+        '<span style="font-size:28px;">📷</span>'+
+        '<span style="font-size:13px;font-weight:600;color:var(--text-secondary);">Tirar ou escolher foto</span>'+
+        '<span style="font-size:11px;color:var(--text-muted);">opcional · a imagem é reduzida antes de salvar</span>'+
+        '<input type="file" accept="image/*" capture="environment" onchange="qualEscolherFoto(this)" style="display:none;">'+
+      '</label>';
+}
+window._qtPintarFoto=_qtPintarFoto;
+
+/* Abre a foto em tamanho grande */
+/* Cada foto fica num registro próprio. Se fossem todas no documento do
+   dia, 15 produtos com foto passariam do limite de 1 MB do Firestore e
+   o dia inteiro deixaria de salvar. */
+let qualFotos={};
+
+onSnapshot(collection(db,'qualidadeFotos'), snap=>{
+  try{
+    qualFotos={};
+    snap.docs.forEach(d=>{ qualFotos[d.id]=(d.data()||{}).foto||''; });
+    if(document.querySelector('.screen.active')?.id==='s-qual') renderQual();
+  }catch(e){ console.error('qualidadeFotos snap',e); }
+});
+
+function _qualFotoId(dia, tipo, cod){ return _qualChave(dia,tipo)+'__'+String(cod); }
+function qualFoto(dia, tipo, cod){ return qualFotos[_qualFotoId(dia,tipo,cod)]||''; }
+window.qualFoto=qualFoto;
+
+async function _qualGravarFoto(dia, tipo, cod, dataUrl){
+  const id=_qualFotoId(dia,tipo,cod);
+  try{
+    if(dataUrl){
+      qualFotos[id]=dataUrl;
+      await setDoc(doc(db,'qualidadeFotos',id),
+        {foto:dataUrl, dia, tipo, cod:String(cod), em:agora(), por:_demAutor()});
+    } else {
+      delete qualFotos[id];
+      await deleteDoc(doc(db,'qualidadeFotos',id));
+    }
+    return true;
+  }catch(e){
+    alert('A avaliação foi salva, mas a foto não: '+e.message);
+    return false;
+  }
+}
+
+function qualVerFoto(cod){
+  const d=_qualDoc(_qualDia,_qualTipo);
+  const t=((d.itens||{})[cod]||{}).teste||{};
+  const foto=qualFoto(_qualDia,_qualTipo,cod);
+  if(!foto) return;
+  const prods=qualProdutosDoDia(_qualDia,_qualTipo);
+  const pr=prods.find(x=>x.cod===cod)||{nome:''};
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.92);z-index:3500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;cursor:zoom-out;';
+  ov.onclick=()=>ov.remove();
+  ov.innerHTML='<div style="color:#fff;font-size:15px;font-weight:700;margin-bottom:10px;text-align:center;">'+(pr.nome||'')+
+      '<div style="font-size:12px;font-weight:400;opacity:.8;margin-top:2px;">'+_qualDia+(t.em?(' · '+t.em):'')+'</div></div>'+
+    '<img src="'+foto+'" alt="foto do produto" style="max-width:100%;max-height:72vh;object-fit:contain;border-radius:12px;">'+
+    '<div style="color:#fff;font-size:12px;opacity:.7;margin-top:12px;">toque para fechar</div>';
+  document.body.appendChild(ov);
+}
+window.qualVerFoto=qualVerFoto;
+
+function qualAbrirTeste(cod){
+  const prods=qualProdutosDoDia(_qualDia,_qualTipo);
+  const pr=prods.find(x=>x.cod===cod); if(!pr) return;
+  const d=_qualDoc(_qualDia,_qualTipo);
+  const t=((d.itens||{})[cod]||{}).teste||{};
+  const probs=t.problemas||[];
+
+  const ov=document.createElement('div');
+  ov.id='qual-teste';
+  ov.dataset.cod=cod;
+  ov.dataset.aval=t.avaliacao||'';
+  ov.dataset.probs=JSON.stringify(probs);
+  ov.dataset.foto=qualFoto(_qualDia,_qualTipo,cod)||'';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🔬 '+pr.nome+'</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">'+_qualDia+' · '+pr.emb+' pct embalados</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+
+      '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:7px;">Como ficou o produto?</div>'+
+      '<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px;">'+
+        QUAL_AVALIACOES.map(x=>'<button type="button" onclick="_qtSetAval(\''+x.id+'\')" data-qt-aval="'+x.id+'" '+
+          'style="display:flex;align-items:center;gap:10px;background:'+(t.avaliacao===x.id?x.bg:'#fff')+';border:2px solid '+(t.avaliacao===x.id?x.cor:'var(--border)')+';border-radius:10px;padding:13px;cursor:pointer;font-family:inherit;text-align:left;">'+
+          '<span style="font-size:19px;color:'+x.cor+';font-weight:900;">'+x.icone+'</span>'+
+          '<span style="font-size:14px;font-weight:700;color:'+x.cor+';">'+x.nome+'</span></button>').join('')+
+      '</div>'+
+
+      '<div id="qt-probs-area" style="display:'+(t.avaliacao&&t.avaliacao!=='ok'?'block':'none')+';">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:7px;">O que foi observado?</div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">'+
+          QUAL_PROBLEMAS.map(q=>'<button type="button" onclick="_qtToggleProb(\''+q.id+'\')" data-qt-prob="'+q.id+'" '+
+            'style="background:'+(probs.includes(q.id)?'#d97706':'#fff')+';color:'+(probs.includes(q.id)?'#fff':'var(--text-secondary)')+';border:1px solid '+(probs.includes(q.id)?'#d97706':'var(--border)')+';border-radius:99px;padding:8px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+q.nome+'</button>').join('')+
+        '</div></div>'+
+
+      '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);">Observação</div>'+
+      '<textarea id="qt-obs" rows="3" placeholder="detalhe o que foi visto no teste" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin:5px 0 12px;resize:vertical;">'+(t.obs||'')+'</textarea>'+
+
+      '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:6px;">Foto do produto</div>'+
+      '<div id="qt-foto-area"></div>'+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      (t.avaliacao?'<button onclick="qualLimparTeste(\''+escapeJsStr(cod)+'\')" style="flex:0 0 auto;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:0 14px;font-size:13px;cursor:pointer;font-family:inherit;">🗑</button>':'')+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'qual-teste\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="qualSalvarTeste()">Salvar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  _qtPintarFoto();
+}
+window.qualAbrirTeste=qualAbrirTeste;
+
+function _qtSetAval(id){
+  const ov=document.getElementById('qual-teste'); if(!ov) return;
+  ov.dataset.aval=id;
+  QUAL_AVALIACOES.forEach(x=>{
+    const b=ov.querySelector('[data-qt-aval="'+x.id+'"]'); if(!b) return;
+    const on=(x.id===id);
+    b.style.background=on?x.bg:'#fff';
+    b.style.borderColor=on?x.cor:'var(--border)';
+  });
+  // os problemas só fazem sentido quando não está no padrão
+  const area=document.getElementById('qt-probs-area');
+  if(area) area.style.display=(id==='ok')?'none':'block';
+}
+window._qtSetAval=_qtSetAval;
+
+function _qtToggleProb(id){
+  const ov=document.getElementById('qual-teste'); if(!ov) return;
+  let probs=[];
+  try{ probs=JSON.parse(ov.dataset.probs||'[]'); }catch(e){}
+  if(probs.includes(id)) probs=probs.filter(x=>x!==id); else probs.push(id);
+  ov.dataset.probs=JSON.stringify(probs);
+  const b=ov.querySelector('[data-qt-prob="'+id+'"]');
+  if(b){
+    const on=probs.includes(id);
+    b.style.background=on?'#d97706':'#fff';
+    b.style.color=on?'#fff':'var(--text-secondary)';
+    b.style.borderColor=on?'#d97706':'var(--border)';
+  }
+}
+window._qtToggleProb=_qtToggleProb;
+
+async function qualSalvarTeste(){
+  const ov=document.getElementById('qual-teste'); if(!ov) return;
+  const cod=ov.dataset.cod;
+  const aval=ov.dataset.aval||'';
+  if(!aval){ alert('Escolha como ficou o produto.'); return; }
+  let probs=[];
+  try{ probs=JSON.parse(ov.dataset.probs||'[]'); }catch(e){}
+  if(aval==='ok') probs=[];
+  const obs=((document.getElementById('qt-obs')||{}).value||'').trim();
+  if(aval!=='ok' && !probs.length && !obs){
+    if(!confirm('Você marcou que o produto não ficou no padrão, mas não disse o que houve.\n\nSalvar assim mesmo?')) return;
+  }
+  const chave=_qualChave(_qualDia,_qualTipo);
+  const d=_qualDoc(_qualDia,_qualTipo);
+  const itens={...(d.itens||{})};
+  const foto=ov.dataset.foto||'';
+  itens[cod]={...(itens[cod]||{}), teste:{avaliacao:aval, problemas:probs, obs, temFoto:!!foto, em:agora(), por:_demAutor()}};
+  qualDados[chave]={...d, itens};
+  ov.remove();
+  renderQual();
+  try{
+    await setDoc(doc(db,'qualidade',chave),
+      {itens, dia:_qualDia, tipo:_qualTipo, atualizadoEm:agora()},{merge:true});
+    // a foto vai separada, para o registro do dia não crescer
+    if(foto!==qualFoto(_qualDia,_qualTipo,cod)) await _qualGravarFoto(_qualDia,_qualTipo,cod,foto);
+  }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+window.qualSalvarTeste=qualSalvarTeste;
+
+async function qualLimparTeste(cod){
+  if(!confirm('Apagar o teste deste produto?')) return;
+  const chave=_qualChave(_qualDia,_qualTipo);
+  const d=_qualDoc(_qualDia,_qualTipo);
+  const itens={...(d.itens||{})};
+  const it={...(itens[cod]||{})};
+  delete it.teste;
+  itens[cod]=it;
+  await _qualGravarFoto(_qualDia,_qualTipo,cod,'');
+  qualDados[chave]={...d, itens};
+  document.getElementById('qual-teste')?.remove();
+  renderQual();
+  try{
+    await setDoc(doc(db,'qualidade',chave),
+      {itens, dia:_qualDia, tipo:_qualTipo, atualizadoEm:agora()},{merge:true});
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.qualLimparTeste=qualLimparTeste;
+
+function _qualRenderDia(){
+  const prods=qualProdutosDoDia(_qualDia, _qualTipo);
+  const d=_qualDoc(_qualDia, _qualTipo);
+  const itens=d.itens||{};
+  const p=qualPendentes(_qualDia, _qualTipo);
+
+  let h='<button onclick="qualVoltar()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">&lsaquo; Todos os dias</button>';
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-size:17px;font-weight:800;">📅 '+_qualDia+'</div>'+
+        '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">'+
+          (_qualTipo==='pao'?'🍞 Pães':'🥐 Salgados')+' · '+prods.length+' produto(s) embalados</div></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:11px;">'+
+      '<div style="flex:1;text-align:center;background:'+(p.semAmostra?'#fef2f2':'#f0fdf4')+';border-radius:9px;padding:9px;">'+
+        '<div style="font-size:19px;font-weight:900;color:'+(p.semAmostra?'#dc2626':'#16a34a')+';">'+(p.semAmostra||'✓')+'</div>'+
+        '<div style="font-size:10px;color:var(--text-secondary);">sem amostra</div></div>'+
+      '<div style="flex:1;text-align:center;background:'+(p.semTeste?'#fffbeb':'#f0fdf4')+';border-radius:9px;padding:9px;">'+
+        '<div style="font-size:19px;font-weight:900;color:'+(p.semTeste?'#d97706':'#16a34a')+';">'+(p.semTeste||'✓')+'</div>'+
+        '<div style="font-size:10px;color:var(--text-secondary);">sem teste</div></div>'+
+    '</div></div>';
+
+  if(!prods.length) return h+_vazio('Nenhum produto embalado neste dia.');
+
+  // pendentes primeiro
+  const ord=prods.slice().sort((a,b)=>{
+    const ia=itens[a.cod]||{}, ib=itens[b.cod]||{};
+    const fa=(ia.amostra?1:0)+((ia.teste&&ia.teste.avaliacao)?1:0);
+    const fb=(ib.amostra?1:0)+((ib.teste&&ib.teste.avaliacao)?1:0);
+    if(fa!==fb) return fa-fb;
+    return _normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR');
+  });
+
+  h+=ord.map(pr=>{
+    const it=itens[pr.cod]||{};
+    const temA=!!it.amostra;
+    const t=it.teste||{};
+    const av=t.avaliacao?QUAL_AVALIACOES.find(x=>x.id===t.avaliacao):null;
+    const completo=temA && av;
+    return '<div class="card" style="margin-bottom:8px;'+(completo?'background:#f0fdf4;border-color:#bbf7d0;':'')+'">'+
+      '<div style="display:flex;align-items:flex-start;gap:10px;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:15px;font-weight:800;line-height:1.3;">'+pr.nome+'</div>'+
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">cód '+pr.cod+' · '+pr.emb+' pct embalados</div>'+
+        '</div>'+
+        // o A da amostra, igual ao que já existe na embalagem
+        '<button onclick="qualToggleAmostra(\''+escapeJsStr(pr.cod)+'\')" title="'+(temA?('Amostra separada '+(it.amostraEm||'')):'Marcar que separou a amostra')+'" '+
+          'style="flex:0 0 auto;width:44px;height:44px;border-radius:11px;border:2px solid '+(temA?'#16a34a':'#dc2626')+';background:'+(temA?'#16a34a':'#dc2626')+';color:#fff;font-size:19px;font-weight:900;cursor:pointer;font-family:inherit;line-height:1;">A</button>'+
+      '</div>'+
+      (temA?'<div style="font-size:10px;color:#15803d;margin-top:5px;">✓ amostra separada '+(it.amostraEm||'')+(it.amostraPor?(' por '+it.amostraPor):'')+'</div>':'')+
+      // o teste
+      '<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border);">'+
+        (av
+          ? '<div style="display:flex;align-items:flex-start;gap:9px;">'+
+              (qualFoto(_qualDia,_qualTipo,pr.cod)?'<img src="'+qualFoto(_qualDia,_qualTipo,pr.cod)+'" alt="foto" onclick="qualVerFoto(\''+escapeJsStr(pr.cod)+'\')" style="flex:0 0 auto;width:56px;height:56px;object-fit:cover;border-radius:9px;cursor:pointer;background:#f1f5f9;">':'')+
+              '<span style="flex:1;min-width:0;">'+
+                '<span style="font-size:12px;font-weight:800;color:'+av.cor+';">'+av.icone+' '+av.nome+'</span>'+
+                (t.problemas&&t.problemas.length?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+t.problemas.map(x=>(QUAL_PROBLEMAS.find(q=>q.id===x)||{nome:x}).nome).join(' · ')+'</span>':'')+
+                (t.obs?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:pre-wrap;">'+t.obs+'</span>':'')+
+                '<span style="display:block;font-size:10px;color:var(--text-muted);margin-top:3px;">'+(t.em||'')+(t.por?(' · '+t.por):'')+'</span>'+
+              '</span>'+
+              '<button onclick="qualAbrirTeste(\''+escapeJsStr(pr.cod)+'\')" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer;font-family:inherit;">✏️</button>'+
+            '</div>'
+          : '<button onclick="qualAbrirTeste(\''+escapeJsStr(pr.cod)+'\')" style="width:100%;background:#fff;border:1px dashed var(--border-md,#cbd5e1);color:var(--text-secondary);border-radius:9px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔬 Registrar o teste</button>')+
+      '</div>'+
+    '</div>';
+  }).join('');
+  return h;
+}
+
+/* ── AMOSTRA ─────────────────────────────────────────────────────── */
+async function qualToggleAmostra(cod){
+  const chave=_qualChave(_qualDia,_qualTipo);
+  const d=_qualDoc(_qualDia,_qualTipo);
+  const itens={...(d.itens||{})};
+  const it={...(itens[cod]||{})};
+  if(it.amostra){
+    if(!confirm('Desmarcar a amostra deste produto?')) return;
+    it.amostra=false; it.amostraEm=''; it.amostraPor='';
+  } else {
+    it.amostra=true; it.amostraEm=agora(); it.amostraPor=_demAutor();
+  }
+  itens[cod]=it;
+  qualDados[chave]={...d, itens};
+  renderQual();
+  try{
+    await setDoc(doc(db,'qualidade',chave),
+      {itens, dia:_qualDia, tipo:_qualTipo, atualizadoEm:agora()},{merge:true});
+  }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+window.qualToggleAmostra=qualToggleAmostra;
+
+function _qualMesNome(m){
+  const nomes=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const p=String(m).split('/');
+  return (nomes[+p[0]]||p[0])+'/'+String(p[1]||'').slice(-2);
+}
+
+function _qualDiaSemana(br){
+  const p=String(br).split('/'); if(p.length!==3) return '';
+  const d=new Date(+p[2], +p[1]-1, +p[0]);
+  return ['dom','seg','ter','qua','qui','sex','sáb'][d.getDay()]||'';
+}
+
+function _qualChave(dia, tipo){ return String(dia||'').replace(/\//g,'-')+'__'+tipo; }
+function _qualDoc(dia, tipo){ return qualDados[_qualChave(dia,tipo)]||{itens:{}}; }
+
+/* O que foi embalado num dia, do tipo escolhido */
+function qualProdutosDoDia(dia, tipo){
+  const out={};
+  (registros||[]).forEach(r=>{
+    if(r.data!==dia) return;
+    const emb=laEmbalado(r.embalagem||{});
+    if(emb<=0) return;
+    const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
+    if(t!==tipo) return;
+    const cod=String(r.cod||'');
+    if(!out[cod]) out[cod]={cod, nome:r.produto||'', emb:0};
+    out[cod].emb+=emb;
+  });
+  return Object.values(out).sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR'));
+}
+
+/* Quanto falta num dia: produto sem amostra ou sem teste */
+function qualPendentes(dia, tipo){
+  const prods=qualProdutosDoDia(dia, tipo);
+  const d=_qualDoc(dia, tipo);
+  let semAmostra=0, semTeste=0;
+  prods.forEach(p=>{
+    const it=(d.itens||{})[p.cod]||{};
+    if(!it.amostra) semAmostra++;
+    if(!it.teste || !it.teste.avaliacao) semTeste++;
+  });
+  return {total:prods.length, semAmostra, semTeste,
+          pendentes:prods.filter(p=>{
+            const it=(d.itens||{})[p.cod]||{};
+            return !it.amostra || !it.teste || !it.teste.avaliacao;
+          }).length};
+}
+
+/* Dias com produção embalada, para montar o calendário */
+function qualDiasDoMes(mes, tipo){
+  const dias={};
+  (registros||[]).forEach(r=>{
+    if(!r.data) return;
+    if(laEmbalado(r.embalagem||{})<=0) return;
+    const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
+    if(t!==tipo) return;
+    const p=String(r.data).split('/');
+    if(p.length!==3) return;
+    const chaveMes=p[1]+'/'+p[2];
+    if(mes && chaveMes!==mes) return;
+    dias[r.data]=true;
+  });
+  return Object.keys(dias).sort((a,b)=>estDataNum(b)-estDataNum(a));
+}
+
+/* Meses que têm produção, do mais recente */
+function qualMeses(tipo){
+  const ms={};
+  (registros||[]).forEach(r=>{
+    if(!r.data || laEmbalado(r.embalagem||{})<=0) return;
+    const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
+    if(t!==tipo) return;
+    const p=String(r.data).split('/');
+    if(p.length===3) ms[p[1]+'/'+p[2]]=true;
+  });
+  return Object.keys(ms).sort((a,b)=>{
+    const [ma,aa]=a.split('/'), [mb,ab]=b.split('/');
+    return (+ab*100+ +mb)-(+aa*100+ +ma);
+  });
+}
 
 /* ══════════════════════════════════════════════════════════════════
    ASSUNTOS PENDENTES
