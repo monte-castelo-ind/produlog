@@ -15291,10 +15291,54 @@ onSnapshot(doc(db,'configuracoes','demandaCategorias'), snap=>{
   const d=snap.data(); if(d&&Array.isArray(d.lista)&&d.lista.length) demandaCategorias=d.lista.slice();
 });
 
-function _demAutor(){
-  try{ let a=localStorage.getItem('mc_demanda_autor'); if(!a){ a=(prompt('Seu nome (para identificar quem escreve nas demandas):')||'').trim(); if(a) localStorage.setItem('mc_demanda_autor',a); } return a||'—'; }
-  catch(e){ return (prompt('Seu nome:')||'').trim()||'—'; }
+/* Quem está usando agora.
+   Antes isso vinha só de um nome digitado uma vez e guardado no
+   navegador — por isso lançamentos feitos pelo admin apareciam com o
+   nome de quem tinha usado aquele aparelho antes. Agora o setor da
+   sessão tem a palavra final, e o nome digitado só complementa. */
+const _SETOR_NOMES={
+  admin:'Admin', confeitaria:'Confeitaria', cozinha:'Cozinha', embalagem:'Embalagem',
+  expedicao:'Expedição', carregamento:'Carregamento', quadra:'Quadra', container:'Contêiner',
+  contagem:'Contagem', estoque:'Estoque', comercial:'Comercial', testes:'Testes',
+  alteracoes:'Alterações', simone:'Simone', patrick:'Patrick'
+};
+
+/* O nome é guardado POR SETOR: o mesmo aparelho é usado por pessoas
+   diferentes, e um nome único fazia o lançamento do admin sair com o
+   nome de quem tinha usado a cozinha antes. */
+function _demNomePessoa(setor){
+  try{ return (localStorage.getItem('mc_autor_'+(setor||'geral'))||'').trim(); }catch(e){ return ''; }
 }
+
+function _demAutor(){
+  const setor=window.setorAtual||'geral';
+  const rotulo=_SETOR_NOMES[setor]||'';
+  // setores de uma pessoa só já dizem quem é
+  if(setor==='simone'||setor==='patrick') return rotulo;
+  const pessoa=_demNomePessoa(setor);
+  if(pessoa) return pessoa+(rotulo?(' ('+rotulo+')'):'');
+  return rotulo||'—';
+}
+
+/* Quem está usando pode se identificar; fica guardado só para o setor
+   em que está. */
+function demTrocarNome(){
+  const setor=window.setorAtual||'geral';
+  if(setor==='simone'||setor==='patrick'){ alert('Este acesso já é identificado.'); return; }
+  const atual=_demNomePessoa(setor);
+  const n=prompt('Seu nome (aparece nos lançamentos deste acesso):', atual);
+  if(n===null) return;
+  try{
+    const t=String(n).trim();
+    if(t) localStorage.setItem('mc_autor_'+setor, t);
+    else localStorage.removeItem('mc_autor_'+setor);
+  }catch(e){}
+  const tela=document.querySelector('.screen.active')?.id;
+  if(tela==='s-qual' && typeof renderQual==='function') renderQual();
+  if(tela==='s-pauta' && typeof renderPauta==='function') renderPauta();
+  alert('Agora os lançamentos saem como: '+_demAutor());
+}
+window.demTrocarNome=demTrocarNome;
 function trocarAutorDemanda(){ try{ const a=(prompt('Seu nome:', localStorage.getItem('mc_demanda_autor')||'')||'').trim(); if(a){ localStorage.setItem('mc_demanda_autor',a); const t=document.querySelector('.screen.active')?.id; if(t==='s-demandas')renderDemandas(); if(t==='s-demanda-det')renderDemandaDet(); } }catch(e){} }
 
 function _demStatusInfo(s){
@@ -22771,7 +22815,15 @@ async function qualSalvarTeste(){
 window.qualSalvarTeste=qualSalvarTeste;
 
 async function qualLimparTeste(cod){
-  if(!confirm('Apagar o teste deste produto?')) return;
+  const prods=qualProdutosDoDia(_qualDia,_qualTipo);
+  const pr=prods.find(x=>x.cod===cod)||{nome:cod};
+  const doc0=_qualDoc(_qualDia,_qualTipo);
+  const t=((doc0.itens||{})[cod]||{}).teste||{};
+  const av=QUAL_AVALIACOES.find(x=>x.id===t.avaliacao);
+  if(!confirm('Desfazer o teste de "'+pr.nome+'"?'+
+    (av?('\n\nEstá como: '+av.nome+(t.por?(' · '+t.por):'')):'')+
+    (qualFoto(_qualDia,_qualTipo,cod)?'\n\nA foto também será apagada.':'')+
+    '\n\nO produto volta para a lista de pendentes.')) return;
   const chave=_qualChave(_qualDia,_qualTipo);
   const d=_qualDoc(_qualDia,_qualTipo);
   const itens={...(d.itens||{})};
@@ -22851,7 +22903,10 @@ function _qualRenderDia(){
                 (t.obs?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:pre-wrap;">'+t.obs+'</span>':'')+
                 '<span style="display:block;font-size:10px;color:var(--text-muted);margin-top:3px;">'+(t.em||'')+(t.por?(' · '+t.por):'')+'</span>'+
               '</span>'+
-              '<button onclick="qualAbrirTeste(\''+escapeJsStr(pr.cod)+'\')" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer;font-family:inherit;">✏️</button>'+
+              '<span style="flex:0 0 auto;display:flex;gap:5px;">'+
+                '<button onclick="qualAbrirTeste(\''+escapeJsStr(pr.cod)+'\')" title="Editar o teste" style="background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;">✏️</button>'+
+                '<button onclick="qualLimparTeste(\''+escapeJsStr(pr.cod)+'\')" title="Desfazer o teste" style="background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:7px 10px;font-size:12px;cursor:pointer;font-family:inherit;">🗑</button>'+
+              '</span>'+
             '</div>'
           : '<button onclick="qualAbrirTeste(\''+escapeJsStr(pr.cod)+'\')" style="width:100%;background:#fff;border:1px dashed var(--border-md,#cbd5e1);color:var(--text-secondary);border-radius:9px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔬 Registrar o teste</button>')+
       '</div>'+
@@ -26470,6 +26525,35 @@ async function amEnviar(){
 window.amEnviar=amEnviar;
 
 /* ── LISTA DO COMERCIAL ────────────────────────────────────────── */
+/* Corrigir o nome do cliente sem refazer a amostra inteira.
+   Fica registrado o nome anterior, para ninguém se perder depois. */
+function amPodeEditarCliente(a){
+  if(!a) return false;
+  if(a.status==='recusada') return false;
+  return window.adminMode===true || window.setorAtual==='admin' ||
+         window.setorAtual==='comercial' || window.setorAtual==='simone';
+}
+window.amPodeEditarCliente=amPodeEditarCliente;
+
+async function amTrocarCliente(id){
+  const a=(amostras||[]).find(x=>x.firestoreId===id); if(!a) return;
+  if(!amPodeEditarCliente(a)){ alert('Só quem pediu a amostra pode corrigir o cliente.'); return; }
+  const novo=prompt('Nome do cliente:', a.cliente||'');
+  if(novo===null) return;
+  const t=String(novo).trim();
+  if(!t){ alert('Informe o nome.'); return; }
+  if(t===a.cliente) return;
+  try{
+    await updateDoc(doc(db,'amostras',id), {
+      cliente:t,
+      clienteAnterior:a.cliente||'',
+      clienteCorrigidoEm:agora(),
+      clienteCorrigidoPor:_demAutor()
+    });
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.amTrocarCliente=amTrocarCliente;
+
 function amCard(a, paraEmbalagem){
   const st=AM_STATUS[a.status]||AM_STATUS.pendente;
   const dias=amDiasAte(a.entrega);
@@ -26574,7 +26658,10 @@ function amAbrir(id, paraEmbalagem){
   ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:620px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
     '<div style="padding:16px 18px 10px;border-bottom:1px solid var(--border);">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'+
-        '<div style="flex:1;min-width:0;font-size:18px;font-weight:900;">'+a.cliente+'</div>'+
+        '<div style="flex:1;min-width:0;font-size:18px;font-weight:900;">'+a.cliente+
+      (amPodeEditarCliente(a)?'<button onclick="amTrocarCliente(\''+escapeJsStr(a.firestoreId)+'\')" title="Corrigir o nome do cliente" style="background:none;border:none;color:var(--mc-azul,#2563eb);font-size:13px;cursor:pointer;padding:0 0 0 7px;font-family:inherit;">✏️</button>':'')+
+      (a.clienteAnterior?'<div style="font-size:10px;font-weight:400;color:var(--text-muted);">antes: '+a.clienteAnterior+'</div>':'')+
+    '</div>'+
         '<div style="display:flex;align-items:center;gap:8px;flex:0 0 auto;">'+
           '<div style="font-size:11px;font-weight:800;color:'+st.cor+';">'+st.ico+' '+st.txt+'</div>'+
           '<button onclick="amImprimir(\''+a.firestoreId+'\')" title="Imprimir amostra" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:16px;cursor:pointer;font-family:inherit;">🖨️</button>'+
