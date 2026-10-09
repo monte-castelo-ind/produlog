@@ -782,6 +782,11 @@
       .cf-tab th:first-child, .cf-tab td:first-child{ min-width:104px; }
       .cf-tab input{ width:56px !important; }
     }
+
+    /* O logo é atalho para o início: a mãozinha avisa que dá para clicar */
+    .mc-brand-logo{ cursor:pointer; transition:opacity .12s; }
+    .mc-brand-logo:hover{ opacity:.75; }
+    .mc-brand-logo:active{ opacity:.55; }
 </style>
 </head>
 <body>
@@ -797,7 +802,7 @@
     <!-- Header padrão Monte Castelo -->
     <div class="mc-header">
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Panificadora</div>
@@ -906,6 +911,14 @@
           </div>
           <span class="mc-sector-arrow">›</span>
         </button>
+        <button class="mc-sector-card" onclick="abrirPin('patrick')">
+          <div class="mc-sector-icon indigo">🧭</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Patrick</div>
+            <div class="mc-sector-desc">Controles di&aacute;rios, estoque e retornos</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
         <button class="mc-sector-card" onclick="abrirPin('simone')">
           <div class="mc-sector-icon indigo">💼</div>
           <div class="mc-sector-info">
@@ -949,7 +962,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Matérias-Primas</div>
@@ -1004,7 +1017,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Rastreamento</div>
@@ -1045,7 +1058,7 @@
   <div class="screen" id="s-estoque-coz">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Cozinha</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Cozinha</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Estoque de Recheios</div><div class="mc-page-sub">Saldo em tempo real</div></div>
       <div class="mc-header-actions"><button class="mc-act-btn-secondary" onclick="abrirDescarteEstoque('recheio','Cozinha')">🗑️ Descartar</button></div>
@@ -1057,7 +1070,7 @@
   <div class="screen" id="s-estoque-conf">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Confeitaria</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Confeitaria</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Estoque</div><div class="mc-page-sub">Massas e recheios · tempo real</div></div>
       <div class="mc-header-actions"><button class="mc-act-btn-secondary" onclick="abrirDescarteEstoque('massa','Confeitaria')">🗑️ Descartar</button></div>
@@ -1069,7 +1082,7 @@
   <div class="screen" id="s-estoque-descarte">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltarDescarte()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title" id="descarte-titulo">🗑️ Descartar</div><div class="mc-page-sub">Baixa de estoque com justificativa</div></div>
     </div>
@@ -1106,7 +1119,7 @@
   <div class="screen" id="s-estoque-admin">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Controle de Estoque</div><div class="mc-page-sub">Massas e recheios</div></div>
     </div>
@@ -1122,7 +1135,7 @@
   <div class="screen" id="s-estoque-mov">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltarMov()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📊 Movimentação</div><div class="mc-page-sub">Entradas, consumos, descartes e ajustes</div></div>
     </div>
@@ -1162,7 +1175,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Confeitaria</div>
@@ -1324,7 +1337,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Confeitaria</div>
@@ -1345,7 +1358,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Lançamento</div>
@@ -1377,7 +1390,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Lançamento</div>
@@ -1408,7 +1421,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Lançamento</div>
@@ -1469,7 +1482,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Registros</div>
@@ -1490,7 +1503,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Confeitaria</div>
@@ -1522,7 +1535,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Confeitaria</div>
@@ -1565,7 +1578,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Cozinha</div>
@@ -1687,7 +1700,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Cozinha</div>
@@ -1719,7 +1732,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Cozinha</div>
@@ -1762,7 +1775,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Cozinha</div>
@@ -1783,7 +1796,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Embalagem</div>
@@ -1878,7 +1891,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Embalagem</div>
@@ -1900,7 +1913,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Inconformidades</div>
@@ -1923,7 +1936,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Inconformidade</div>
@@ -1946,7 +1959,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Embalagem</div>
@@ -1977,7 +1990,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Embalagem</div>
@@ -2016,7 +2029,7 @@
     <div class="mc-header">
       <button class="mc-header-back" id="exp-view-back" onclick="goTo('s-conf-home')">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Expedição</div>
@@ -2036,7 +2049,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Expedição</div>
@@ -2057,7 +2070,7 @@
     <div class="mc-header" id="presenca-form-topbar">
       <button class="mc-header-back" id="presenca-form-back" onclick="voltarPresenca()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Presença</div>
@@ -2077,7 +2090,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Confeitaria</div>
@@ -2098,7 +2111,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Cozinha</div>
@@ -2119,7 +2132,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Embalagem</div>
@@ -2141,7 +2154,7 @@
     <div class="mc-header" id="manut-topbar">
       <button class="mc-header-back" id="manut-back-btn" onclick="voltarManut()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Manutenção</div>
@@ -2161,7 +2174,7 @@
     <div class="mc-header" id="manut-nova-topbar">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Nova Máquina</div>
@@ -2191,7 +2204,7 @@
     <div class="mc-header" id="manut-maq-topbar">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Máquina</div>
@@ -2211,7 +2224,7 @@
     <div class="mc-header" id="manut-lanc-topbar">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Nova Manutenção</div>
@@ -2270,7 +2283,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltarPlano()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Plano da Semana</div>
@@ -2296,7 +2309,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltarPlanoQuadra()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Plano da Quadra</div>
@@ -2318,7 +2331,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Rafael</div>
@@ -2373,7 +2386,7 @@
   <div class="screen" id="s-req-rafael">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📥 Requisições</div><div class="mc-page-sub">Receber e conferir compras</div></div>
     </div>
@@ -2384,7 +2397,7 @@
   <div class="screen" id="s-req-admin">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📥 Requisições (acompanhamento)</div><div class="mc-page-sub">Recebimentos do Rafael</div></div>
     </div>
@@ -2396,7 +2409,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Farinhas</div>
@@ -2416,7 +2429,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Farinhas</div>
@@ -2437,7 +2450,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Farinhas</div>
@@ -2457,7 +2470,7 @@
   <div class="screen" id="s-pf">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Expedição</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Expedição</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📄 Pedidos por fora</div><div class="mc-page-sub">Um lançamento por dia</div></div>
     </div>
@@ -2468,7 +2481,7 @@
   <div class="screen" id="s-lib">
     <div class="mc-header">
       <button class="mc-header-back" onclick="libVoltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Liberação</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Liberação</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🚚 Liberação do contêiner</div><div class="mc-page-sub">Produtos controlados · embalagem ou confeitaria libera</div></div>
     </div>
@@ -2478,7 +2491,7 @@
   <div class="screen" id="s-emb-alt">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Alterações do embalado</div><div class="mc-page-sub">Mudanças depois de finalizado</div></div>
     </div>
@@ -2489,7 +2502,7 @@
   <div class="screen" id="s-emb-cfped">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Embalagem</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Embalagem</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🤝 Pedidos C&amp;F</div><div class="mc-page-sub">Marque conforme for fazendo</div></div>
     </div>
@@ -2500,7 +2513,7 @@
   <div class="screen" id="s-cfped">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🤝 Pedidos C&amp;F</div><div class="mc-page-sub">Por loja e data de entrega</div></div>
     </div>
@@ -2511,7 +2524,7 @@
   <div class="screen" id="s-ajcont">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Contagem</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Contagem</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">⚖️ Ajustes de Contagem</div><div class="mc-page-sub">ELIGO × contagem do app</div></div>
     </div>
@@ -2522,7 +2535,7 @@
   <div class="screen" id="s-cdq">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Quadra</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Quadra</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🍞 Controle Diário Quadra</div><div class="mc-page-sub">Consumo de kits × embalado</div></div>
     </div>
@@ -2533,7 +2546,7 @@
   <div class="screen" id="s-ret">
     <div class="mc-header">
       <button class="mc-header-back" onclick="retVoltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">↩️ Retorno de Mercadorias</div><div class="mc-page-sub">Produtos que voltaram das rotas</div></div>
       <div class="mc-header-actions">
@@ -2548,7 +2561,7 @@
   <div class="screen" id="s-ret-form">
     <div class="mc-header">
       <button class="mc-header-back" onclick="retSairForm()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">↩️ Novo retorno</div><div class="mc-page-sub" id="ret-form-sub">Dados da rota</div></div>
     </div>
@@ -2558,7 +2571,7 @@
   <div class="screen" id="s-ret-val">
     <div class="mc-header">
       <button class="mc-header-back" onclick="retVoltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Confeitaria</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Confeitaria</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🔍 Validar retornos</div><div class="mc-page-sub">Dar destino ao que voltou</div></div>
     </div>
@@ -2568,7 +2581,7 @@
   <div class="screen" id="s-ret-hist">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Retornos</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📚 Histórico de retornos</div><div class="mc-page-sub">Tudo que já foi resolvido</div></div>
     </div>
@@ -2579,7 +2592,7 @@
   <div class="screen" id="s-am">
     <div class="mc-header">
       <button class="mc-header-back" onclick="amVoltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧪 Pedidos Amostra</div><div class="mc-page-sub">Solicitação de amostras para clientes</div></div>
       <div class="mc-header-actions">
@@ -2594,7 +2607,7 @@
   <div class="screen" id="s-am-form">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title" id="am-form-titulo">🧪 Nova amostra</div><div class="mc-page-sub">Informe as unidades de cada produto</div></div>
     </div>
@@ -2605,7 +2618,7 @@
   <div class="screen" id="s-am-emb">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Embalagem</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Embalagem</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧪 Amostras</div><div class="mc-page-sub">Solicitações e amostras a produzir</div></div>
     </div>
@@ -2616,7 +2629,7 @@
   <div class="screen" id="s-est-hub">
     <div class="mc-header">
       <button class="mc-header-back" onclick="estVoltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏬 Estoque & Contêiner</div><div class="mc-page-sub">Visão geral em tempo real</div></div>
       <div class="mc-header-actions">
@@ -2630,7 +2643,7 @@
   <div class="screen" id="s-est-interno">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Estoque da empresa</div><div class="mc-page-sub">Dentro da fábrica</div></div>
     </div>
@@ -2641,7 +2654,7 @@
   <div class="screen" id="s-est-container">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🚛 Estoque da rua</div><div class="mc-page-sub">Reserva no contêiner</div></div>
     </div>
@@ -2652,7 +2665,7 @@
   <div class="screen" id="s-est-mov">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Movimentações</div><div class="mc-page-sub">Tudo que entrou e saiu</div></div>
     </div>
@@ -2663,7 +2676,7 @@
   <div class="screen" id="s-est-prod">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Produtos controlados</div><div class="mc-page-sub">Quais entram no controle</div></div>
     </div>
@@ -2674,7 +2687,7 @@
   <div class="screen" id="s-est-config">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Estoque</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🔧 Configurações</div><div class="mc-page-sub">Capacidade, corte e senha</div></div>
     </div>
@@ -2685,7 +2698,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Container</div>
@@ -2709,7 +2722,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Container</div>
@@ -2732,7 +2745,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Container</div>
@@ -2779,7 +2792,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Container</div>
@@ -2801,7 +2814,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Quadra</div>
@@ -2866,7 +2879,7 @@
   <div class="screen" id="s-quadra-kits-prod">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Quadra</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Quadra</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Produzir kits</div><div class="mc-page-sub">Gera estoque de kits</div></div>
     </div>
@@ -2878,7 +2891,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Quadra</div>
@@ -2909,7 +2922,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Quadra</div>
@@ -2937,7 +2950,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Quadra</div>
@@ -2958,7 +2971,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Quadra</div>
@@ -2980,7 +2993,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="window.setorAtual==='simone'?goTo('s-simone-home'):(window.adminMode?goTo('s-adm-hub'):goTo('s-inicio'))">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Testes MP</div>
@@ -3013,7 +3026,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Pendência de Teste</div>
@@ -3036,7 +3049,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Testes MP</div>
@@ -3057,7 +3070,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Testes MP</div>
@@ -3114,7 +3127,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Testes MP</div>
@@ -3171,7 +3184,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Expedição</div>
@@ -3194,7 +3207,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Expedição</div>
@@ -3217,7 +3230,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="expManualVoltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Expedição</div>
@@ -3245,7 +3258,7 @@
     <!-- Header padrão -->
     <div class="mc-header">
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Administrativo</div>
@@ -3266,17 +3279,7 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
       <div class="agenda-aviso" style="display:none;"></div>
 
-      <div class="mc-section-header" style="margin-top:0;">🗂️ Cadastros</div>
-      <button class="mc-sector-card" style="border-left:4px solid var(--mc-cinza,#64748b);margin-bottom:10px;" onclick="goTo('s-adm-cadastros')">
-        <div class="mc-sector-icon" style="background:#e2e8f0;">🗂️</div>
-        <div class="mc-sector-info">
-          <div class="mc-sector-title">Cadastros &amp; Configurações</div>
-          <div class="mc-sector-desc">Produtos · Kits · Matéria-prima · Senhas · Ajustes</div>
-        </div>
-        <span class="mc-sector-arrow">›</span>
-      </button>
-
-      <div class="mc-section-header">📦 Produção</div>
+      <div class="mc-section-header" style="margin-top:18px;">📦 Produção do dia<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">o que está acontecendo agora</span></div>
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-azul);margin-bottom:10px;" onclick="goTo('s-adm-g-setores')">
         <div class="mc-sector-icon blue">🏭</div>
         <div class="mc-sector-info">
@@ -3285,7 +3288,6 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-verde);margin-bottom:10px;" onclick="goTo('s-adm-g-plan')">
         <div class="mc-sector-icon green">📋</div>
         <div class="mc-sector-info">
@@ -3294,16 +3296,23 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
-      <button class="mc-sector-card" style="border-left:4px solid var(--mc-azul,#2563eb);margin-bottom:10px;" onclick="goTo('s-cpm');renderCpm()">
-        <div class="mc-sector-icon" style="background:#dbeafe;">🏭</div>
+      <button class="mc-sector-card" style="border-left:4px solid #7c3aed;margin-bottom:10px;" onclick="cfPedAbrir()">
+        <div class="mc-sector-icon" style="background:#ede9fe;">🤝</div>
         <div class="mc-sector-info">
-          <div class="mc-sector-title">Controle de Produção</div>
-          <div class="mc-sector-desc">Lançamento manual mensal · exportar Excel</div>
+          <div class="mc-sector-title">Pedidos C&amp;F</div>
+          <div class="mc-sector-desc">Quantidades por loja e data de entrega</div>
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
+      <button class="mc-sector-card" style="border-left:4px solid #0891b2;margin-bottom:10px;" onclick="goTo('s-am')">
+        <div class="mc-sector-icon" style="background:#cffafe;">🧪</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Pedidos Amostra</div>
+          <div class="mc-sector-desc">Solicitações do comercial &middot; produção da embalagem</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <div class="mc-section-header" style="margin-top:18px;">📊 Acompanhamento<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">conferir o que foi produzido e as diferenças</span></div>
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-roxo,#7c3aed);margin-bottom:10px;" onclick="cdcAbrir('admin')">
         <div class="mc-sector-icon" style="background:#ede9fe;">📊</div>
         <div class="mc-sector-info">
@@ -3312,7 +3321,6 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-dourado,#d97706);margin-bottom:10px;" onclick="cdqAbrir()">
         <div class="mc-sector-icon" style="background:#fef3c7;">🍞</div>
         <div class="mc-sector-info">
@@ -3321,12 +3329,28 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
-      <button class="mc-sector-card" style="border-left:4px solid #7c3aed;margin-bottom:10px;" onclick="cfPedAbrir()">
-        <div class="mc-sector-icon" style="background:#ede9fe;">🤝</div>
+      <button class="mc-sector-card" style="border-left:4px solid var(--mc-azul,#2563eb);margin-bottom:10px;" onclick="goTo('s-cpm');renderCpm()">
+        <div class="mc-sector-icon" style="background:#dbeafe;">🏭</div>
         <div class="mc-sector-info">
-          <div class="mc-sector-title">Pedidos C&amp;F</div>
-          <div class="mc-sector-desc">Quantidades por loja e data de entrega</div>
+          <div class="mc-sector-title">Controle de Produção</div>
+          <div class="mc-sector-desc">Lançamento manual mensal · exportar Excel</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <button class="mc-sector-card" style="border-left:4px solid #2563eb;margin-bottom:10px;" onclick="goTo('s-emb-alt')">
+        <div class="mc-sector-icon" style="background:#dbeafe;">✏️</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Alterações do embalado</div>
+          <div class="mc-sector-desc">Quantidades mudadas depois de finalizadas</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <div class="mc-section-header" style="margin-top:18px;">⚖️ Estoque e ajustes<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">saldos, liberações e acertos com o ERP</span></div>
+      <button class="mc-sector-card" style="border-left:4px solid #7c3aed;margin-bottom:10px;" onclick="goTo('s-est-hub')">
+        <div class="mc-sector-icon" style="background:#ede9fe;">🏬</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Estoque &amp; Contêiner <span id="est-badge-adm" style="display:none;background:var(--mc-vermelho,#dc2626);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px;">0</span></div>
+          <div class="mc-sector-desc">Estoque em tempo real · Reserva na rua · Migração · Movimentações</div>
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
@@ -3338,7 +3362,6 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
       <button class="mc-sector-card" style="border-left:4px solid #0891b2;margin-bottom:10px;" onclick="goTo('s-ajref');renderAjRef()">
         <div class="mc-sector-icon" style="background:#cffafe;">🔄</div>
         <div class="mc-sector-info">
@@ -3347,16 +3370,6 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
-      <button class="mc-sector-card" style="border-left:4px solid #2563eb;margin-bottom:10px;" onclick="goTo('s-emb-alt')">
-        <div class="mc-sector-icon" style="background:#dbeafe;">✏️</div>
-        <div class="mc-sector-info">
-          <div class="mc-sector-title">Alterações do embalado</div>
-          <div class="mc-sector-desc">Quantidades mudadas depois de finalizadas</div>
-        </div>
-        <span class="mc-sector-arrow">›</span>
-      </button>
-
       <button class="mc-sector-card" style="border-left:4px solid #dc2626;margin-bottom:10px;" onclick="goTo('s-ret')">
         <div class="mc-sector-icon" style="background:#fee2e2;">↩️</div>
         <div class="mc-sector-info">
@@ -3365,35 +3378,7 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
-      <button class="mc-sector-card" style="border-left:4px solid #0891b2;margin-bottom:10px;" onclick="goTo('s-am')">
-        <div class="mc-sector-icon" style="background:#cffafe;">🧪</div>
-        <div class="mc-sector-info">
-          <div class="mc-sector-title">Pedidos Amostra</div>
-          <div class="mc-sector-desc">Solicitações do comercial &middot; produção da embalagem</div>
-        </div>
-        <span class="mc-sector-arrow">›</span>
-      </button>
-
-      <div class="mc-section-header">🛒 Suprimentos</div>
-      <button class="mc-sector-card" style="border-left:4px solid #7c3aed;margin-bottom:10px;" onclick="goTo('s-est-hub')">
-        <div class="mc-sector-icon" style="background:#ede9fe;">🏬</div>
-        <div class="mc-sector-info">
-          <div class="mc-sector-title">Estoque &amp; Contêiner <span id="est-badge-adm" style="display:none;background:var(--mc-vermelho,#dc2626);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px;">0</span></div>
-          <div class="mc-sector-desc">Estoque em tempo real · Reserva na rua · Migração · Movimentações</div>
-        </div>
-        <span class="mc-sector-arrow">›</span>
-      </button>
-
-      <button class="mc-sector-card" style="border-left:4px solid var(--mc-dourado);margin-bottom:10px;" onclick="goTo('s-adm-g-mp')">
-        <div class="mc-sector-icon" style="background:#fef3c7;">🧪</div>
-        <div class="mc-sector-info">
-          <div class="mc-sector-title">Matéria-Prima &amp; Estoque <span class="hubc-mp" style="display:none;background:var(--mc-roxo);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px;align-items:center;">0</span></div>
-          <div class="mc-sector-desc">Simulador · Rastreamento · Testes · Estoque · Contagem · Agenda</div>
-        </div>
-        <span class="mc-sector-arrow">›</span>
-      </button>
-
+      <div class="mc-section-header" style="margin-top:18px;">🛒 Compras e matéria-prima<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">o que entra na empresa</span></div>
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-laranja);margin-bottom:10px;" onclick="goTo('s-adm-g-log')">
         <div class="mc-sector-icon" style="background:#ffedd5;">🛒</div>
         <div class="mc-sector-info">
@@ -3402,8 +3387,23 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
-      <div class="mc-section-header">📊 Gestão</div>
+      <button class="mc-sector-card" style="border-left:4px solid var(--mc-dourado);margin-bottom:10px;" onclick="goTo('s-adm-g-mp')">
+        <div class="mc-sector-icon" style="background:#fef3c7;">🧪</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Matéria-Prima &amp; Estoque <span class="hubc-mp" style="display:none;background:var(--mc-roxo);color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px;align-items:center;">0</span></div>
+          <div class="mc-sector-desc">Simulador · Rastreamento · Testes · Estoque · Contagem · Agenda</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <div class="mc-section-header" style="margin-top:18px;">🗂️ Gestão e cadastros<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">equipe, relatórios e configuração</span></div>
+      <button class="mc-sector-card" onclick="pautaAbrir()">
+        <div class="mc-sector-icon" style="background:#fef3c7;">📋</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Assuntos Pendentes</div>
+          <div class="mc-sector-desc">Pauta da reuni&atilde;o &middot; o que precisa ser resolvido</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-roxo);margin-bottom:10px;" onclick="goTo('s-adm-g-gestao')">
         <div class="mc-sector-icon purple">✅</div>
         <div class="mc-sector-info">
@@ -3412,7 +3412,6 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-indigo);margin-bottom:10px;" onclick="goTo('s-adm-g-rel')">
         <div class="mc-sector-icon indigo">📊</div>
         <div class="mc-sector-info">
@@ -3421,6 +3420,15 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
+      <button class="mc-sector-card" style="border-left:4px solid var(--mc-cinza,#64748b);margin-bottom:10px;" onclick="goTo('s-adm-cadastros')">
+        <div class="mc-sector-icon" style="background:#e2e8f0;">🗂️</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Cadastros &amp; Configurações</div>
+          <div class="mc-sector-desc">Produtos · Kits · Matéria-prima · Senhas · Ajustes</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+    
 
     </div>
   </div>
@@ -3429,7 +3437,7 @@
   <div class="screen" id="s-adm-g-setores">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Setores de Produção</div><div class="mc-page-sub">Acessar qualquer setor</div></div>
     </div>
@@ -3471,7 +3479,7 @@
   <div class="screen" id="s-adm-g-plan">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Planejamento &amp; Produção</div><div class="mc-page-sub">Plano, controle e painel</div></div>
     </div>
@@ -3508,7 +3516,7 @@
   <div class="screen" id="s-adm-g-mp">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧪 Matéria-Prima &amp; Estoque</div><div class="mc-page-sub">Simulação, rastreio e contagem</div></div>
     </div>
@@ -3551,7 +3559,7 @@
   <div class="screen" id="s-adm-g-log">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🛒 Compras &amp; Logística</div><div class="mc-page-sub">Pedidos e carregamentos</div></div>
     </div>
@@ -3593,7 +3601,7 @@
   <div class="screen" id="s-adm-g-gestao">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✅ Gestão &amp; Tarefas</div><div class="mc-page-sub">Demandas e solicitações</div></div>
     </div>
@@ -3620,7 +3628,7 @@
   <div class="screen" id="s-adm-g-rel">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📊 Relatórios &amp; Equipe</div><div class="mc-page-sub">Dados, presença e manutenção</div></div>
     </div>
@@ -3646,7 +3654,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Presenças</div>
@@ -3694,7 +3702,7 @@
   <div class="screen" id="s-adm-cadastros">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🗂️ Cadastros & Configurações</div><div class="mc-page-sub">Bases, produtos e ajustes do sistema</div></div>
     </div>
@@ -3783,7 +3791,7 @@
   <div class="screen" id="s-ajref">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🔄 Ajustes de Refazimento</div><div class="mc-page-sub">Conferência de pendentes por dia</div></div>
     </div>
@@ -3795,7 +3803,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Custos</div>
@@ -3854,7 +3862,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Custos</div>
@@ -3956,7 +3964,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Buscar Produto</div>
@@ -3986,7 +3994,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Kits & Receitas</div>
@@ -4009,7 +4017,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Kit</div>
@@ -4032,7 +4040,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Produto</div>
@@ -4055,7 +4063,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Produtos Confeitaria</div>
@@ -4080,7 +4088,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Produto</div>
@@ -4103,7 +4111,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Massas & Recheios</div>
@@ -4123,7 +4131,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Ficha Técnica</div>
@@ -4163,7 +4171,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Segurança</div>
@@ -4184,7 +4192,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Segurança</div>
@@ -4219,7 +4227,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Itens de Contagem</div>
@@ -4238,7 +4246,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Itens de Contagem</div>
@@ -4261,7 +4269,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Farinhas</div>
@@ -4281,7 +4289,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="goTo(window.setorAtual==='simone'?'s-simone-home':'s-rafael-home')">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Devoluções</div>
@@ -4303,7 +4311,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Devolução</div>
@@ -4326,7 +4334,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="(function(){const o=window.prioridadesOrigem;window.prioridadesOrigem=null;if(o){goTo(o);}else if(window.adminMode){goTo('s-adm-hub');}else{goTo('s-inicio');}})()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Prioridades</div>
@@ -4348,7 +4356,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Prioridade</div>
@@ -4366,12 +4374,106 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="prioridade-form-content"></div>
   </div>
 
+  <!-- ASSUNTOS PENDENTES -->
+  <div class="screen" id="s-pauta">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Pauta</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title">📋 Assuntos Pendentes</div><div class="mc-page-sub">O que precisamos resolver</div></div>
+      <div class="mc-header-actions">
+        <button class="mc-act-btn-primary" onclick="pautaNovo()">+ Assunto</button>
+      </div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="pauta-content"></div>
+  </div>
+
+  <!-- PATRICK - PROCESSOS INTERNOS -->
+  <div class="screen" id="s-patrick-home">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Patrick</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">🧭 Patrick</div>
+        <div class="mc-page-sub">Controle de processos</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
+      <div class="mc-section-header">📋 Pauta</div>
+      <div class="mc-sector-grid">
+        <button class="mc-sector-card" onclick="pautaAbrir()">
+          <div class="mc-sector-icon" style="background:#fef3c7;">📋</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Assuntos Pendentes <span class="pauta-badge" style="display:none;background:#dc2626;color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px;">0</span></div>
+            <div class="mc-sector-desc">O que precisamos resolver &middot; reuni&atilde;o semanal</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+      </div>
+
+      <div class="mc-section-header" style="margin-top:18px;">📊 Acompanhamento</div>
+      <div class="mc-sector-grid">
+        <button class="mc-sector-card" onclick="cdcAbrir('admin')">
+          <div class="mc-sector-icon purple">📊</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Controle Diário Confeitaria</div>
+            <div class="mc-sector-desc">Massa, recheio, produzido, embalado e quebra por dia</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="mc-sector-card" onclick="cdqAbrir()">
+          <div class="mc-sector-icon" style="background:#fef3c7;">🍞</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Controle Diário Quadra</div>
+            <div class="mc-sector-desc">Kits consumidos &times; embalado &middot; quebra por kit</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="mc-sector-card" onclick="cfPedAbrir()">
+          <div class="mc-sector-icon" style="background:#ede9fe;">🤝</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Pedidos C&amp;F</div>
+            <div class="mc-sector-desc">Consulta &middot; quantidades por loja e entrega</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+      </div>
+
+      <div class="mc-section-header" style="margin-top:18px;">⚖️ Estoque e retornos</div>
+      <div class="mc-sector-grid">
+        <button class="mc-sector-card" onclick="goTo('s-est-hub')">
+          <div class="mc-sector-icon blue">🏬</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Estoque &amp; Contêiner</div>
+            <div class="mc-sector-desc">Saldos, entradas, migra&ccedil;&atilde;o e movimenta&ccedil;&otilde;es</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="mc-sector-card" onclick="goTo('s-ret')">
+          <div class="mc-sector-icon red">↩️</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Retorno de Mercadorias <span class="ret-badge" style="display:none;background:#dc2626;color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px;">0</span></div>
+            <div class="mc-sector-desc">Registrar, dar destino e acompanhar</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- SIMONE - FINANCEIRO -->
   <div class="screen" id="s-simone-home">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Simone - Financeiro</div>
@@ -4418,7 +4520,7 @@
   <div class="screen" id="s-compras">
     <div class="mc-header">
       <button class="mc-header-back" onclick="goTo(window.setorAtual==='simone'?'s-simone-home':'s-adm-hub')">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Compras</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Compras</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🛒 Pedidos de Matéria-Prima</div><div class="mc-page-sub">Por fornecedor</div></div>
       <div class="mc-header-actions">
@@ -4432,7 +4534,7 @@
   <div class="screen" id="s-compra-forn">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Pedido</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Pedido</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📝 Montar pedido</div><div class="mc-page-sub">Quantidade · kg · preço</div></div>
     </div>
@@ -4443,7 +4545,7 @@
   <div class="screen" id="s-compras-fornlist">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Fornecedores</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Fornecedores</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏢 Fornecedores</div><div class="mc-page-sub">Contato e dados · v2</div></div>
     </div>
@@ -4454,7 +4556,7 @@
   <div class="screen" id="s-compra-forncad">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Fornecedor</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Fornecedor</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏢 Dados do fornecedor</div><div class="mc-page-sub">Contato, vendedor, entrega</div></div>
     </div>
@@ -4465,7 +4567,7 @@
   <div class="screen" id="s-compras-hist">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Histórico</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Histórico</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Histórico de pedidos</div><div class="mc-page-sub">Todos os fornecedores</div></div>
     </div>
@@ -4476,7 +4578,7 @@
   <div class="screen" id="s-carreg">
     <div class="mc-header">
       <button class="mc-header-back" onclick="goTo(window.setorAtual==='carregamento'?'s-inicio':'s-adm-g-log')">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Expedição</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Expedição</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📦 Carregamentos</div><div class="mc-page-sub">Conferência por bipagem</div></div>
       <div class="mc-header-actions">
@@ -4492,7 +4594,7 @@
   <div class="screen" id="s-carreg-edit">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Carregamento</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Carregamento</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📝 Montar carregamento</div><div class="mc-page-sub">Produtos e quantidades</div></div>
     </div>
@@ -4503,7 +4605,7 @@
   <div class="screen" id="s-agenda">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Agenda</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Agenda</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🗓️ Agenda de Contagens</div><div class="mc-page-sub">Aviso 3 dias antes</div></div>
     </div>
@@ -4517,7 +4619,7 @@
 <div class="screen" id="s-la-dias">
   <div class="mc-header">
     <button class="mc-header-back" onclick="voltar()">‹</button>
-    <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+    <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">✅ Dias lançados no ERP</div><div class="mc-page-sub">Linha de corte da produção</div></div>
   </div>
@@ -4528,7 +4630,7 @@
 <div class="screen" id="s-la-solicitar">
   <div class="mc-header">
     <button class="mc-header-back" onclick="voltar()">‹</button>
-    <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
+    <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Comercial</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">📝 Solicitar produto</div><div class="mc-page-sub">Pedido de liberação antecipada</div></div>
     <div class="mc-header-actions">
@@ -4542,7 +4644,7 @@
 <div class="screen" id="s-la-decisao">
   <div class="mc-header">
     <button class="mc-header-back" onclick="voltar()">‹</button>
-    <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+    <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">⚖️ Decidir solicitações</div><div class="mc-page-sub">Aprovar ou negar liberações</div></div>
   </div>
@@ -4553,7 +4655,7 @@
 <div class="screen" id="s-la-resumo">
   <div class="mc-header">
     <button class="mc-header-back" onclick="voltar()">‹</button>
-    <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Liberação</div></div></div>
+    <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Liberação</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">📊 Resumo dos ajustes</div><div class="mc-page-sub">Soma do que está em aberto, por produto</div></div>
   </div>
@@ -4563,7 +4665,7 @@
 <div class="screen" id="s-la-ajustes">
   <div class="mc-header">
     <button class="mc-header-back" onclick="voltar()">‹</button>
-    <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+    <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
     <div class="mc-divider-v"></div>
     <div class="mc-page-info"><div class="mc-page-title">↩ Ajustes em aberto</div><div class="mc-page-sub">Controle de entradas/saídas</div></div>
   </div>
@@ -4573,7 +4675,7 @@
   <div class="screen" id="s-perdas">
     <div class="mc-header">
       <button class="mc-header-back" onclick="perdaSetor==='quadra'?goTo('s-quadra-home'):goTo('s-conf-home')">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub" id="perdas-sub">Perdas</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub" id="perdas-sub">Perdas</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📉 Perdas de produção</div><div class="mc-page-sub">Produzido × embalado</div></div>
     </div>
@@ -4583,7 +4685,7 @@
   <div class="screen" id="s-cdc">
     <div class="mc-header">
       <button class="mc-header-back" onclick="cdcVoltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📊 Controle Diário Confeitaria</div><div class="mc-page-sub">Resumo por dia</div></div>
     </div>
@@ -4597,7 +4699,7 @@
   <div class="screen" id="s-cpm">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏭 Controle de Produção</div><div class="mc-page-sub">Lançamento mensal manual</div></div>
     </div>
@@ -4607,7 +4709,7 @@
   <div class="screen" id="s-ctrl-prod">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Admin</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Controle de Produção</div><div class="mc-page-sub">Conferência de lançamentos</div></div>
     </div>
@@ -4618,7 +4720,7 @@
   <div class="screen" id="s-eans">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Cadastro</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Cadastro</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🏷️ Códigos de barras</div><div class="mc-page-sub">EAN de cada produto</div></div>
     </div>
@@ -4629,7 +4731,7 @@
   <div class="screen" id="s-carreg-conf">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Conferência</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Conferência</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📡 Bipagem</div><div class="mc-page-sub">Leitura de código de barras</div></div>
     </div>
@@ -4648,7 +4750,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Estoque Embalagem</div>
@@ -4671,7 +4773,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Estoque</div>
@@ -4694,7 +4796,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Status Geral</div>
@@ -4716,7 +4818,7 @@
   <div class="screen" id="s-painel-proto">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Gerencial</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Gerencial</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧪 Painel (protótipo)</div><div class="mc-page-sub">Visão de KPIs e gráficos</div></div>
       <div class="mc-header-actions"><button class="mc-act-btn-secondary" onclick="renderPainelProto()">↻ Atualizar</button></div>
@@ -4728,7 +4830,7 @@
   <div class="screen" id="s-painel">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Gerencial</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Gerencial</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📊 Painel Gerencial</div><div class="mc-page-sub">Indicadores e pendências</div></div>
       <div class="mc-header-actions"><button class="mc-act-btn-secondary" onclick="renderPainel()">↻ Atualizar</button></div>
@@ -4740,7 +4842,7 @@
   <div class="screen" id="s-sim">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Planejamento</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Planejamento</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🧮 Simulador de Matéria-Prima</div><div class="mc-page-sub">Necessidade por produção</div></div>
     </div>
@@ -4751,7 +4853,7 @@
   <div class="screen" id="s-alt-home">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Alterações de Receita</div><div class="mc-page-sub">Solicite ajustes nas fichas</div></div>
     </div>
@@ -4773,7 +4875,7 @@
   <div class="screen" id="s-alt-lista">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title" id="alt-lista-titulo">Receitas</div><div class="mc-page-sub">Escolha a receita</div></div>
     </div>
@@ -4787,7 +4889,7 @@
   <div class="screen" id="s-alt-editor">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Alterações</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Editar receita</div><div class="mc-page-sub">Ajuste e solicite</div></div>
     </div>
@@ -4798,7 +4900,7 @@
   <div class="screen" id="s-alt-admin">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">✏️ Solicitações de Receita</div><div class="mc-page-sub">Aprovar, negar e histórico</div></div>
     </div>
@@ -4809,7 +4911,7 @@
   <div class="screen" id="s-acomp">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Plano</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Plano</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Acompanhamento do Plano</div><div class="mc-page-sub">O que já foi feito × pendente</div></div>
       <div class="mc-header-actions"><button class="mc-act-btn-secondary" onclick="renderAcomp()">↻ Atualizar</button></div>
@@ -4821,7 +4923,7 @@
   <div class="screen" id="s-acomp-coz">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📋 Acompanhamento — Recheios</div><div class="mc-page-sub">Plano × produzido, por dia</div></div>
       <div class="mc-header-actions"><button class="mc-act-btn-secondary" onclick="renderAcompCoz()">↻ Atualizar</button></div>
@@ -4833,7 +4935,7 @@
   <div class="screen" id="s-demandas">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Administrativo</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">🗂️ Demandas</div><div class="mc-page-sub">Tarefas, assuntos e projetos</div></div>
       <div class="mc-header-actions"><button class="mc-act-btn-primary" onclick="novaDemanda()">+ Nova</button></div>
@@ -4845,7 +4947,7 @@
   <div class="screen" id="s-demanda-det">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
-      <div class="mc-brand"><div class="mc-brand-logo"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Demanda</div></div></div>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Demanda</div></div></div>
       <div class="mc-divider-v"></div>
       <div class="mc-page-info"><div class="mc-page-title">📝 Demanda</div><div class="mc-page-sub">Editar e acompanhar</div></div>
     </div>
@@ -4857,7 +4959,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Contagem</div>
@@ -4941,7 +5043,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Contagem</div>
@@ -4981,7 +5083,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Contagem</div>
@@ -5010,7 +5112,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">Contagem</div>
@@ -5031,7 +5133,7 @@
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand">
-        <div class="mc-brand-logo"></div>
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
         <div class="mc-brand-text">
           <div class="mc-brand-name">Monte Castelo</div>
           <div class="mc-brand-sub">ProduLog</div>
@@ -5153,10 +5255,10 @@ let QUADRA_PRODUTOS = [];
 let QUADRA_KITS_RECEITAS = {};
   let QUADRA_KITS = []; // Lista de nomes de kits da Quadra
 let QUADRA_KIT_MAPPING = {"Kit Massa Especial Mini Sonho": "KIT MASSA ESPECIAL MINI SONHO", "Kit Pão Sovado": "KIT PÃO SOVADO", "Kit Pao De Milho Salgado Cacetinho": "KIT PAO DE MILHO SALGADO CACETINHO", "Kit Cuca Alemã": "KIT CUCA ALEMÃ", "Kit Rosca De Polvilho": "KIT ROSCA DE POLVILHO", "Kit Massa Especial Donuts E Cueca Grande": "KIT MASSA ESPECIAL DONUTS E CUECA GRANDE", "Kit Pão Preto": "KIT PÃO PRETO", "Kit Massa Sonho": "KIT MASSA SONHO", "Kit Massa Especial": "KIT MASSA ESPECIAL", "Kit Massa Doce": "KIT MASSA DOCE", "Kit Pão De Cenoura": "KIT PÃO DE CENOURA", "Kit Cueca Virada": "KIT CUECA VIRADA", "Kit Pão De Leite": "KIT PÃO DE LEITE", "Kit Cuca Colonial": "KIT CUCA COLONIAL", "Kit Pão De Aipim": "KIT PÃO DE AIPIM", "Kit Cuca Frutas": "KIT CUCA FRUTAS", "Kit Cuca Chocolate": "KIT CUCA CHOCOLATE", "Kit Vovo/Gajeta": "KIT VOVO/GAJETA", "Kit Pão De Milho Doce": "KIT PÃO DE MILHO DOCE", "Kit Pão De Batata": "KIT PÃO DE BATATA", "Kit Pão Caseiro": "KIT PÃO CASEIRO", "Kit Raminho": "KIT RAMINHO", "Kit Pão De Milho Salgado": "KIT PÃO DE MILHO SALGADO", "Kit Pão Folhado": "KIT PÃO FOLHADO", "Kit Pão Brioche": "KIT PÃO BRIOCHE", "Kit Pão Integral": "KIT PÃO INTEGRAL", "Kit Grande Premium 6/8": "KIT GRANDE PREMIUM 6/8", "Kit Pão 7 Grãos": "KIT PÃO 7 GRÃOS"};
-let PINS = { confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314', admin:'2504', contagem:'0000', container:'0001', quadra:'2020', testes:'7070', simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030', estoque:'8080' }; // Será carregado do Firebase
-const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde' };
+let PINS = { confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314', admin:'2504', contagem:'0000', container:'0001', quadra:'2020', testes:'7070', simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030', estoque:'8080', patrick:'9090' }; // Será carregado do Firebase
+const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo' };
 const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒' };
-const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub' };
+const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home' };
 
 let pinAtual = '';
 let setorAtivo = '';
@@ -5407,9 +5509,41 @@ function _navRaiz(){
   return (typeof DESTINOS!=='undefined' && DESTINOS[window.setorAtual]) || 's-inicio';
 }
 
+/* O logo leva para o início de quem está usando: o admin para o painel
+   dele, cada setor para a sua própria tela inicial. */
+function irParaInicio(){
+  const destino=_navRaiz();
+  const atual=_navTelaAtual();
+  if(atual===destino){
+    // já está no início do setor: o logo então sai para a tela de setores
+    _navPilha=[];
+    goTo(window.adminMode?'s-adm-hub':'s-inicio', true);
+    return;
+  }
+  _navPilha=[];
+  // limpa os níveis internos das telas que têm lista e detalhe
+  try{
+    if(typeof _pautaSel!=='undefined') _pautaSel='';
+    if(typeof _cfSemSel!=='undefined') _cfSemSel='';
+    if(typeof _embCfSel!=='undefined') _embCfSel='';
+    if(typeof _ajContSel!=='undefined') _ajContSel='';
+  }catch(e){}
+  goTo(destino, true);
+}
+window.irParaInicio=irParaInicio;
+
 function voltar(){
   const atual=_navTelaAtual();
   const raiz=_navRaiz();
+  /* Telas que têm níveis por dentro: o voltar precisa desfazer esse
+     nível antes de sair. Sem isso, abrir um assunto e voltar jogava a
+     pessoa para fora, em vez de devolver à lista. */
+  if(atual==='s-pauta'     && typeof _pautaSel!=='undefined' && _pautaSel){ pautaVoltar(); return; }
+  if(atual==='s-cfped'     && typeof _cfSemSel!=='undefined' && _cfSemSel){ cfVoltarLista(); return; }
+  if(atual==='s-emb-cfped' && typeof _embCfSel!=='undefined' && _embCfSel){ embCfVoltar(); return; }
+  if(atual==='s-ajcont'    && typeof _ajContSel!=='undefined' && _ajContSel){ ajContVoltar(); return; }
+  if(atual==='s-cdq'       && typeof _cdqModo!=='undefined' && _cdqModo==='dia'){ _cdqVoltarLista(); return; }
+  if(atual==='s-cdc'       && typeof _cdcModo!=='undefined' && _cdcModo==='dia'){ _cdcVoltarLista(); return; }
   // na tela inicial do setor, voltar é sair do setor
   if(atual===raiz){ _navPilha=[]; goTo(window.adminMode?'s-adm-hub':'s-inicio', true); return; }
   while(_navPilha.length){
@@ -5502,6 +5636,7 @@ function goTo(id, semHistorico){
   if(id==='s-cdq' && typeof renderCDQ==='function') renderCDQ();
   if(id==='s-ajcont' && typeof renderAjCont==='function') renderAjCont();
   if(id==='s-cfped' && typeof renderCfPed==='function') renderCfPed();
+  if(id==='s-pauta' && typeof renderPauta==='function') renderPauta();
   if(id==='s-emb-cfped' && typeof renderEmbCf==='function') renderEmbCf();
   if(id==='s-perdas') renderPerdas();
   if(id==='s-carreg-edit') renderCarregEdit();
@@ -21167,7 +21302,7 @@ window.cdcAbrir=cdcAbrir;
 function _cdcEhAdmin(){
   if(_cdcVisao==='setor') return false;
   if(_cdcVisao==='admin') return true;
-  return window.adminMode===true || window.setorAtual==='admin';
+  return window.adminMode===true || window.setorAtual==='admin' || window.setorAtual==='patrick';
 }
 
 /* O controle diário é aberto pelo admin, pela confeitaria e pela
@@ -22239,6 +22374,375 @@ async function libEntrarNoContainer(reg, qtd, validade, setor){
 window.libEntrarNoContainer=libEntrarNoContainer;
 
 /* ══════════════════════════════════════════════════════════════════
+   ASSUNTOS PENDENTES
+   Lista do que precisa ser resolvido, para a reunião semanal.
+   Cada assunto tem categoria, prioridade, prazo, responsável e as
+   anotações de cada conversa.
+   Coleção: pautaAssuntos
+   ══════════════════════════════════════════════════════════════════ */
+let pautaAssuntos=[];
+let _pautaFiltro='abertos', _pautaCat='', _pautaBusca='', _pautaSel='';
+
+const PAUTA_CATEGORIAS=[
+  {id:'processo',  nome:'Processo',      icone:'⚙️', cor:'#2563eb'},
+  {id:'estoque',   nome:'Estoque',       icone:'📦', cor:'#7c3aed'},
+  {id:'producao',  nome:'Produção',      icone:'🏭', cor:'#16a34a'},
+  {id:'sistema',   nome:'Sistema / App', icone:'💻', cor:'#0891b2'},
+  {id:'pessoas',   nome:'Pessoas',       icone:'👥', cor:'#d97706'},
+  {id:'fornecedor',nome:'Fornecedor',    icone:'🚚', cor:'#b45309'},
+  {id:'custo',     nome:'Custo',         icone:'💰', cor:'#15803d'},
+  {id:'outro',     nome:'Outro',         icone:'📌', cor:'#64748b'}
+];
+
+const PAUTA_PRIORIDADES=[
+  {id:'alta',  nome:'Alta',  cor:'#dc2626', bg:'#fef2f2'},
+  {id:'media', nome:'Média', cor:'#d97706', bg:'#fffbeb'},
+  {id:'baixa', nome:'Baixa', cor:'#16a34a', bg:'#f0fdf4'}
+];
+
+const PAUTA_SITUACOES=[
+  {id:'aberto',   nome:'A fazer',    icone:'○', cor:'#64748b'},
+  {id:'andamento',nome:'Em andamento',icone:'◐', cor:'#2563eb'},
+  {id:'parado',   nome:'Travado',    icone:'⏸', cor:'#d97706'},
+  {id:'resolvido',nome:'Resolvido',  icone:'✓', cor:'#16a34a'}
+];
+
+onSnapshot(collection(db,'pautaAssuntos'), snap=>{
+  try{
+    pautaAssuntos=snap.docs.map(d=>({firestoreId:d.id,...d.data()}));
+    if(document.querySelector('.screen.active')?.id==='s-pauta') renderPauta();
+  }catch(e){ console.error('pauta snap',e); }
+});
+
+function pautaAbrir(){ _pautaSel=''; goTo('s-pauta'); }
+window.pautaAbrir=pautaAbrir;
+
+function renderPauta(){
+  const el=document.getElementById('pauta-content'); if(!el) return;
+  if(_pautaSel){
+    const a=pautaAssuntos.find(x=>x.firestoreId===_pautaSel);
+    if(a){ el.innerHTML=_pautaDetalhe(a); return; }
+    _pautaSel='';
+  }
+  el.innerHTML=_pautaListaHTML();
+}
+window.renderPauta=renderPauta;
+
+function _pautaListaHTML(){
+  const todos=pautaAssuntos||[];
+  const abertos=todos.filter(a=>a.situacao!=='resolvido');
+  const atrasados=abertos.filter(a=>{ const d=_pautaDias(a.prazo); return d!==null && d<0; });
+  const semana=abertos.filter(a=>{ const d=_pautaDias(a.prazo); return d!==null && d>=0 && d<=7; });
+  const lista=pautaLista();
+
+  // resumo do que importa agora
+  let h='<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+    _pautaCartao('ABERTOS', abertos.length, 'var(--mc-azul,#2563eb)', 'abertos')+
+    _pautaCartao('ATRASADOS', atrasados.length, '#dc2626', 'atrasados')+
+    _pautaCartao('ESTA SEMANA', semana.length, '#d97706', '')+
+  '</div>';
+
+  // busca e filtros
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<input type="text" id="pauta-busca" value="'+String(_pautaBusca).replace(/"/g,'&quot;')+'" oninput="pautaBuscar(this.value)" placeholder="🔍 Buscar assunto ou responsável" autocomplete="off" style="width:100%;padding:11px 13px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;">'+
+    '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;">'+
+      [['abertos','Em aberto'],['atrasados','Atrasados'],['resolvidos','Resolvidos'],['todos','Todos']].map(([id,nome])=>
+        '<button onclick="pautaSetFiltro(\''+id+'\')" style="background:'+(_pautaFiltro===id?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_pautaFiltro===id?'#fff':'var(--text-secondary)')+';border:1px solid '+(_pautaFiltro===id?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:99px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">'+nome+'</button>').join('')+
+    '</div>'+
+    '<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;">'+
+      '<button onclick="pautaSetCat(\'\')" style="background:'+(!_pautaCat?'var(--text-primary)':'#fff')+';color:'+(!_pautaCat?'#fff':'var(--text-secondary)')+';border:1px solid var(--border);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">todas</button>'+
+      PAUTA_CATEGORIAS.map(c=>{
+        const n=todos.filter(a=>a.categoria===c.id && (_pautaFiltro!=='abertos'||a.situacao!=='resolvido')).length;
+        if(!n && _pautaCat!==c.id) return '';
+        return '<button onclick="pautaSetCat(\''+c.id+'\')" style="background:'+(_pautaCat===c.id?c.cor:'#fff')+';color:'+(_pautaCat===c.id?'#fff':c.cor)+';border:1px solid '+c.cor+'55;border-radius:99px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">'+c.icone+' '+c.nome+(n?(' '+n):'')+'</button>';
+      }).join('')+
+    '</div>'+
+  '</div>';
+
+  if(!lista.length){
+    return h+_vazio(todos.length?'Nada com esses filtros.':'Nenhum assunto ainda.',
+      todos.length?'':'Use "+ Assunto" para registrar o primeiro.');
+  }
+
+  h+=lista.map(a=>{
+    const c=_pautaCat2(a.categoria), pri=_pautaPri(a.prioridade), sit=_pautaSit(a.situacao);
+    const prazo=_pautaPrazoTexto(a);
+    const resolvido=a.situacao==='resolvido';
+    const nNotas=(a.notas||[]).length;
+    return '<button onclick="pautaVer(\''+escapeJsStr(a.firestoreId)+'\')" class="card" style="display:block;width:100%;text-align:left;margin-bottom:8px;cursor:pointer;font-family:inherit;border-left:4px solid '+(resolvido?'#cbd5e1':pri.cor)+';'+(resolvido?'opacity:.65;':'')+'">'+
+      '<div style="display:flex;align-items:flex-start;gap:9px;">'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:15px;font-weight:800;line-height:1.3;'+(resolvido?'text-decoration:line-through;':'')+'">'+(a.titulo||'')+'</span>'+
+          (a.descricao?'<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.45;">'+String(a.descricao).slice(0,110)+(a.descricao.length>110?'…':'')+'</span>':'')+
+          '<span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;align-items:center;">'+
+            '<span style="font-size:11px;font-weight:700;color:'+c.cor+';background:'+c.cor+'15;border-radius:99px;padding:2px 9px;">'+c.icone+' '+c.nome+'</span>'+
+            '<span style="font-size:11px;font-weight:700;color:'+sit.cor+';">'+sit.icone+' '+sit.nome+'</span>'+
+            (a.responsavel?'<span style="font-size:11px;color:var(--text-secondary);">👤 '+a.responsavel+'</span>':'')+
+            (nNotas?'<span style="font-size:11px;color:var(--text-muted);">💬 '+nNotas+'</span>':'')+
+          '</span>'+
+        '</span>'+
+        '<span style="text-align:right;white-space:nowrap;flex:0 0 auto;">'+
+          '<span style="display:block;font-size:12px;font-weight:800;color:'+prazo.cor+';">'+prazo.txt+'</span>'+
+          (!resolvido?'<span style="display:block;font-size:10px;font-weight:700;color:'+pri.cor+';background:'+pri.bg+';border-radius:99px;padding:1px 8px;margin-top:4px;">'+pri.nome+'</span>':'')+
+        '</span>'+
+      '</div></button>';
+  }).join('');
+  return h;
+}
+
+function _pautaDetalhe(a){
+  const c=_pautaCat2(a.categoria), pri=_pautaPri(a.prioridade), sit=_pautaSit(a.situacao);
+  const prazo=_pautaPrazoTexto(a);
+  const notas=(a.notas||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0));
+
+  let h='<button onclick="pautaVoltar()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">&lsaquo; Todos os assuntos</button>';
+
+  h+='<div class="card" style="margin-bottom:12px;border-left:4px solid '+pri.cor+';">'+
+    '<div style="font-size:18px;font-weight:800;line-height:1.3;">'+(a.titulo||'')+'</div>'+
+    (a.descricao?'<div style="font-size:13px;color:var(--text-secondary);margin-top:7px;line-height:1.55;white-space:pre-wrap;">'+a.descricao+'</div>':'')+
+    '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:11px;">'+
+      '<span style="font-size:12px;font-weight:700;color:'+c.cor+';background:'+c.cor+'15;border-radius:99px;padding:4px 11px;">'+c.icone+' '+c.nome+'</span>'+
+      '<span style="font-size:12px;font-weight:700;color:'+pri.cor+';background:'+pri.bg+';border-radius:99px;padding:4px 11px;">'+pri.nome+'</span>'+
+      (a.responsavel?'<span style="font-size:12px;color:var(--text-secondary);background:var(--bg-page);border-radius:99px;padding:4px 11px;">👤 '+a.responsavel+'</span>':'')+
+      '<span style="font-size:12px;font-weight:700;color:'+prazo.cor+';background:var(--bg-page);border-radius:99px;padding:4px 11px;">📅 '+prazo.txt+'</span>'+
+    '</div>'+
+    '<div style="font-size:10px;color:var(--text-muted);margin-top:9px;">aberto em '+(a.criadoEm||'')+(a.criadoPor?(' por '+a.criadoPor):'')+
+      (a.resolvidoEm?(' · resolvido em '+a.resolvidoEm+(a.resolvidoPor?(' por '+a.resolvidoPor):'')):'')+'</div>'+
+    '<div style="display:flex;gap:7px;margin-top:11px;">'+
+      '<button onclick="pautaEditar()" class="btn btn-secondary" style="flex:1;">✏️ Editar</button>'+
+      '<button onclick="pautaExcluir()" style="flex:0 0 auto;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:0 14px;font-size:13px;cursor:pointer;font-family:inherit;">🗑</button>'+
+    '</div>'+
+  '</div>';
+
+  // situação: um toque para mudar
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:7px;">SITUAÇÃO</div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+      PAUTA_SITUACOES.map(x=>'<button onclick="pautaSetSituacao(\''+x.id+'\')" style="flex:1;min-width:90px;background:'+(a.situacao===x.id?x.cor:'#fff')+';color:'+(a.situacao===x.id?'#fff':x.cor)+';border:1px solid '+x.cor+(a.situacao===x.id?'':'55')+';border-radius:9px;padding:10px 6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">'+x.icone+' '+x.nome+'</button>').join('')+
+    '</div></div>';
+
+  // anotações das reuniões
+  h+='<div class="card">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">'+
+      '<span style="font-size:11px;font-weight:800;color:var(--text-secondary);">ANOTAÇÕES ('+notas.length+')</span>'+
+      '<button onclick="pautaAddNota()" style="background:var(--mc-azul,#2563eb);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ Anotar</button>'+
+    '</div>'+
+    (notas.length
+      ? notas.map((n,i)=>'<div style="padding:9px 0;'+(i?'border-top:1px solid var(--border);':'')+'">'+
+          '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap;">'+(n.texto||'')+'</div>'+
+          '<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">'+(n.em||'')+(n.por?(' · '+n.por):'')+'</div>'+
+        '</div>').join('')
+      : '<div style="font-size:12px;color:var(--text-secondary);padding:8px 0;">Nada anotado ainda. Use para registrar o que foi decidido em cada conversa.</div>')+
+  '</div>';
+  return h;
+}
+
+/* ── CADASTRO E EDIÇÃO ───────────────────────────────────────────── */
+function pautaNovo(){ _pautaForm(null); }
+window.pautaNovo=pautaNovo;
+function pautaEditar(){
+  const a=pautaAssuntos.find(x=>x.firestoreId===_pautaSel);
+  if(a) _pautaForm(a);
+}
+window.pautaEditar=pautaEditar;
+
+function _pautaForm(a){
+  const ed=!!a;
+  const v=a||{categoria:'processo', prioridade:'media', situacao:'aberto'};
+  const ov=document.createElement('div');
+  ov.id='pauta-form';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">'+(ed?'✏️ Editar assunto':'+ Novo assunto')+'</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Assunto <span style="color:#dc2626;">*</span></label>'+
+      '<input type="text" id="pf-titulo" value="'+String(v.titulo||'').replace(/"/g,'&quot;')+'" placeholder="ex: Acertar a contagem do contêiner" autocomplete="off" style="width:100%;padding:12px;min-height:48px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;margin:4px 0 12px;">'+
+
+      '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Detalhes</label>'+
+      '<textarea id="pf-desc" rows="3" placeholder="O que está acontecendo, o que precisa ser feito" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin:4px 0 12px;resize:vertical;">'+(v.descricao||'')+'</textarea>'+
+
+      '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Categoria</label>'+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin:5px 0 12px;">'+
+        PAUTA_CATEGORIAS.map(c=>'<button type="button" onclick="_pfSetCat(\''+c.id+'\')" data-pf-cat="'+c.id+'" style="background:'+(v.categoria===c.id?c.cor:'#fff')+';color:'+(v.categoria===c.id?'#fff':c.cor)+';border:1px solid '+c.cor+'66;border-radius:99px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+c.icone+' '+c.nome+'</button>').join('')+
+      '</div>'+
+
+      '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Prioridade</label>'+
+      '<div style="display:flex;gap:6px;margin:5px 0 12px;">'+
+        PAUTA_PRIORIDADES.map(x=>'<button type="button" onclick="_pfSetPri(\''+x.id+'\')" data-pf-pri="'+x.id+'" style="flex:1;background:'+(v.prioridade===x.id?x.cor:'#fff')+';color:'+(v.prioridade===x.id?'#fff':x.cor)+';border:1px solid '+x.cor+'66;border-radius:9px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">'+x.nome+'</button>').join('')+
+      '</div>'+
+
+      '<div style="display:flex;gap:9px;">'+
+        '<div style="flex:1;"><label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Prazo</label>'+
+          '<input type="date" id="pf-prazo" value="'+(v.prazo?estBRparaISO(v.prazo):'')+'" style="width:100%;padding:11px;min-height:46px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;box-sizing:border-box;margin-top:4px;"></div>'+
+        '<div style="flex:1;"><label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Responsável</label>'+
+          '<input type="text" id="pf-resp" value="'+String(v.responsavel||'').replace(/"/g,'&quot;')+'" placeholder="quem resolve" autocomplete="off" style="width:100%;padding:11px;min-height:46px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin-top:4px;"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'pauta-form\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="pautaSalvar('+(ed?('\''+escapeJsStr(a.firestoreId)+'\''):'null')+')">Salvar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  ov.dataset.cat=v.categoria||'processo';
+  ov.dataset.pri=v.prioridade||'media';
+  setTimeout(()=>document.getElementById('pf-titulo')?.focus(),60);
+}
+
+function _pfSetCat(id){
+  const ov=document.getElementById('pauta-form'); if(!ov) return;
+  ov.dataset.cat=id;
+  PAUTA_CATEGORIAS.forEach(c=>{
+    const b=ov.querySelector('[data-pf-cat="'+c.id+'"]'); if(!b) return;
+    b.style.background=(c.id===id)?c.cor:'#fff';
+    b.style.color=(c.id===id)?'#fff':c.cor;
+  });
+}
+window._pfSetCat=_pfSetCat;
+
+function _pfSetPri(id){
+  const ov=document.getElementById('pauta-form'); if(!ov) return;
+  ov.dataset.pri=id;
+  PAUTA_PRIORIDADES.forEach(x=>{
+    const b=ov.querySelector('[data-pf-pri="'+x.id+'"]'); if(!b) return;
+    b.style.background=(x.id===id)?x.cor:'#fff';
+    b.style.color=(x.id===id)?'#fff':x.cor;
+  });
+}
+window._pfSetPri=_pfSetPri;
+
+async function pautaSalvar(id){
+  const ov=document.getElementById('pauta-form'); if(!ov) return;
+  const titulo=((document.getElementById('pf-titulo')||{}).value||'').trim();
+  if(!titulo){ alert('Escreva o assunto.'); return; }
+  const iso=(document.getElementById('pf-prazo')||{}).value||'';
+  const dados={
+    titulo,
+    descricao:((document.getElementById('pf-desc')||{}).value||'').trim(),
+    categoria:ov.dataset.cat||'processo',
+    prioridade:ov.dataset.pri||'media',
+    prazo: iso?estISOparaBR(iso):'',
+    responsavel:((document.getElementById('pf-resp')||{}).value||'').trim(),
+    atualizadoEm:agora()
+  };
+  try{
+    if(id){
+      await updateDoc(doc(db,'pautaAssuntos',id), dados);
+    } else {
+      const ref=doc(collection(db,'pautaAssuntos'));
+      await setDoc(ref, {...dados, situacao:'aberto', notas:[],
+        criadoEm:agora(), criadoPor:_demAutor(), criadoTs:Date.now()});
+    }
+    ov.remove();
+  }catch(e){ alert('Erro ao salvar: '+e.message); }
+}
+window.pautaSalvar=pautaSalvar;
+
+async function pautaSetSituacao(sit){
+  const a=pautaAssuntos.find(x=>x.firestoreId===_pautaSel); if(!a) return;
+  const dados={situacao:sit, atualizadoEm:agora()};
+  if(sit==='resolvido'){ dados.resolvidoEm=agora(); dados.resolvidoPor=_demAutor(); }
+  else { dados.resolvidoEm=''; dados.resolvidoPor=''; }
+  try{ await updateDoc(doc(db,'pautaAssuntos',_pautaSel), dados); }
+  catch(e){ alert('Erro: '+e.message); }
+}
+window.pautaSetSituacao=pautaSetSituacao;
+
+async function pautaAddNota(){
+  const a=pautaAssuntos.find(x=>x.firestoreId===_pautaSel); if(!a) return;
+  const txt=prompt('O que foi decidido ou aconteceu:','');
+  if(txt===null) return;
+  const t=String(txt).trim();
+  if(!t) return;
+  const notas=[...(a.notas||[]), {texto:t, por:_demAutor(), em:agora(), ts:Date.now()}];
+  try{ await updateDoc(doc(db,'pautaAssuntos',_pautaSel), {notas, atualizadoEm:agora()}); }
+  catch(e){ alert('Erro: '+e.message); }
+}
+window.pautaAddNota=pautaAddNota;
+
+async function pautaExcluir(){
+  const a=pautaAssuntos.find(x=>x.firestoreId===_pautaSel); if(!a) return;
+  if(!confirm('Excluir "'+(a.titulo||'')+'"?\n\nNão dá para desfazer.')) return;
+  try{
+    await deleteDoc(doc(db,'pautaAssuntos',_pautaSel));
+    _pautaSel=''; renderPauta();
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.pautaExcluir=pautaExcluir;
+
+function _pautaCartao(rotulo, valor, cor, filtro){
+  const ativo=filtro && _pautaFiltro===filtro;
+  return '<button onclick="'+(filtro?('pautaSetFiltro(\''+filtro+'\')'):'')+'" class="card" style="flex:1;text-align:center;padding:12px 6px;cursor:'+(filtro?'pointer':'default')+';font-family:inherit;border:'+(ativo?('2px solid '+cor):'1px solid var(--border)')+';">'+
+    '<div style="font-size:10px;font-weight:800;color:var(--text-secondary);letter-spacing:.5px;">'+rotulo+'</div>'+
+    '<div style="font-size:26px;font-weight:900;color:'+cor+';line-height:1.1;">'+valor+'</div></button>';
+}
+
+function pautaBuscar(v){ _pautaBusca=v||''; renderPauta(); const i=document.getElementById('pauta-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
+window.pautaBuscar=pautaBuscar;
+function pautaSetFiltro(f){ _pautaFiltro=f; renderPauta(); }
+window.pautaSetFiltro=pautaSetFiltro;
+function pautaSetCat(c){ _pautaCat=(_pautaCat===c?'':c); renderPauta(); }
+window.pautaSetCat=pautaSetCat;
+function pautaVer(id){ _pautaSel=id; renderPauta(); }
+window.pautaVer=pautaVer;
+function pautaVoltar(){ _pautaSel=''; renderPauta(); }
+window.pautaVoltar=pautaVoltar;
+
+function _pautaCat2(id){ return PAUTA_CATEGORIAS.find(c=>c.id===id)||PAUTA_CATEGORIAS[PAUTA_CATEGORIAS.length-1]; }
+function _pautaPri(id){ return PAUTA_PRIORIDADES.find(c=>c.id===id)||PAUTA_PRIORIDADES[1]; }
+function _pautaSit(id){ return PAUTA_SITUACOES.find(c=>c.id===id)||PAUTA_SITUACOES[0]; }
+
+/* Dias até o prazo: negativo é atraso */
+function _pautaDias(br){
+  if(!br) return null;
+  const p=String(br).split('/'); if(p.length!==3) return null;
+  const alvo=new Date(+p[2], +p[1]-1, +p[0]); alvo.setHours(0,0,0,0);
+  const h=new Date(); h.setHours(0,0,0,0);
+  return Math.round((alvo-h)/86400000);
+}
+
+function _pautaPrazoTexto(a){
+  const d=_pautaDias(a.prazo);
+  if(d===null) return {txt:'sem prazo', cor:'var(--text-muted)'};
+  if(a.situacao==='resolvido') return {txt:a.prazo, cor:'var(--text-muted)'};
+  if(d<0)  return {txt:'⏰ atrasado '+Math.abs(d)+'d', cor:'#dc2626'};
+  if(d===0)return {txt:'é hoje', cor:'#d97706'};
+  if(d===1)return {txt:'amanhã', cor:'#d97706'};
+  if(d<=7) return {txt:'em '+d+' dias', cor:'#d97706'};
+  return {txt:a.prazo, cor:'#16a34a'};
+}
+
+/* Ordena pelo que precisa de atenção primeiro */
+function pautaLista(){
+  const q=_normNome(_pautaBusca||'');
+  return (pautaAssuntos||[]).filter(a=>{
+    if(_pautaFiltro==='abertos'   && a.situacao==='resolvido') return false;
+    if(_pautaFiltro==='resolvidos'&& a.situacao!=='resolvido') return false;
+    if(_pautaFiltro==='atrasados'){
+      const d=_pautaDias(a.prazo);
+      if(a.situacao==='resolvido' || d===null || d>=0) return false;
+    }
+    if(_pautaCat && a.categoria!==_pautaCat) return false;
+    if(q && !_normNome((a.titulo||'')+' '+(a.descricao||'')+' '+(a.responsavel||'')).includes(q)) return false;
+    return true;
+  }).sort((a,b)=>{
+    // resolvidos no fim
+    const ra=a.situacao==='resolvido'?1:0, rb=b.situacao==='resolvido'?1:0;
+    if(ra!==rb) return ra-rb;
+    // depois por prazo (quem tem prazo e está mais perto vem antes)
+    const da=_pautaDias(a.prazo), db=_pautaDias(b.prazo);
+    if(da!==null && db!==null && da!==db) return da-db;
+    if(da!==null && db===null) return -1;
+    if(da===null && db!==null) return 1;
+    // depois por prioridade
+    const peso={alta:0, media:1, baixa:2};
+    const pa=peso[a.prioridade]??1, pb=peso[b.prioridade]??1;
+    if(pa!==pb) return pa-pb;
+    return (b.criadoTs||0)-(a.criadoTs||0);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════
    PEDIDOS C&F POR LOJA
    Uma grade por semana: produtos nas linhas, lojas nas colunas, cada
    loja com a sua data de entrega. O total de cada produto é puxado
@@ -22267,6 +22771,13 @@ onSnapshot(collection(db,'cfPedidosSemana'), snap=>{
     renderCfPed();
   }catch(e){ console.error('cfPedidosSemana snap',e); }
 });
+
+/* O Patrick consulta os pedidos C&F, mas não monta nem envia: a grade
+   abre só para leitura no acesso dele. */
+function cfSoLeitura(){
+  return window.setorAtual==='patrick' && window.adminMode!==true;
+}
+window.cfSoLeitura=cfSoLeitura;
 
 function cfPedAbrir(){ _cfSemSel=''; goTo('s-cfped'); }
 window.cfPedAbrir=cfPedAbrir;
@@ -22345,6 +22856,7 @@ async function _cfGravar(campos, semRedesenhar){
 }
 
 async function cfAddLoja(){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const nome=prompt('Nome da loja:','');
   if(nome===null) return;
@@ -22355,6 +22867,7 @@ async function cfAddLoja(){
 window.cfAddLoja=cfAddLoja;
 
 async function cfTirarLoja(i){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const l=(sem.lojas||[])[i]; if(!l) return;
   const chave=_cfChaveLoja(l,i);
@@ -22383,6 +22896,7 @@ async function cfSetLojaData(i, iso){
 window.cfSetLojaData=cfSetLojaData;
 
 async function cfSetQtd(cod, i, valor){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const l=(sem.lojas||[])[i]; if(!l) return;
   const chave=_cfChaveLoja(l,i);
@@ -22441,6 +22955,7 @@ function cfProximo(inp){
 window.cfProximo=cfProximo;
 
 async function cfRenomear(){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const nome=prompt('Nome do pedido:', sem.nome||'');
   if(nome===null || !String(nome).trim()) return;
@@ -22450,6 +22965,7 @@ window.cfRenomear=cfRenomear;
 
 /* Escolher os produtos que entram na grade */
 function cfAddProduto(){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const ov=document.createElement('div');
   ov.id='cf-prod-modal';
@@ -22508,6 +23024,7 @@ async function cfIncluirProduto(cod){
 window.cfIncluirProduto=cfIncluirProduto;
 
 async function cfTirarProduto(cod){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const tot=cfTotalProduto(sem, cod);
   if(tot && !confirm('Tirar '+_cfNomeProduto(cod)+'?\n\n'+tot+' pacote(s) lançados serão apagados.')) return;
@@ -22568,6 +23085,7 @@ function cfDefinirComoFazer(cod){
 window.cfDefinirComoFazer=cfDefinirComoFazer;
 
 async function cfSalvarComoFazer(cod, tipo, dia){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const comoFazer={...(sem.comoFazer||{})};
   if(!tipo) delete comoFazer[cod];
@@ -22642,11 +23160,19 @@ function _cfRenderGrade(sem){
         '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+lojas.length+' loja(s) · '+Object.keys(itens).length+' produto(s)</div></div>'+
       '<button onclick="cfRenomear()" title="Renomear" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:inherit;">✏️</button>'+
     '</div>'+
-    '<div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;">'+
-      '<button onclick="cfAddLoja()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Loja</button>'+
-      '<button onclick="cfAddProduto()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Produto</button>'+
-    '</div>'+
+    (cfSoLeitura()
+      ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:9px;text-align:center;">👁 Somente consulta</div>'
+      : '<div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;">'+
+          '<button onclick="cfAddLoja()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Loja</button>'+
+          '<button onclick="cfAddProduto()" class="btn btn-secondary" style="flex:1;min-width:130px;">+ Produto</button>'+
+        '</div>')+
     // envio para a embalagem
+    (cfSoLeitura() ? (sem.enviado
+        ? '<div style="background:#f0fdf4;border:1px solid #16a34a;border-radius:9px;padding:9px 11px;margin-top:10px;">'+
+            '<div style="font-size:12px;font-weight:800;color:#15803d;">📤 Com a embalagem</div>'+
+            (sem.entrega?'<div style="font-size:13px;font-weight:700;color:#15803d;margin-top:2px;">Entregar até '+sem.entrega+'</div>':'')+
+            '<div style="font-size:11px;color:#166534;margin-top:2px;">'+_cfFeitos(sem)+' de '+Object.keys(sem.itens||{}).length+' marcados</div></div>'
+        : '') :
     (sem.enviado
       ? '<div style="background:#f0fdf4;border:2px solid #16a34a;border-radius:11px;padding:12px;margin-top:10px;">'+
           '<div style="font-size:14px;font-weight:900;color:#15803d;">📤 ESTE PEDIDO ESTÁ COM A EMBALAGEM</div>'+
@@ -22660,7 +23186,7 @@ function _cfRenderGrade(sem){
           '</div></div>'
       : '<div style="margin-top:10px;">'+
           '<div style="font-size:11px;color:var(--text-secondary);text-align:center;margin-bottom:7px;">✏️ Só você está vendo este pedido.</div>'+
-          '<button onclick="cfEnviarEmbalagem()" class="btn btn-primary" style="width:100%;">📤 Enviar para a embalagem</button></div>')+
+          '<button onclick="cfEnviarEmbalagem()" class="btn btn-primary" style="width:100%;">📤 Enviar para a embalagem</button></div>'))+
   '</div>';
 
   if(!lojas.length) return h+'<div class="card" style="text-align:center;padding:26px;">'+
@@ -22715,7 +23241,7 @@ function _cfRenderGrade(sem){
         const v=Number(linha[chave])||0;
         totLoja[i]+=v;
         return '<td style="padding:9px 10px;text-align:center;">'+
-          '<input type="number" step="1" min="0" value="'+(v||'')+'" placeholder="0" '+
+          '<input type="number" step="1" min="0" value="'+(v||'')+'" placeholder="0"'+(cfSoLeitura()?' readonly':'')+' '+
             'id="cf-'+escapeHtmlAttr(cod)+'-'+i+'" data-cf-cod="'+escapeHtmlAttr(cod)+'" data-cf-loja="'+i+'" '+
             'onchange="cfSetQtd(\''+escapeJsStr(cod)+'\','+i+',this.value)" '+
             'onkeydown="if(event.key===\'Enter\'){event.preventDefault();cfProximo(this);}" '+
@@ -22766,6 +23292,7 @@ function _cfFeitos(sem){
 }
 
 function cfEnviarEmbalagem(){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const sem=_cfSem(); if(!sem) return;
   const prod=Object.keys(sem.itens||{});
   if(!prod.length){ alert('Inclua produtos antes de enviar.'); return; }
@@ -22970,6 +23497,7 @@ function cfBuscar(v){ _cfBusca=v||''; renderCfPed(); const i=document.getElement
 window.cfBuscar=cfBuscar;
 
 async function cfNovaSemana(){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   const hojeBr=hoje();
   const nome=prompt('Nome do pedido:', 'Pedido C&F semana '+hojeBr);
   if(nome===null) return;
@@ -22984,6 +23512,7 @@ async function cfNovaSemana(){
 window.cfNovaSemana=cfNovaSemana;
 
 async function cfExcluirSemana(id){
+  if(cfSoLeitura()){ alert('Aqui você só consulta os pedidos C&F.'); return; }
   if(window.adminMode!==true){ alert('Só o admin pode excluir.'); return; }
   const sem=cfSemanas.find(x=>x.firestoreId===id); if(!sem) return;
   if(!confirm('Excluir "'+(sem.nome||'')+'"?\\n\\nNão dá para desfazer.')) return;
@@ -24464,7 +24993,8 @@ window.retRenderDetalhe=retRenderDetalhe;
 /* Dar destino é trabalho da confeitaria: é ela que confere o estado do
    produto. O carregamento só registra o que voltou. */
 function retPodeDestinar(){
-  return window.adminMode===true || window.setorAtual==='admin' || window.setorAtual==='confeitaria';
+  return window.adminMode===true || window.setorAtual==='admin' ||
+         window.setorAtual==='confeitaria' || window.setorAtual==='patrick';
 }
 window.retPodeDestinar=retPodeDestinar;
 
