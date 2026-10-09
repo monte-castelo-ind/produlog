@@ -767,6 +767,21 @@
     .cf-tab tbody tr:hover td{ background:#ede9fe !important; }
     .cf-tab td{ background:inherit; }
     .cf-tab input:focus{ outline:2px solid var(--mc-azul,#2563eb); outline-offset:-1px; }
+
+    /* No celular e no tablet a tabela precisa aproveitar a largura toda.
+       A coluna do produto fica fixa e as demais dividem o que sobra. */
+    .cf-tab{ table-layout:auto; }
+    .cf-tab th:first-child, .cf-tab td:first-child{ min-width:150px; }
+    @media (max-width:820px){
+      .cf-tab{ font-size:13px !important; }
+      .cf-tab th, .cf-tab td{ padding-left:8px !important; padding-right:8px !important; }
+      .cf-tab th:first-child, .cf-tab td:first-child{ min-width:124px; max-width:168px; white-space:normal; }
+      .cf-tab input{ width:66px !important; font-size:15px !important; padding:8px 4px !important; }
+    }
+    @media (max-width:520px){
+      .cf-tab th:first-child, .cf-tab td:first-child{ min-width:104px; }
+      .cf-tab input{ width:56px !important; }
+    }
 </style>
 </head>
 <body>
@@ -22658,7 +22673,7 @@ function _cfRenderGrade(sem){
   }
 
   h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
-    '<table class="cf-tab" style="border-collapse:collapse;font-size:14px;white-space:nowrap;margin:0 auto;">'+
+    '<table class="cf-tab" style="border-collapse:collapse;font-size:14px;white-space:nowrap;width:100%;min-width:100%;">'+
     '<thead>'+
       // a data de entrega fica acima do nome da loja, como na planilha
       '<tr style="background:#475569;color:#fff;font-size:10px;">'+
@@ -22883,7 +22898,7 @@ function _embCfTabela(sem){
   '</div>';
 
   h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
-    '<table class="cf-tab" style="border-collapse:collapse;font-size:14px;white-space:nowrap;margin:0 auto;">'+
+    '<table class="cf-tab" style="border-collapse:collapse;font-size:14px;white-space:nowrap;width:100%;min-width:100%;">'+
     '<thead>'+
       '<tr style="background:#475569;color:#fff;">'+
         '<th style="padding:9px 16px;text-align:left;position:sticky;left:0;background:#475569;"></th>'+
@@ -24632,7 +24647,7 @@ function retCaixaNota(r){
   const ok=!!(r.nota && r.nota.emitida);
   const quem=ok?((r.nota.por||'')+(r.nota.em?(' · '+r.nota.em):'')):'';
   return '<button onclick="event.stopPropagation();retToggleNota(\''+escapeJsStr(r.firestoreId)+'\')" '+
-    'title="'+(ok?('Nota emitida '+quem):'Marcar que a nota foi emitida')+'" '+
+    'title="'+(ok?('Nota emitida '+quem+' — toque para corrigir'):'Marcar que a nota foi emitida')+'" '+
     'style="flex:0 0 auto;display:flex;align-items:center;gap:6px;background:'+(ok?'#f0fdf4':'#fff')+';border:1px solid '+(ok?'#16a34a':'var(--border-md,#cbd5e1)')+';border-radius:8px;padding:6px 10px;cursor:pointer;font-family:inherit;">'+
       '<span style="width:18px;height:18px;border-radius:4px;border:2px solid '+(ok?'#16a34a':'#cbd5e1')+';background:'+(ok?'#16a34a':'#fff')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;line-height:1;">'+(ok?'✓':'')+'</span>'+
       '<span style="font-size:11px;font-weight:700;color:'+(ok?'#15803d':'var(--text-secondary)')+';">NOTA</span>'+
@@ -24640,24 +24655,82 @@ function retCaixaNota(r){
 }
 window.retCaixaNota=retCaixaNota;
 
-async function retToggleNota(id){
+function retToggleNota(id){
   const r=retornos.find(x=>x.firestoreId===id); if(!r) return;
   const ok=!!(r.nota && r.nota.emitida);
-  if(ok){
-    if(!confirm('Desmarcar a nota de "'+r.cliente+'"?\n\nEstá marcada como emitida'+
-      (r.nota.por?(' por '+r.nota.por):'')+(r.nota.em?(' em '+r.nota.em):'')+'.')) return;
-    try{ await updateDoc(doc(db,'retornos',id),{nota:{emitida:false, desmarcadoPor:_demAutor(), desmarcadoEm:agora()}}); }
-    catch(e){ alert('Erro: '+e.message); }
-    return;
-  }
-  const num=prompt('Número da nota de devolução (opcional):','');
+  // já marcada: abre as opções, porque o número pode ter saído errado
+  if(ok){ retAbrirNota(id); return; }
+  retPedirNota(id, '');
+}
+window.retToggleNota=retToggleNota;
+
+/* Janela da nota já emitida: corrigir o número ou desmarcar */
+function retAbrirNota(id){
+  const r=retornos.find(x=>x.firestoreId===id); if(!r) return;
+  const n=r.nota||{};
+  const ov=document.createElement('div');
+  ov.id='ret-nota-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:18px;">'+
+    '<div style="font-size:17px;font-weight:800;">🧾 Nota emitida</div>'+
+    '<div style="font-size:13px;font-weight:700;margin-top:8px;">'+(r.cliente||'')+'</div>'+
+    '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:10px 12px;margin-top:10px;">'+
+      '<div style="font-size:16px;font-weight:900;color:#15803d;">'+(n.numero?('nº '+n.numero):'(sem número)')+'</div>'+
+      '<div style="font-size:11px;color:#166534;margin-top:2px;">'+(n.por||'')+(n.em?(' · '+n.em):'')+'</div>'+
+      (n.corrigidoEm?'<div style="font-size:10px;color:#166534;margin-top:2px;">corrigido em '+n.corrigidoEm+(n.corrigidoPor?(' por '+n.corrigidoPor):'')+'</div>':'')+
+    '</div>'+
+    '<button onclick="retCorrigirNota(\''+escapeJsStr(id)+'\')" class="btn btn-primary" style="width:100%;margin-top:12px;">✏️ Corrigir o número</button>'+
+    '<button onclick="retDesmarcarNota(\''+escapeJsStr(id)+'\')" style="width:100%;margin-top:8px;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Desmarcar a nota</button>'+
+    '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="document.getElementById(\'ret-nota-modal\').remove()">Fechar</button>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.retAbrirNota=retAbrirNota;
+
+function retCorrigirNota(id){
+  const r=retornos.find(x=>x.firestoreId===id); if(!r) return;
+  document.getElementById('ret-nota-modal')?.remove();
+  retPedirNota(id, (r.nota&&r.nota.numero)||'', true);
+}
+window.retCorrigirNota=retCorrigirNota;
+
+/* Pede o número — na correção, já vem preenchido com o atual */
+async function retPedirNota(id, atual, corrigindo){
+  const r=retornos.find(x=>x.firestoreId===id); if(!r) return;
+  const num=prompt(corrigindo
+      ? 'Corrigir o número da nota de "'+r.cliente+'":'
+      : 'Número da nota de devolução (opcional):', atual||'');
   if(num===null) return;
+  const limpo=String(num||'').trim();
+  const antes=(r.nota&&r.nota.numero)||'';
   try{
-    await updateDoc(doc(db,'retornos',id),{nota:{
-      emitida:true, numero:String(num||'').trim(), por:_demAutor(), em:agora(), ts:Date.now()
-    }});
+    const nota={
+      emitida:true, numero:limpo,
+      por:(corrigindo && r.nota && r.nota.por)?r.nota.por:_demAutor(),
+      em:(corrigindo && r.nota && r.nota.em)?r.nota.em:agora(),
+      ts:(corrigindo && r.nota && r.nota.ts)?r.nota.ts:Date.now()
+    };
+    if(corrigindo && antes!==limpo){
+      // guarda o que estava antes, para não sumir a informação
+      nota.numeroAnterior=antes;
+      nota.corrigidoEm=agora();
+      nota.corrigidoPor=_demAutor();
+    }
+    await updateDoc(doc(db,'retornos',id),{nota});
   }catch(e){ alert('Erro: '+e.message); }
 }
+window.retPedirNota=retPedirNota;
+
+async function retDesmarcarNota(id){
+  const r=retornos.find(x=>x.firestoreId===id); if(!r) return;
+  const n=r.nota||{};
+  if(!confirm('Desmarcar a nota de "'+r.cliente+'"?\n\nEstá marcada como emitida'+
+    (n.numero?(' com o nº '+n.numero):'')+(n.por?(' por '+n.por):'')+(n.em?(' em '+n.em):'')+'.')) return;
+  document.getElementById('ret-nota-modal')?.remove();
+  try{ await updateDoc(doc(db,'retornos',id),{nota:{emitida:false, desmarcadoPor:_demAutor(), desmarcadoEm:agora()}}); }
+  catch(e){ alert('Erro: '+e.message); }
+}
+window.retDesmarcarNota=retDesmarcarNota;
 window.retToggleNota=retToggleNota;
 
 function retCardLista(r){
@@ -24684,7 +24757,9 @@ function retCardLista(r){
     '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">🚚 '+(r.motorista||'—')+' · por '+(r.criadoPor||'')+'</div>'+
     (r.nota&&r.nota.emitida
       ? '<div style="font-size:11px;color:#15803d;margin-top:3px;">🧾 nota emitida'+
-          (r.nota.numero?(' nº '+r.nota.numero):'')+' · '+(r.nota.por||'')+(r.nota.em?(' em '+r.nota.em):'')+'</div>'
+          (r.nota.numero?(' nº '+r.nota.numero):'')+' · '+(r.nota.por||'')+(r.nota.em?(' em '+r.nota.em):'')+
+          (r.nota.numeroAnterior?('<div style="font-size:10px;color:var(--text-muted);">corrigido · antes era nº '+r.nota.numeroAnterior+'</div>'):'')+
+        '</div>'
       : '')+
     (validado?'<div style="font-size:11px;color:#15803d;margin-top:3px;">'+retResumoDestinos(r)+'</div>':'')+
   '</div>';
