@@ -4500,6 +4500,34 @@
           <span class="mc-sector-arrow">›</span>
         </button>
       </div>
+
+      <div class="mc-section-header" style="margin-top:18px;">🔧 Processos e compras</div>
+      <div class="mc-sector-grid">
+        <button class="mc-sector-card" onclick="window.prioridadesOrigem='s-patrick-home';goTo('s-prioridades')">
+          <div class="mc-sector-icon" style="background:#fee2e2;">🔥</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Prioridades</div>
+            <div class="mc-sector-desc">Fila do que precisa sair primeiro</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="mc-sector-card" onclick="goTo('s-manut-home')">
+          <div class="mc-sector-icon" style="background:#e0e7ff;">🔧</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Manutenção de Máquinas</div>
+            <div class="mc-sector-desc">Chamados de todos os setores</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="mc-sector-card" onclick="goTo('s-req-admin');renderReqAdmin()">
+          <div class="mc-sector-icon green">📥</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Compras &middot; Requisi&ccedil;&otilde;es</div>
+            <div class="mc-sector-desc">O que foi pedido e o que chegou</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -22685,6 +22713,49 @@ async function _qualGravarFoto(dia, tipo, cod, dataUrl){
   }
 }
 
+/* Quanto cada unidade deveria pesar, pela ficha do produto.
+   Massa + recheios é o peso de uma unidade; o cadastro guarda em gramas. */
+function qualPesoEsperado(cod){
+  const c=String(cod).trim();
+  const todas=[].concat(
+    (typeof PRODUTOS!=='undefined'?PRODUTOS:[]),
+    (typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[]));
+  const p=todas.find(x=>String(x.cod||'').trim()===c);
+  if(!p) return 0;
+  const g=(Number(p.grMassa)||0)+(Number(p.grRecheio)||0)+(Number(p.grRecheio2)||0);
+  if(g>0) return g;
+  // sem gramatura, tenta pelo peso do pacote dividido pelas unidades
+  const kg=Number(p.kgPacote)||0, un=Number(p.qtdPct)||0;
+  if(kg>0 && un>0) return Math.round(kg*1000/un);
+  return 0;
+}
+window.qualPesoEsperado=qualPesoEsperado;
+
+/* Compara o peso medido com o esperado */
+function qualDesvioPeso(cod, medido){
+  const esp=qualPesoEsperado(cod);
+  const m=Number(medido)||0;
+  if(!esp || !m) return null;
+  const dif=m-esp;
+  const pct=dif/esp*100;
+  return {esperado:esp, medido:m, dif, pct};
+}
+window.qualDesvioPeso=qualDesvioPeso;
+
+/* A faixa aceitável: até 5% é normal, até 10% chama atenção */
+/* Número curto: sem casas quando é inteiro, uma casa quando não é */
+function _qualNum(v){
+  const n=Number(v)||0;
+  return (Math.round(n*10)/10).toFixed(Math.abs(n%1)<0.05?0:1).replace('.',',');
+}
+
+function _qualPesoCor(pct){
+  const a=Math.abs(pct);
+  if(a<=5)  return {cor:'#16a34a', bg:'#f0fdf4', txt:'dentro da faixa'};
+  if(a<=10) return {cor:'#d97706', bg:'#fffbeb', txt:'fora da faixa'};
+  return {cor:'#dc2626', bg:'#fef2f2', txt:'muito fora'};
+}
+
 function qualVerFoto(cod){
   const d=_qualDoc(_qualDia,_qualTipo);
   const t=((d.itens||{})[cod]||{}).teste||{};
@@ -22703,12 +22774,29 @@ function qualVerFoto(cod){
 }
 window.qualVerFoto=qualVerFoto;
 
+/* Mostra na hora como o peso medido se compara ao padrão */
+function _qtPesoMudou(cod){
+  const el=document.getElementById('qt-peso-aviso'); if(!el) return;
+  const v=parseFloat(((document.getElementById('qt-peso')||{}).value||'').replace(',','.'))||0;
+  const d=qualDesvioPeso(cod, v);
+  if(!d){ el.innerHTML=''; return; }
+  const c=_qualPesoCor(d.pct);
+  el.innerHTML='<div style="background:'+c.bg+';border:1px solid '+c.cor+'44;border-radius:9px;padding:9px 11px;">'+
+    '<div style="font-size:13px;font-weight:800;color:'+c.cor+';">'+
+      (d.dif>0?'+':'')+_qualNum(d.dif)+' g · '+(d.pct>0?'+':'')+_qualNum(d.pct)+'%</div>'+
+    '<div style="font-size:11px;color:'+c.cor+';margin-top:1px;">'+
+      (Math.abs(d.dif)<0.5 ? 'no padrão de '+d.esperado+' g'
+        : (d.dif>0?'acima':'abaixo')+' do padrão de '+d.esperado+' g · '+c.txt)+'</div></div>';
+}
+window._qtPesoMudou=_qtPesoMudou;
+
 function qualAbrirTeste(cod){
   const prods=qualProdutosDoDia(_qualDia,_qualTipo);
   const pr=prods.find(x=>x.cod===cod); if(!pr) return;
   const d=_qualDoc(_qualDia,_qualTipo);
   const t=((d.itens||{})[cod]||{}).teste||{};
   const probs=t.problemas||[];
+  const esperado=qualPesoEsperado(cod);
 
   const ov=document.createElement('div');
   ov.id='qual-teste';
@@ -22738,6 +22826,17 @@ function qualAbrirTeste(cod){
             'style="background:'+(probs.includes(q.id)?'#d97706':'#fff')+';color:'+(probs.includes(q.id)?'#fff':'var(--text-secondary)')+';border:1px solid '+(probs.includes(q.id)?'#d97706':'var(--border)')+';border-radius:99px;padding:8px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+q.nome+'</button>').join('')+
         '</div></div>'+
 
+      // peso medido no teste
+      '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);">Peso da unidade testada</div>'+
+      '<div style="display:flex;gap:9px;align-items:center;margin:5px 0 4px;">'+
+        '<input type="number" step="any" min="0" id="qt-peso" value="'+(t.peso||'')+'" placeholder="gramas" '+
+          'oninput="_qtPesoMudou(\''+escapeJsStr(cod)+'\')" '+
+          'style="flex:0 0 130px;padding:12px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:17px;font-weight:700;text-align:center;font-family:inherit;box-sizing:border-box;">'+
+        '<span style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">'+
+          (esperado?('padrão: <strong>'+esperado+' g</strong> por unidade'):'<span style="color:#b45309;">sem gramatura cadastrada</span>')+'</span>'+
+      '</div>'+
+      '<div id="qt-peso-aviso" style="margin-bottom:12px;"></div>'+
+
       '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);">Observação</div>'+
       '<textarea id="qt-obs" rows="3" placeholder="detalhe o que foi visto no teste" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin:5px 0 12px;resize:vertical;">'+(t.obs||'')+'</textarea>'+
 
@@ -22751,6 +22850,7 @@ function qualAbrirTeste(cod){
   '</div>';
   document.body.appendChild(ov);
   _qtPintarFoto();
+  _qtPesoMudou(cod);
 }
 window.qualAbrirTeste=qualAbrirTeste;
 
@@ -22801,7 +22901,11 @@ async function qualSalvarTeste(){
   const d=_qualDoc(_qualDia,_qualTipo);
   const itens={...(d.itens||{})};
   const foto=ov.dataset.foto||'';
-  itens[cod]={...(itens[cod]||{}), teste:{avaliacao:aval, problemas:probs, obs, temFoto:!!foto, em:agora(), por:_demAutor()}};
+  const peso=parseFloat(((document.getElementById('qt-peso')||{}).value||'').replace(',','.'))||0;
+  const dsv=qualDesvioPeso(cod, peso);
+  itens[cod]={...(itens[cod]||{}), teste:{avaliacao:aval, problemas:probs, obs, temFoto:!!foto,
+    peso, pesoEsperado:dsv?dsv.esperado:qualPesoEsperado(cod), pesoDesvio:dsv?Number(dsv.pct.toFixed(2)):null,
+    em:agora(), por:_demAutor()}};
   qualDados[chave]={...d, itens};
   ov.remove();
   renderQual();
@@ -22899,6 +23003,11 @@ function _qualRenderDia(){
               (qualFoto(_qualDia,_qualTipo,pr.cod)?'<img src="'+qualFoto(_qualDia,_qualTipo,pr.cod)+'" alt="foto" onclick="qualVerFoto(\''+escapeJsStr(pr.cod)+'\')" style="flex:0 0 auto;width:56px;height:56px;object-fit:cover;border-radius:9px;cursor:pointer;background:#f1f5f9;">':'')+
               '<span style="flex:1;min-width:0;">'+
                 '<span style="font-size:12px;font-weight:800;color:'+av.cor+';">'+av.icone+' '+av.nome+'</span>'+
+                (t.peso?(function(){
+                  const c=_qualPesoCor(t.pesoDesvio||0);
+                  return '<span style="display:block;font-size:11px;font-weight:700;color:'+c.cor+';margin-top:2px;">⚖️ '+_qualNum(t.peso)+' g'+
+                    (t.pesoEsperado?(' · padrão '+t.pesoEsperado+' g · '+((t.pesoDesvio||0)>0?'+':'')+_qualNum(t.pesoDesvio||0)+'%'):'')+'</span>';
+                })():'')+
                 (t.problemas&&t.problemas.length?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+t.problemas.map(x=>(QUAL_PROBLEMAS.find(q=>q.id===x)||{nome:x}).nome).join(' · ')+'</span>':'')+
                 (t.obs?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:pre-wrap;">'+t.obs+'</span>':'')+
                 '<span style="display:block;font-size:10px;color:var(--text-muted);margin-top:3px;">'+(t.em||'')+(t.por?(' · '+t.por):'')+'</span>'+
