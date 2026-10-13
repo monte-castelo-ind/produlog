@@ -22538,13 +22538,263 @@ window.qualVerDia=qualVerDia;
 function qualVoltar(){ _qualDia=''; renderQual(); }
 window.qualVoltar=qualVoltar;
 
+/* ── RELATÓRIO DE AMOSTRAS ───────────────────────────────────────
+   Documento para a vigilância: o que foi amostrado em cada dia, com o
+   teste e o peso. Sai em Excel e em PDF (via impressão do navegador). */
+let _qrelDe='', _qrelAte='';
+
+function qualAbrirRelatorio(){
+  // por padrão, o mês que está sendo visto
+  const m=_qualMes||'';
+  let de='', ate='';
+  if(m){
+    const p=m.split('/');
+    de='01/'+p[0]+'/'+p[1];
+    const ultimo=new Date(+p[1], +p[0], 0).getDate();
+    ate=String(ultimo).padStart(2,'0')+'/'+p[0]+'/'+p[1];
+  }
+  _qrelDe=_qrelDe||de; _qrelAte=_qrelAte||ate;
+  const ov=document.createElement('div');
+  ov.id='qrel-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:18px;">'+
+    '<div style="font-size:17px;font-weight:800;">📄 Relatório de amostras</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Documento com tudo que foi amostrado e testado no per&iacute;odo.</div>'+
+    '<div style="display:flex;gap:9px;margin-top:14px;">'+
+      '<div style="flex:1;"><label style="font-size:12px;font-weight:700;color:var(--text-secondary);">De</label>'+
+        '<input type="date" id="qrel-de" value="'+(_qrelDe?estBRparaISO(_qrelDe):'')+'" style="width:100%;padding:11px;min-height:46px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;box-sizing:border-box;margin-top:4px;"></div>'+
+      '<div style="flex:1;"><label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Até</label>'+
+        '<input type="date" id="qrel-ate" value="'+(_qrelAte?estBRparaISO(_qrelAte):'')+'" style="width:100%;padding:11px;min-height:46px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;box-sizing:border-box;margin-top:4px;"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;">'+
+      '<button onclick="_qrelAtalho(0)" style="flex:1;min-width:98px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px;font-size:12px;cursor:pointer;font-family:inherit;">Este mês</button>'+
+      '<button onclick="_qrelAtalho(1)" style="flex:1;min-width:98px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px;font-size:12px;cursor:pointer;font-family:inherit;">Mês passado</button>'+
+      '<button onclick="_qrelAtalho(2)" style="flex:1;min-width:98px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px;font-size:12px;cursor:pointer;font-family:inherit;">Últimos 90 dias</button>'+
+    '</div>'+
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-size:12px;color:var(--text-secondary);">'+
+      '<input type="checkbox" id="qrel-sodois" style="width:17px;height:17px;cursor:pointer;">'+
+      'incluir os dois tipos (pães e salgados)</label>'+
+    '<div id="qrel-previa" style="font-size:12px;color:var(--text-secondary);margin-top:10px;"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;">'+
+      '<button onclick="qualRelExcel()" class="btn btn-primary" style="flex:1;">📊 Excel</button>'+
+      '<button onclick="qualRelPdf()" class="btn btn-primary" style="flex:1;background:#dc2626;">📄 PDF</button>'+
+    '</div>'+
+    '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="document.getElementById(\'qrel-modal\').remove()">Fechar</button>'+
+  '</div>';
+  document.body.appendChild(ov);
+  ['qrel-de','qrel-ate','qrel-sodois'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('change', _qrelPrevia);
+  });
+  _qrelPrevia();
+}
+window.qualAbrirRelatorio=qualAbrirRelatorio;
+
+function _qrelAtalho(qual){
+  const h=new Date();
+  let de, ate;
+  if(qual===0){
+    de=new Date(h.getFullYear(), h.getMonth(), 1);
+    ate=new Date(h.getFullYear(), h.getMonth()+1, 0);
+  } else if(qual===1){
+    de=new Date(h.getFullYear(), h.getMonth()-1, 1);
+    ate=new Date(h.getFullYear(), h.getMonth(), 0);
+  } else {
+    ate=new Date(h); de=new Date(h); de.setDate(de.getDate()-90);
+  }
+  const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const a=document.getElementById('qrel-de'), b=document.getElementById('qrel-ate');
+  if(a) a.value=iso(de);
+  if(b) b.value=iso(ate);
+  _qrelPrevia();
+}
+window._qrelAtalho=_qrelAtalho;
+
+/* Junta tudo do período, em linhas prontas para a planilha */
+function qualRelLinhas(){
+  const deIso=(document.getElementById('qrel-de')||{}).value||'';
+  const ateIso=(document.getElementById('qrel-ate')||{}).value||'';
+  const dois=!!(document.getElementById('qrel-sodois')||{}).checked;
+  const de=deIso?estDataNum(estISOparaBR(deIso)):0;
+  const ate=ateIso?estDataNum(estISOparaBR(ateIso)):99999999;
+  const tipos=dois?['salgado','pao']:[_qualTipo];
+  const out=[];
+  tipos.forEach(tipo=>{
+    const dias={};
+    (registros||[]).forEach(r=>{
+      if(!r.data || laEmbalado(r.embalagem||{})<=0) return;
+      const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
+      if(t!==tipo) return;
+      const n=estDataNum(r.data);
+      if(n<de || n>ate) return;
+      dias[r.data]=true;
+    });
+    Object.keys(dias).sort((a,b)=>estDataNum(a)-estDataNum(b)).forEach(dia=>{
+      const d=_qualDoc(dia, tipo);
+      qualProdutosDoDia(dia, tipo).forEach(pr=>{
+        const it=(d.itens||{})[pr.cod]||{};
+        const t=it.teste||{};
+        const av=t.avaliacao?(QUAL_AVALIACOES.find(x=>x.id===t.avaliacao)||{}).nome:'';
+        out.push({
+          Data:dia,
+          Tipo:(tipo==='pao'?'Pão':'Salgado'),
+          Codigo:pr.cod,
+          Produto:pr.nome,
+          PacotesEmbalados:pr.emb,
+          AmostraSeparada:it.amostra?'Sim':'Não',
+          AmostraEm:it.amostraEm||'',
+          AmostraPor:it.amostraPor||'',
+          TesteRealizado:t.avaliacao?'Sim':'Não',
+          Avaliacao:av,
+          PesoMedido:t.peso||'',
+          PesoPadrao:t.pesoEsperado||qualPesoEsperado(pr.cod)||'',
+          DesvioPct:(t.pesoDesvio===0||t.pesoDesvio)?t.pesoDesvio:'',
+          Observacoes:[(t.problemas||[]).map(x=>(QUAL_PROBLEMAS.find(q=>q.id===x)||{nome:x}).nome).join('; '), t.obs||''].filter(Boolean).join(' — '),
+          TesteEm:t.em||'',
+          TestePor:t.por||''
+        });
+      });
+    });
+  });
+  return out;
+}
+
+function _qrelPrevia(){
+  const el=document.getElementById('qrel-previa'); if(!el) return;
+  const l=qualRelLinhas();
+  const comA=l.filter(x=>x.AmostraSeparada==='Sim').length;
+  const comT=l.filter(x=>x.TesteRealizado==='Sim').length;
+  el.innerHTML = l.length
+    ? '<div style="background:var(--bg-page);border-radius:9px;padding:10px 12px;">'+
+        '<strong>'+l.length+'</strong> registro(s) no período<br>'+
+        '<span style="font-size:11px;">'+comA+' com amostra · '+comT+' com teste</span></div>'
+    : '<div style="color:#b45309;">Nenhum produto embalado neste período.</div>';
+}
+window._qrelPrevia=_qrelPrevia;
+
+async function qualRelExcel(){
+  const linhas=qualRelLinhas();
+  if(!linhas.length){ alert('Nenhum registro no período.'); return; }
+  try{
+    await new Promise(function(res,rej){
+      if(window.XLSX){res();return;}
+      var sc=document.createElement('script');
+      sc.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+      sc.onload=res; sc.onerror=rej; document.head.appendChild(sc);
+    });
+    const cab=['Data','Tipo','Codigo','Produto','PacotesEmbalados','AmostraSeparada','AmostraEm','AmostraPor',
+               'TesteRealizado','Avaliacao','PesoMedido','PesoPadrao','DesvioPct','Observacoes','TesteEm','TestePor'];
+    const titulos={Data:'Data',Tipo:'Tipo',Codigo:'Código',Produto:'Produto',PacotesEmbalados:'Pacotes embalados',
+      AmostraSeparada:'Amostra separada',AmostraEm:'Amostra em',AmostraPor:'Amostra por',
+      TesteRealizado:'Teste realizado',Avaliacao:'Avaliação',PesoMedido:'Peso medido (g)',
+      PesoPadrao:'Peso padrão (g)',DesvioPct:'Desvio (%)',Observacoes:'Observações',TesteEm:'Teste em',TestePor:'Teste por'};
+    const ws=XLSX.utils.json_to_sheet(linhas, {header:cab});
+    // cabeçalho em português e destacado
+    cab.forEach((c,i)=>{
+      const cel=XLSX.utils.encode_cell({r:0,c:i});
+      ws[cel]={t:'s', v:titulos[c]||c, s:{font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'334155'}},alignment:{horizontal:'center',wrapText:true}}};
+    });
+    ws['!cols']=[{wch:11},{wch:9},{wch:8},{wch:36},{wch:11},{wch:9},{wch:16},{wch:16},{wch:9},{wch:17},{wch:11},{wch:11},{wch:10},{wch:44},{wch:16},{wch:16}];
+    ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:linhas.length,c:cab.length-1}})};
+    ws['!freeze']={xSplit:0,ySplit:1};
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Amostras');
+    const per=_qrelPeriodoTexto().replace(/\//g,'-').replace(/ a /,'_a_');
+    XLSX.writeFile(wb, 'Controle de Qualidade '+per+'.xlsx');
+  }catch(e){ alert('Não consegui gerar a planilha: '+(e&&e.message||e)); }
+}
+window.qualRelExcel=qualRelExcel;
+
+function _qrelPeriodoTexto(){
+  const de=(document.getElementById('qrel-de')||{}).value||'';
+  const ate=(document.getElementById('qrel-ate')||{}).value||'';
+  if(de&&ate) return estISOparaBR(de)+' a '+estISOparaBR(ate);
+  if(de) return 'a partir de '+estISOparaBR(de);
+  if(ate) return 'até '+estISOparaBR(ate);
+  return 'todo o período';
+}
+
+/* O PDF sai pela impressão do navegador: abre uma página pronta e a
+   pessoa escolhe "Salvar como PDF". Sem biblioteca extra. */
+function qualRelPdf(){
+  const linhas=qualRelLinhas();
+  if(!linhas.length){ alert('Nenhum registro no período.'); return; }
+  const per=_qrelPeriodoTexto();
+  const comA=linhas.filter(x=>x.AmostraSeparada==='Sim').length;
+  const comT=linhas.filter(x=>x.TesteRealizado==='Sim').length;
+
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const corAv=a=>a==='Dentro do padrão'?'#15803d':(a==='Com observação'?'#b45309':(a?'#b91c1c':'#94a3b8'));
+
+  const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">'+
+    '<title>Controle de Qualidade '+esc(per)+'</title><style>'+
+      '*{box-sizing:border-box;}'+
+      'body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:22px;color:#0f172a;font-size:11px;}'+
+      'h1{font-size:17px;margin:0 0 2px;}'+
+      '.sub{font-size:11px;color:#475569;margin-bottom:3px;}'+
+      '.resumo{display:flex;gap:10px;margin:14px 0;}'+
+      '.bloco{flex:1;border:1px solid #cbd5e1;border-radius:7px;padding:9px;text-align:center;}'+
+      '.bloco b{display:block;font-size:20px;}'+
+      '.bloco span{font-size:10px;color:#475569;}'+
+      'table{border-collapse:collapse;width:100%;}'+
+      'th{background:#334155;color:#fff;font-size:9px;padding:6px 5px;text-align:left;text-transform:uppercase;letter-spacing:.3px;}'+
+      'td{border-bottom:1px solid #e2e8f0;padding:5px;font-size:10px;vertical-align:top;}'+
+      'tr:nth-child(even) td{background:#f8fafc;}'+
+      '.c{text-align:center;}'+
+      '.nao{color:#b91c1c;font-weight:700;}'+
+      '.sim{color:#15803d;font-weight:700;}'+
+      '.rodape{margin-top:16px;font-size:9px;color:#64748b;border-top:1px solid #cbd5e1;padding-top:7px;}'+
+      '@media print{body{padding:10px;} thead{display:table-header-group;} tr{break-inside:avoid;} .noprint{display:none;}}'+
+      '.noprint{position:fixed;top:12px;right:12px;display:flex;gap:7px;}'+
+      '.noprint button{background:#2563eb;color:#fff;border:none;border-radius:7px;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}'+
+    '</style></head><body>'+
+    '<div class="noprint"><button onclick="window.print()">🖨 Salvar como PDF</button></div>'+
+    '<h1>Controle de Qualidade — Amostras e Testes</h1>'+
+    '<div class="sub"><strong>Panificadora Monte Castelo</strong></div>'+
+    '<div class="sub">Período: '+esc(per)+' · emitido em '+esc(agora())+' por '+esc(_demAutor())+'</div>'+
+    '<div class="resumo">'+
+      '<div class="bloco"><b>'+linhas.length+'</b><span>produtos no período</span></div>'+
+      '<div class="bloco"><b style="color:#15803d;">'+comA+'</b><span>com amostra separada</span></div>'+
+      '<div class="bloco"><b style="color:#2563eb;">'+comT+'</b><span>com teste realizado</span></div>'+
+    '</div>'+
+    '<table><thead><tr>'+
+      '<th>Data</th><th>Tipo</th><th>Cód</th><th>Produto</th><th class="c">Pct</th>'+
+      '<th class="c">Amostra</th><th class="c">Teste</th><th>Avaliação</th>'+
+      '<th class="c">Peso</th><th class="c">Padrão</th><th class="c">Desvio</th><th>Observações</th>'+
+    '</tr></thead><tbody>'+
+    linhas.map(l=>'<tr>'+
+      '<td>'+esc(l.Data)+'</td>'+
+      '<td>'+esc(l.Tipo)+'</td>'+
+      '<td>'+esc(l.Codigo)+'</td>'+
+      '<td>'+esc(l.Produto)+'</td>'+
+      '<td class="c">'+esc(l.PacotesEmbalados)+'</td>'+
+      '<td class="c"><span class="'+(l.AmostraSeparada==='Sim'?'sim':'nao')+'">'+esc(l.AmostraSeparada)+'</span></td>'+
+      '<td class="c"><span class="'+(l.TesteRealizado==='Sim'?'sim':'nao')+'">'+esc(l.TesteRealizado)+'</span></td>'+
+      '<td style="color:'+corAv(l.Avaliacao)+';font-weight:600;">'+esc(l.Avaliacao||'—')+'</td>'+
+      '<td class="c">'+(l.PesoMedido?esc(l.PesoMedido)+' g':'—')+'</td>'+
+      '<td class="c">'+(l.PesoPadrao?esc(l.PesoPadrao)+' g':'—')+'</td>'+
+      '<td class="c">'+((l.DesvioPct||l.DesvioPct===0)?((l.DesvioPct>0?'+':'')+esc(l.DesvioPct)+'%'):'—')+'</td>'+
+      '<td>'+esc(l.Observacoes||'')+'</td>'+
+    '</tr>').join('')+
+    '</tbody></table>'+
+    '<div class="rodape">Documento gerado pelo ProduLog · Panificadora Monte Castelo · '+esc(agora())+'</div>'+
+    '</body></html>';
+
+  const w=window.open('', '_blank');
+  if(!w){ alert('O navegador bloqueou a janela. Libere os pop-ups e tente de novo.'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+window.qualRelPdf=qualRelPdf;
+
 function _qualRenderCalendario(){
   const meses=qualMeses(_qualTipo);
   if(!_qualMes && meses.length) _qualMes=meses[0];
   const dias=qualDiasDoMes(_qualMes, _qualTipo);
 
   // abas pão / salgado
-  let h='<div style="display:flex;gap:7px;margin-bottom:12px;">'+
+  let h='<button onclick="qualAbrirRelatorio()" style="width:100%;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;">📄 Relatório para a vigilância</button>';
+  h+='<div style="display:flex;gap:7px;margin-bottom:12px;">'+
     [['salgado','🥐 Salgados'],['pao','🍞 Pães']].map(([id,nome])=>
       '<button onclick="qualSetTipo(\''+id+'\')" style="flex:1;background:'+(_qualTipo===id?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_qualTipo===id?'#fff':'var(--text-secondary)')+';border:1px solid '+(_qualTipo===id?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">'+nome+'</button>').join('')+
   '</div>';
@@ -26670,6 +26920,31 @@ window.amPodeEditarCliente=amPodeEditarCliente;
    e quando. */
 /* Remarcar a entrega. A embalagem se programa pela data, então toda
    mudança fica registrada e aparece em destaque. */
+/* O admin desfaz a recusa da embalagem. A amostra volta a aguardar e a
+   data pode ser alterada de novo, sem refazer o pedido. */
+async function amDesfazerRecusa(id){
+  const a=(amostras||[]).find(x=>x.firestoreId===id); if(!a) return;
+  if(window.adminMode!==true){ alert('Só o admin pode cancelar a recusa.'); return; }
+  if(a.status!=='recusada'){ alert('Esta amostra não está recusada.'); return; }
+  if(!confirm('Cancelar a recusa de "'+(a.cliente||'')+'"?'+
+    (a.recusaMotivo?('\n\nA embalagem recusou por: '+a.recusaMotivo):'')+
+    '\n\nA amostra volta para a fila e a data pode ser alterada.')) return;
+  // prazo curto volta a aguardar aceite; prazo normal já entra como pendente
+  const curto=(typeof amDiasAte==='function') ? (amDiasAte(a.entrega)<=1) : false;
+  try{
+    await updateDoc(doc(db,'amostras',id), {
+      status: curto?'aguardando':'pendente',
+      prazoCurto: curto,
+      recusaMotivo:'', recusadoPor:'', recusadoEm:'',
+      recusaCancelada:{motivo:a.recusaMotivo||'', por:_demAutor(), em:agora(),
+                       recusadaPor:a.recusadoPor||'', recusadaEm:a.recusadoEm||''}
+    });
+    document.getElementById('am-modal')?.remove();
+    alert('✓ Recusa cancelada.'+(curto?'\n\nComo o prazo é curto, a embalagem precisa aceitar de novo.':''));
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.amDesfazerRecusa=amDesfazerRecusa;
+
 async function amTrocarEntrega(id){
   const a=(amostras||[]).find(x=>x.firestoreId===id); if(!a) return;
   if(!amPodeEditarCliente(a)){ alert('Só quem pediu a amostra pode remarcar.'); return; }
@@ -26867,11 +27142,11 @@ function amCard(a, paraEmbalagem){
       (a.itens||[]).length+' produto(s) · '+(a.totalUn||0)+' unidade(s)'+
       (a.status==='pendente'&&feitos?(' · <strong>'+feitos+'/'+total+' conferidos</strong>'):'')+'</div>'+
     // a observação é instrução de produção: destacada em qualquer lista
-    (a.obs
-      ? '<div style="background:#fffbeb;border:2px solid #d97706;border-radius:10px;padding:10px 12px;margin-top:8px;">'+
-          '<div style="font-size:10px;font-weight:900;color:#b45309;letter-spacing:1.5px;">📝 OBSERVAÇÃO</div>'+
-          '<div style="font-size:18px;font-weight:800;color:#78350f;line-height:1.35;margin-top:3px;">'+a.obs+'</div></div>'
-      : '')+
+    // a observação é instrução de produção, e a data vai junto da frase
+    '<div style="background:#fffbeb;border:2px solid #d97706;border-radius:10px;padding:10px 12px;margin-top:8px;">'+
+      '<div style="font-size:10px;font-weight:900;color:#b45309;letter-spacing:1.5px;">📝 OBSERVAÇÃO</div>'+
+      '<div style="font-size:18px;font-weight:800;color:#78350f;line-height:1.35;margin-top:3px;">'+
+        (a.obs||'')+(a.obs?'<span style="color:#c2410c;"> · '+(a.entrega||'')+'</span>':(a.entrega||''))+'</div></div>'+
     '<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">'+(a.solicitadoPor||'')+' · '+(a.solicitadoEm||'')+'</div>'+
   '</div>';
 }
@@ -26990,7 +27265,7 @@ function amAbrir(id, paraEmbalagem){
             (a.obs
               ? '<div style="font-size:19px;font-weight:800;color:#78350f;line-height:1.35;">'+a.obs+
                   // a data vem junto da frase e acompanha qualquer remarcação
-                  '<span style="color:#c2410c;"> · entrega '+(a.entrega||'')+'</span></div>'
+                  '<span style="color:#c2410c;"> · '+(a.entrega||'')+'</span></div>'
               : '<div style="font-size:19px;font-weight:800;color:#78350f;line-height:1.35;">Entrega '+(a.entrega||'')+
                   '<span style="display:block;font-size:12px;font-weight:400;color:var(--text-muted);margin-top:3px;">sem observação · toque no lápis para escrever</span></div>')+
             // histórico de edições
@@ -27001,6 +27276,10 @@ function amAbrir(id, paraEmbalagem){
           '</div>'
         : '')+
       '<div style="font-size:10px;color:var(--text-muted);margin-top:5px;">Pedido por '+(a.solicitadoPor||'')+' em '+(a.solicitadoEm||'')+'</div>'+
+      (a.recusaCancelada
+        ? '<div style="font-size:10px;color:#15803d;margin-top:2px;">↩ recusa cancelada por '+(a.recusaCancelada.por||'')+' em '+(a.recusaCancelada.em||'')+
+            (a.recusaCancelada.motivo?(' · motivo da recusa: '+a.recusaCancelada.motivo):'')+'</div>'
+        : '')+
       (podeMarcar?'<div style="font-size:12px;font-weight:700;color:var(--mc-azul);margin-top:6px;">'+nFeitos+' de '+total+' conferidos</div>':'')+
     '</div>'+
     '<div style="flex:1;overflow-y:auto;padding:6px 12px;">'+
@@ -27015,7 +27294,11 @@ function amAbrir(id, paraEmbalagem){
         : (podeMarcar
           ? '<button class="btn btn-primary" style="width:100%;" onclick="amFinalizar(\''+a.firestoreId+'\')">✅ Finalizar amostra</button>'
           : (a.status==='recusada'
-            ? '<button class="btn btn-primary" style="width:100%;" onclick="document.getElementById(\'am-modal\').remove();amRemarcar(\''+a.firestoreId+'\')">Remarcar data</button>'
+            ? '<button class="btn btn-primary" style="width:100%;" onclick="document.getElementById(\'am-modal\').remove();amRemarcar(\''+a.firestoreId+'\')">Remarcar data</button>'+
+              // o admin desfaz a recusa e a amostra volta a andar
+              (window.adminMode===true
+                ? '<button onclick="amDesfazerRecusa(\''+a.firestoreId+'\')" style="width:100%;margin-top:8px;background:#fff;border:1px solid #16a34a;color:#15803d;border-radius:9px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Cancelar a recusa</button>'
+                : '')
             : '')))+
       '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="document.getElementById(\'am-modal\').remove()">Fechar</button>'+
       (a.status!=='feita' && (window.adminMode||String(a.solicitadoPor)===_elevSetor())
