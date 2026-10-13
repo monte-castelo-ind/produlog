@@ -22552,16 +22552,27 @@ function _qualRenderCalendario(){
   if(!dias.length) return h+_vazio('Nenhuma produção embalada aqui.','Os dias aparecem conforme a embalagem finaliza.');
 
   // resumo do mês
-  let totPend=0, totDias=0;
-  dias.forEach(d=>{ const p=qualPendentes(d,_qualTipo); if(p.pendentes){ totPend+=p.pendentes; totDias++; } });
+  let totDias=0, totAmostra=0, totTeste=0;
+  dias.forEach(d=>{
+    const p=qualPendentes(d,_qualTipo);
+    if(p.pendentes) totDias++;
+    totAmostra+=p.semAmostra; totTeste+=p.semTeste;
+  });
+  const totPend=totAmostra+totTeste;
   h+='<div class="card" style="margin-bottom:12px;'+(totPend?'background:#fffbeb;border:1px solid #fde68a;':'')+'">'+
-    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
-      '<span style="flex:1;min-width:0;">'+
-        '<span style="display:block;font-size:14px;font-weight:800;color:'+(totPend?'#b45309':'#15803d')+';">'+
-          (totPend?('⚠ '+totPend+' produto(s) pendentes'):'✓ Tudo em dia')+'</span>'+
-        '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
-          (totPend?(totDias+' dia(s) com pendência neste mês'):'nenhuma pendência neste mês')+'</span></span>'+
-    '</div></div>';
+    '<div style="font-size:14px;font-weight:800;color:'+(totPend?'#b45309':'#15803d')+';">'+
+      (totPend?('⚠ '+totDias+' dia(s) com pendência'):'✓ Tudo em dia')+'</div>'+
+    (totPend
+      ? '<div style="display:flex;gap:8px;margin-top:9px;">'+
+          '<div style="flex:1;text-align:center;background:'+(totAmostra?'#fef2f2':'#f0fdf4')+';border-radius:9px;padding:9px;">'+
+            '<div style="font-size:20px;font-weight:900;color:'+(totAmostra?'#dc2626':'#16a34a')+';">'+(totAmostra||'✓')+'</div>'+
+            '<div style="font-size:10px;color:var(--text-secondary);">sem amostra</div></div>'+
+          '<div style="flex:1;text-align:center;background:'+(totTeste?'#fffbeb':'#f0fdf4')+';border-radius:9px;padding:9px;">'+
+            '<div style="font-size:20px;font-weight:900;color:'+(totTeste?'#d97706':'#16a34a')+';">'+(totTeste||'✓')+'</div>'+
+            '<div style="font-size:10px;color:var(--text-secondary);">sem teste</div></div>'+
+        '</div>'
+      : '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">nenhuma pendência neste mês</div>')+
+  '</div>';
 
   // seletor de mês
   if(meses.length>1){
@@ -22577,7 +22588,7 @@ function _qualRenderCalendario(){
   }
 
   // os dias em blocos
-  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;">'+
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;">'+
     dias.map(d=>{
       const p=qualPendentes(d,_qualTipo);
       const tudoOk=p.pendentes===0;
@@ -22585,11 +22596,20 @@ function _qualRenderCalendario(){
       const fundo=tudoOk?'#f0fdf4':'#fffbeb';
       const borda=tudoOk?'#bbf7d0':'#fde68a';
       const dd=String(d).split('/');
-      return '<button onclick="qualVerDia(\''+escapeJsStr(d)+'\')" style="background:'+fundo+';border:2px solid '+borda+';border-radius:12px;padding:11px 8px;cursor:pointer;font-family:inherit;text-align:center;">'+
+      return '<button onclick="qualVerDia(\''+escapeJsStr(d)+'\')" style="background:'+fundo+';border:2px solid '+borda+';border-radius:12px;padding:10px 7px;cursor:pointer;font-family:inherit;text-align:center;">'+
         '<div style="font-size:22px;font-weight:900;color:'+cor+';line-height:1;">'+dd[0]+'</div>'+
         '<div style="font-size:10px;color:var(--text-muted);margin-top:1px;">'+_qualDiaSemana(d)+'</div>'+
-        '<div style="font-size:11px;font-weight:700;color:'+cor+';margin-top:6px;line-height:1.3;">'+
-          (tudoOk?('✓ '+p.total+' feitos'):(p.pendentes+' pendente'+(p.pendentes>1?'s':'')))+'</div>'+
+        // o que falta de cada coisa, separado
+        (tudoOk
+          ? '<div style="font-size:11px;font-weight:700;color:'+cor+';margin-top:7px;">✓ '+p.total+' feitos</div>'
+          : '<div style="margin-top:7px;display:flex;flex-direction:column;gap:2px;">'+
+              (p.semAmostra
+                ? '<div style="font-size:10px;font-weight:700;color:#dc2626;line-height:1.2;">🅰 '+p.semAmostra+' s/ amostra</div>'
+                : '<div style="font-size:10px;font-weight:700;color:#16a34a;line-height:1.2;">🅰 ✓</div>')+
+              (p.semTeste
+                ? '<div style="font-size:10px;font-weight:700;color:#d97706;line-height:1.2;">🔬 '+p.semTeste+' s/ teste</div>'
+                : '<div style="font-size:10px;font-weight:700;color:#16a34a;line-height:1.2;">🔬 ✓</div>')+
+            '</div>')+
       '</button>';
     }).join('')+
   '</div>';
@@ -23108,7 +23128,8 @@ function qualDiasDoMes(mes, tipo){
     if(mes && chaveMes!==mes) return;
     dias[r.data]=true;
   });
-  return Object.keys(dias).sort((a,b)=>estDataNum(b)-estDataNum(a));
+  // do começo do mês para o fim, como num calendário
+  return Object.keys(dias).sort((a,b)=>estDataNum(a)-estDataNum(b));
 }
 
 /* Meses que têm produção, do mais recente */
@@ -26647,6 +26668,84 @@ window.amPodeEditarCliente=amPodeEditarCliente;
 /* Editar a observação guardando o que havia antes. A embalagem decide
    o que fazer com base nessa observação, então vale saber o que mudou
    e quando. */
+/* Remarcar a entrega. A embalagem se programa pela data, então toda
+   mudança fica registrada e aparece em destaque. */
+async function amTrocarEntrega(id){
+  const a=(amostras||[]).find(x=>x.firestoreId===id); if(!a) return;
+  if(!amPodeEditarCliente(a)){ alert('Só quem pediu a amostra pode remarcar.'); return; }
+  const atual=a.entrega||'';
+  const ov=document.createElement('div');
+  ov.id='am-dt-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:18px;">'+
+    '<div style="font-size:17px;font-weight:800;">📅 Alterar a entrega</div>'+
+    '<div style="font-size:13px;font-weight:700;margin-top:7px;">'+(a.cliente||'')+'</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">hoje está para <strong>'+atual+'</strong></div>'+
+    '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);display:block;margin-top:14px;">Nova data</label>'+
+    '<input type="date" id="am-dt-nova" value="'+(atual?estBRparaISO(atual):'')+'" style="width:100%;padding:12px;min-height:50px;border:2px solid var(--mc-azul,#2563eb);border-radius:9px;font-size:16px;box-sizing:border-box;margin:5px 0 12px;">'+
+    '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);">Motivo (opcional)</label>'+
+    '<input type="text" id="am-dt-motivo" placeholder="ex: cliente pediu para adiar" autocomplete="off" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin:4px 0 14px;">'+
+    '<div style="display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'am-dt-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="amSalvarEntrega(\''+escapeJsStr(id)+'\')">Salvar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.amTrocarEntrega=amTrocarEntrega;
+
+async function amSalvarEntrega(id){
+  const a=(amostras||[]).find(x=>x.firestoreId===id); if(!a) return;
+  const iso=(document.getElementById('am-dt-nova')||{}).value||'';
+  if(!iso){ alert('Escolha a data.'); return; }
+  const nova=estISOparaBR(iso);
+  if(nova===a.entrega){ document.getElementById('am-dt-modal')?.remove(); return; }
+  const motivo=((document.getElementById('am-dt-motivo')||{}).value||'').trim();
+  const hist=[...(a.entregaHistorico||[]), {
+    de:a.entrega||'', para:nova, motivo, por:_demAutor(), em:agora(), ts:Date.now()
+  }];
+  const curto=(typeof amDiasAte==='function') ? (amDiasAte(nova)<=1) : false;
+  document.getElementById('am-dt-modal')?.remove();
+  try{
+    await updateDoc(doc(db,'amostras',id), {
+      entrega:nova,
+      entregaNum:estDataNum(nova),
+      entregaHistorico:hist,
+      prazoCurto:curto
+    });
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.amSalvarEntrega=amSalvarEntrega;
+
+function amVerHistEntrega(id){
+  const a=(amostras||[]).find(x=>x.firestoreId===id); if(!a) return;
+  const hist=(a.entregaHistorico||[]).slice().sort((x,y)=>(y.ts||0)-(x.ts||0));
+  const ov=document.createElement('div');
+  ov.id='am-hist-dt';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:85vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🕐 Alterações da entrega</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">'+(a.cliente||'')+' · '+hist.length+' alteração(ões)</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      '<div style="background:#fff7ed;border:2px solid #ea580c;border-radius:10px;padding:11px;margin-bottom:10px;">'+
+        '<div style="font-size:10px;font-weight:800;color:#c2410c;letter-spacing:1px;">ENTREGA AGORA</div>'+
+        '<div style="font-size:20px;font-weight:900;color:#c2410c;margin-top:2px;">'+(a.entrega||'')+'</div></div>'+
+      hist.map(h=>'<div class="card" style="margin-bottom:8px;">'+
+        '<div style="font-size:11px;color:var(--text-muted);">'+(h.em||'')+(h.por?(' · '+h.por):'')+'</div>'+
+        '<div style="display:flex;align-items:center;gap:9px;margin-top:5px;">'+
+          '<span style="font-size:14px;color:var(--text-secondary);text-decoration:line-through;">'+(h.de||'—')+'</span>'+
+          '<span style="font-size:13px;color:var(--text-muted);">→</span>'+
+          '<span style="font-size:15px;font-weight:800;">'+(h.para||'')+'</span></div>'+
+        (h.motivo?'<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">'+h.motivo+'</div>':'')+
+      '</div>').join('')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'am-hist-dt\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.amVerHistEntrega=amVerHistEntrega;
+
 async function amEditarObs(id){
   const a=(amostras||[]).find(x=>x.firestoreId===id); if(!a) return;
   if(!amPodeEditarCliente(a)){ alert('Só quem pediu a amostra pode editar a observação.'); return; }
@@ -26760,7 +26859,9 @@ function amCard(a, paraEmbalagem){
       '<div style="font-size:11px;font-weight:800;color:'+st.cor+';white-space:nowrap;">'+st.ico+' '+st.txt+'</div>'+
     '</div>'+
     '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+
-      '📅 '+a.entrega+(dias!==null?(' · '+(dias<0?('atrasada '+Math.abs(dias)+'d'):(dias===0?'HOJE':(dias===1?'amanhã':'em '+dias+' dias')))):'')+
+      ((a.entregaHistorico||[]).length?'<span style="color:#ea580c;font-weight:800;">⚠️ </span>':'')+
+  '📅 '+a.entrega+(dias!==null?(' · '+(dias<0?('atrasada '+Math.abs(dias)+'d'):(dias===0?'HOJE':(dias===1?'amanhã':'em '+dias+' dias')))):'')+
+  ((a.entregaHistorico||[]).length?'<span style="color:#ea580c;font-weight:700;"> · remarcada</span>':'')+
       (urgente?' <span style="color:#dc2626;font-weight:800;">⚠️</span>':'')+'</div>'+
     '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">'+
       (a.itens||[]).length+' produto(s) · '+(a.totalUn||0)+' unidade(s)'+
@@ -26862,11 +26963,23 @@ function amAbrir(id, paraEmbalagem){
           '<div style="font-size:11px;font-weight:800;color:'+st.cor+';">'+st.ico+' '+st.txt+'</div>'+
           '<button onclick="amImprimir(\''+a.firestoreId+'\')" title="Imprimir amostra" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-size:16px;cursor:pointer;font-family:inherit;">🖨️</button>'+
         '</div></div>'+
-      '<div style="font-size:13px;color:var(--text-secondary);margin-top:3px;">📅 Entrega '+a.entrega+' · '+total+' produto(s) · '+(a.totalUn||0)+' un · '+amFmtPct(a.totalPct||0)+' pct</div>'+
+      '<div style="font-size:13px;color:var(--text-secondary);margin-top:3px;">'+
+        '<span style="font-weight:'+(a.entregaHistorico&&a.entregaHistorico.length?'800':'400')+';color:'+(a.entregaHistorico&&a.entregaHistorico.length?'#d97706':'var(--text-secondary)')+';">📅 Entrega '+a.entrega+'</span>'+
+        (amPodeEditarCliente(a)
+          ? '<button onclick="amTrocarEntrega(\''+escapeJsStr(a.firestoreId)+'\')" title="Alterar a data de entrega" style="background:none;border:none;color:var(--mc-azul,#2563eb);font-size:13px;cursor:pointer;padding:0 6px;font-family:inherit;">✏️</button>'
+          : '')+
+        ' · '+total+' produto(s) · '+(a.totalUn||0)+' un · '+amFmtPct(a.totalPct||0)+' pct</div>'+
+      // data remarcada fica evidente: a embalagem pode já ter se programado
+      ((a.entregaHistorico||[]).length
+        ? '<button onclick="amVerHistEntrega(\''+escapeJsStr(a.firestoreId)+'\')" style="display:block;width:100%;text-align:left;background:#fff7ed;border:2px solid #ea580c;border-radius:10px;padding:9px 11px;margin-top:8px;cursor:pointer;font-family:inherit;">'+
+            '<span style="display:block;font-size:12px;font-weight:900;color:#c2410c;">⚠️ DATA ALTERADA</span>'+
+            '<span style="display:block;font-size:11px;color:#9a3412;margin-top:2px;">era '+(a.entregaHistorico[a.entregaHistorico.length-1].de||'—')+
+              ' · mudou para '+a.entrega+' · '+(a.entregaHistorico||[]).length+' alteração(ões) · ver</span></button>'
+        : '')+
       (a.assinatura ? '<div style="margin-top:10px;">'+assHtml(a.assinatura,true)+'</div>' : '')+
       // observação: editável por quem pede, com histórico do que mudou
-      ((a.obs || amPodeEditarCliente(a))
-        ? '<div style="background:'+(a.obs?'#fffbeb':'var(--bg-page)')+';border:'+(a.obs?'3px solid #d97706':'1px dashed var(--border-md,#cbd5e1)')+';border-radius:12px;padding:12px 14px;margin-top:10px;">'+
+      (true
+        ? '<div style="background:#fffbeb;border:3px solid #d97706;border-radius:12px;padding:12px 14px;margin-top:10px;">'+
             '<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">'+
               '<span style="font-size:20px;">📝</span>'+
               '<span style="flex:1;min-width:0;font-size:12px;font-weight:900;color:#b45309;letter-spacing:1px;">OBSERVAÇÃO</span>'+
@@ -26875,8 +26988,11 @@ function amAbrir(id, paraEmbalagem){
                 : '')+
             '</div>'+
             (a.obs
-              ? '<div style="font-size:19px;font-weight:800;color:#78350f;line-height:1.35;">'+a.obs+'</div>'
-              : '<div style="font-size:13px;color:var(--text-muted);">sem observação · toque no lápis para escrever</div>')+
+              ? '<div style="font-size:19px;font-weight:800;color:#78350f;line-height:1.35;">'+a.obs+
+                  // a data vem junto da frase e acompanha qualquer remarcação
+                  '<span style="color:#c2410c;"> · entrega '+(a.entrega||'')+'</span></div>'
+              : '<div style="font-size:19px;font-weight:800;color:#78350f;line-height:1.35;">Entrega '+(a.entrega||'')+
+                  '<span style="display:block;font-size:12px;font-weight:400;color:var(--text-muted);margin-top:3px;">sem observação · toque no lápis para escrever</span></div>')+
             // histórico de edições
             ((a.obsHistorico||[]).length
               ? '<button onclick="amVerHistObs(\''+escapeJsStr(a.firestoreId)+'\')" style="background:none;border:none;color:#b45309;font-size:11px;font-weight:700;cursor:pointer;padding:6px 0 0;font-family:inherit;text-decoration:underline;">'+
