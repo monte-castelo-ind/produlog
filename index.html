@@ -22897,24 +22897,16 @@ async function qualSalvarTeste(){
   if(aval!=='ok' && !probs.length && !obs){
     if(!confirm('Você marcou que o produto não ficou no padrão, mas não disse o que houve.\n\nSalvar assim mesmo?')) return;
   }
-  const chave=_qualChave(_qualDia,_qualTipo);
-  const d=_qualDoc(_qualDia,_qualTipo);
-  const itens={...(d.itens||{})};
   const foto=ov.dataset.foto||'';
   const peso=parseFloat(((document.getElementById('qt-peso')||{}).value||'').replace(',','.'))||0;
   const dsv=qualDesvioPeso(cod, peso);
-  itens[cod]={...(itens[cod]||{}), teste:{avaliacao:aval, problemas:probs, obs, temFoto:!!foto,
-    peso, pesoEsperado:dsv?dsv.esperado:qualPesoEsperado(cod), pesoDesvio:dsv?Number(dsv.pct.toFixed(2)):null,
-    em:agora(), por:_demAutor()}};
-  qualDados[chave]={...d, itens};
+  const fotoAntes=qualFoto(_qualDia,_qualTipo,cod);
   ov.remove();
-  renderQual();
-  try{
-    await setDoc(doc(db,'qualidade',chave),
-      {itens, dia:_qualDia, tipo:_qualTipo, atualizadoEm:agora()},{merge:true});
-    // a foto vai separada, para o registro do dia não crescer
-    if(foto!==qualFoto(_qualDia,_qualTipo,cod)) await _qualGravarFoto(_qualDia,_qualTipo,cod,foto);
-  }catch(e){ alert('Não consegui salvar: '+e.message); }
+  await _qualGravarItem(cod, {teste:{avaliacao:aval, problemas:probs, obs, temFoto:!!foto,
+    peso, pesoEsperado:dsv?dsv.esperado:qualPesoEsperado(cod), pesoDesvio:dsv?Number(dsv.pct.toFixed(2)):null,
+    em:agora(), por:_demAutor()}});
+  // a foto vai separada, para o registro do dia não crescer
+  if(foto!==fotoAntes) await _qualGravarFoto(_qualDia,_qualTipo,cod,foto);
 }
 window.qualSalvarTeste=qualSalvarTeste;
 
@@ -22928,20 +22920,10 @@ async function qualLimparTeste(cod){
     (av?('\n\nEstá como: '+av.nome+(t.por?(' · '+t.por):'')):'')+
     (qualFoto(_qualDia,_qualTipo,cod)?'\n\nA foto também será apagada.':'')+
     '\n\nO produto volta para a lista de pendentes.')) return;
-  const chave=_qualChave(_qualDia,_qualTipo);
-  const d=_qualDoc(_qualDia,_qualTipo);
-  const itens={...(d.itens||{})};
-  const it={...(itens[cod]||{})};
-  delete it.teste;
-  itens[cod]=it;
-  await _qualGravarFoto(_qualDia,_qualTipo,cod,'');
-  qualDados[chave]={...d, itens};
   document.getElementById('qual-teste')?.remove();
-  renderQual();
-  try{
-    await setDoc(doc(db,'qualidade',chave),
-      {itens, dia:_qualDia, tipo:_qualTipo, atualizadoEm:agora()},{merge:true});
-  }catch(e){ alert('Erro: '+e.message); }
+  await _qualGravarFoto(_qualDia,_qualTipo,cod,'');
+  // null limpa o teste sem tocar nos outros produtos
+  await _qualGravarItem(cod, {teste:null});
 }
 window.qualLimparTeste=qualLimparTeste;
 
@@ -23025,24 +23007,42 @@ function _qualRenderDia(){
 }
 
 /* ── AMOSTRA ─────────────────────────────────────────────────────── */
-async function qualToggleAmostra(cod){
+/* Grava SÓ o produto alterado.
+   Antes cada ação enviava a lista inteira do dia: marcar a amostra de um
+   produto reescrevia todos os outros com o estado que estava na memória,
+   e isso desfazia alterações feitas segundos antes. */
+async function _qualGravarItem(cod, campos){
   const chave=_qualChave(_qualDia,_qualTipo);
   const d=_qualDoc(_qualDia,_qualTipo);
+  // mostra na hora
   const itens={...(d.itens||{})};
-  const it={...(itens[cod]||{})};
-  if(it.amostra){
-    if(!confirm('Desmarcar a amostra deste produto?')) return;
-    it.amostra=false; it.amostraEm=''; it.amostraPor='';
-  } else {
-    it.amostra=true; it.amostraEm=agora(); it.amostraPor=_demAutor();
-  }
+  const it={...(itens[cod]||{}), ...campos};
+  Object.keys(campos).forEach(k=>{ if(campos[k]===null) delete it[k]; });
   itens[cod]=it;
   qualDados[chave]={...d, itens};
   renderQual();
   try{
+    // merge profundo: mexe só neste produto
     await setDoc(doc(db,'qualidade',chave),
-      {itens, dia:_qualDia, tipo:_qualTipo, atualizadoEm:agora()},{merge:true});
-  }catch(e){ alert('Não consegui salvar: '+e.message); }
+      {itens:{[cod]:campos}, dia:_qualDia, tipo:_qualTipo, atualizadoEm:agora()},{merge:true});
+    return true;
+  }catch(e){
+    alert('Não consegui salvar: '+e.message);
+    return false;
+  }
+}
+
+async function qualToggleAmostra(cod){
+  const d=_qualDoc(_qualDia,_qualTipo);
+  const atual=(d.itens||{})[cod]||{};
+  let campos;
+  if(atual.amostra){
+    if(!confirm('Desmarcar a amostra deste produto?')) return;
+    campos={amostra:false, amostraEm:'', amostraPor:''};
+  } else {
+    campos={amostra:true, amostraEm:agora(), amostraPor:_demAutor()};
+  }
+  await _qualGravarItem(cod, campos);
 }
 window.qualToggleAmostra=qualToggleAmostra;
 
@@ -23085,7 +23085,7 @@ function qualPendentes(dia, tipo){
   prods.forEach(p=>{
     const it=(d.itens||{})[p.cod]||{};
     if(!it.amostra) semAmostra++;
-    if(!it.teste || !it.teste.avaliacao) semTeste++;
+    if(!it.teste || !it.teste.avaliacao) semTeste++;   // null conta como sem teste
   });
   return {total:prods.length, semAmostra, semTeste,
           pendentes:prods.filter(p=>{
