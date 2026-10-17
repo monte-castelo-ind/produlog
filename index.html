@@ -954,6 +954,7 @@
       </div>
       <div id="mc-exibicao-box" style="margin-top:22px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;"></div>
       <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted);">Monte Castelo Panificadora · v6.0</div>
+      <div id="pl-conta" style="text-align:center;margin-top:6px;font-size:11px;color:var(--text-muted);"></div>
     </div>
   </div>
 
@@ -1142,6 +1143,29 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
       <div id="mov-head"></div>
       <div id="mov-list"></div>
+    </div>
+  </div>
+
+  <!-- LOGIN DA CONTA: uma vez por aparelho; depois fica conectado -->
+  <div class="screen" id="s-login">
+    <div class="pin-screen">
+      <div class="pin-logo">
+        <div class="pin-empresa">Monte Castelo</div>
+        <div class="pin-sub">Panificadora · ProduLog</div>
+      </div>
+      <div id="pl-login-wait" style="color:#fff;opacity:.85;font-size:14px;text-align:center;">Verificando acesso…</div>
+      <div id="pl-login-form" style="width:100%;max-width:300px;margin:0 auto;display:none;">
+        <div style="color:#fff;font-size:13px;opacity:.9;text-align:center;margin-bottom:16px;line-height:1.5;">Entre com a conta deste aparelho.<br>Só é preciso uma vez.</div>
+        <input type="email" id="pl-login-email" placeholder="E-mail" autocomplete="username" autocapitalize="off" spellcheck="false"
+          onkeydown="if(event.key==='Enter')document.getElementById('pl-login-senha').focus()"
+          style="width:100%;font-size:16px;padding:14px;border-radius:12px;border:none;box-sizing:border-box;" />
+        <input type="password" id="pl-login-senha" placeholder="Senha" autocomplete="current-password"
+          onkeydown="if(event.key==='Enter')plEntrar()"
+          style="width:100%;font-size:16px;padding:14px;border-radius:12px;border:none;box-sizing:border-box;margin-top:10px;" />
+        <button id="pl-login-btn" onclick="plEntrar()"
+          style="width:100%;margin-top:14px;padding:15px;border-radius:12px;border:none;background:#fff;color:#1e3a8a;font-weight:700;font-size:16px;cursor:pointer;">Entrar →</button>
+        <div class="pin-err" id="pl-login-err"></div>
+      </div>
     </div>
   </div>
 
@@ -5235,7 +5259,8 @@
   <!-- PLANEJAMENTO - IMPORTAR ESTOQUE -->
   <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, deleteDoc, setDoc, getDoc, onSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, deleteDoc, setDoc, getDoc, onSnapshot as _fbOnSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // MODO TV VIA LINK (?tv=1): detectado logo no início, antes de qualquer snapshot do Firebase
 window._tvLinkMode = /[?&]tv=1\b/.test(location.search);
@@ -5252,6 +5277,92 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// ===== LOGIN DA CONTA (Firebase Auth) =====
+// O banco deve responder só a quem fez login. Cada aparelho entra uma vez
+// com a conta do setor e fica conectado; a tela de PIN continua só para
+// escolher o setor. Toda leitura em tempo real espera o login: com o banco
+// fechado, uma leitura aberta antes do login falharia e não tentaria de novo.
+// Por isso onSnapshot abaixo é um porteiro: antes do login, guarda o pedido
+// numa fila; depois do login, liga tudo de uma vez.
+const auth = getAuth(app);
+var _plLogado=false, _plAuthPronto=false, _plFila=[];
+window._plLogado=false;
+function onSnapshot(ref, ...args){
+  if(_plLogado) return _fbOnSnapshot(ref, ...args);
+  const item={ ref, args, unsub:null, cancelado:false };
+  _plFila.push(item);
+  return function(){ item.cancelado=true; if(item.unsub){ try{ item.unsub(); }catch(e){} } };
+}
+function _plLigarFila(){
+  const fila=_plFila; _plFila=[];
+  fila.forEach(it=>{
+    if(it.cancelado) return;
+    try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }catch(e){ console.error('leitura:', e); }
+  });
+}
+function _plMostrarLogin(){
+  const f=document.getElementById('pl-login-form'), w=document.getElementById('pl-login-wait');
+  if(f) f.style.display=_plAuthPronto?'':'none';
+  if(w) w.style.display=_plAuthPronto?'none':'';
+  if(_plAuthPronto){ const e=document.getElementById('pl-login-email'); if(e && !e.value) setTimeout(()=>e.focus(),50); }
+}
+window.plEntrar=function(){
+  const em=(document.getElementById('pl-login-email').value||'').trim();
+  const pw=document.getElementById('pl-login-senha').value||'';
+  const err=document.getElementById('pl-login-err'), btn=document.getElementById('pl-login-btn');
+  if(!em || !pw){ err.textContent='Preencha e-mail e senha.'; return; }
+  err.textContent=''; btn.disabled=true; btn.textContent='Entrando…';
+  setPersistence(auth, browserLocalPersistence)
+    .then(()=>signInWithEmailAndPassword(auth, em, pw))
+    .catch(e=>{
+      const c=(e && e.code) || '';
+      err.textContent =
+        ['auth/invalid-credential','auth/wrong-password','auth/user-not-found','auth/invalid-email','auth/invalid-login-credentials'].includes(c) ? 'E-mail ou senha incorretos.'
+        : c==='auth/too-many-requests' ? 'Muitas tentativas. Espere alguns minutos.'
+        : c==='auth/network-request-failed' ? 'Sem internet. Confira a conexão.'
+        : c==='auth/user-disabled' ? 'Esta conta está desativada.'
+        : 'Não foi possível entrar ('+c+').';
+    })
+    .finally(()=>{ btn.disabled=false; btn.textContent='Entrar →'; });
+};
+/* Senha do admin: só a cadastrada no banco (Gerenciar Senhas). Sem valor
+   padrão no código e sem senha mestra — o código é público. Se a senha do
+   admin se perder, corrige-se no console do Firebase, em
+   configuracoes/setores → pins.admin. */
+function _plSenhaAdminOk(s){
+  const a=(typeof PINS!=='undefined' && PINS && PINS.admin!=null) ? String(PINS.admin).trim() : '';
+  return a!=='' && String(s==null?'':s).trim()===a;
+}
+window.plSairConta=function(){
+  if(!confirm('Desconectar este aparelho? Para voltar a usar, vai precisar do e-mail e da senha da conta.')) return;
+  signOut(auth).then(()=>location.reload()).catch(e=>alert('Não foi possível desconectar: '+(e.code||e.message)));
+};
+onAuthStateChanged(auth, user=>{
+  _plAuthPronto=true;
+  const conta=document.getElementById('pl-conta');
+  if(user){
+    const primeira=!_plLogado;
+    _plLogado=true; window._plLogado=true;
+    if(conta){
+      conta.textContent='Conectado como '+(user.email||'conta sem e-mail')+' · ';
+      const a=document.createElement('a'); a.href='#'; a.textContent='desconectar'; a.style.color='inherit';
+      a.onclick=function(ev){ ev.preventDefault(); plSairConta(); };
+      conta.appendChild(a);
+    }
+    _plLigarFila();
+    if(primeira){
+      const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
+      if(window._tvLinkMode){ window._tvLinkIniciado=false; _entrarModoTvLink(); }
+      else { const t=_navTelaAtual(); if(!t || t==='s-login') goTo('s-inicio', true); }
+    }
+  } else {
+    if(_plLogado){ location.reload(); return; }   // a conta saiu (outra aba ou desativada)
+    if(conta) conta.textContent='';
+    const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
+    goTo('s-login', true);
+  }
+});
+
 // Carregar senhas dos setores do Firebase EM TEMPO REAL (atualiza sozinho em todos os aparelhos)
 function escutarSetoresDoFirebase(){
   try {
@@ -5267,8 +5378,7 @@ function escutarSetoresDoFirebase(){
             console.log('✅ Senhas sincronizadas do Firebase');
           }
         } else {
-          console.log('⚠️ Documento de setores não existe, criando...');
-          inicializarSetoresNoFirebase();
+          console.warn('Documento configuracoes/setores não existe; as senhas padrão do código ficam valendo até alguém cadastrar pela tela Gerenciar Senhas.');
         }
       }catch(e){ console.warn('setores snap erro:', e.message); }
     }, err=>{ console.warn('setores listener erro:', err.message); });
@@ -5318,7 +5428,7 @@ let QUADRA_PRODUTOS = [];
 let QUADRA_KITS_RECEITAS = {};
   let QUADRA_KITS = []; // Lista de nomes de kits da Quadra
 let QUADRA_KIT_MAPPING = {"Kit Massa Especial Mini Sonho": "KIT MASSA ESPECIAL MINI SONHO", "Kit Pão Sovado": "KIT PÃO SOVADO", "Kit Pao De Milho Salgado Cacetinho": "KIT PAO DE MILHO SALGADO CACETINHO", "Kit Cuca Alemã": "KIT CUCA ALEMÃ", "Kit Rosca De Polvilho": "KIT ROSCA DE POLVILHO", "Kit Massa Especial Donuts E Cueca Grande": "KIT MASSA ESPECIAL DONUTS E CUECA GRANDE", "Kit Pão Preto": "KIT PÃO PRETO", "Kit Massa Sonho": "KIT MASSA SONHO", "Kit Massa Especial": "KIT MASSA ESPECIAL", "Kit Massa Doce": "KIT MASSA DOCE", "Kit Pão De Cenoura": "KIT PÃO DE CENOURA", "Kit Cueca Virada": "KIT CUECA VIRADA", "Kit Pão De Leite": "KIT PÃO DE LEITE", "Kit Cuca Colonial": "KIT CUCA COLONIAL", "Kit Pão De Aipim": "KIT PÃO DE AIPIM", "Kit Cuca Frutas": "KIT CUCA FRUTAS", "Kit Cuca Chocolate": "KIT CUCA CHOCOLATE", "Kit Vovo/Gajeta": "KIT VOVO/GAJETA", "Kit Pão De Milho Doce": "KIT PÃO DE MILHO DOCE", "Kit Pão De Batata": "KIT PÃO DE BATATA", "Kit Pão Caseiro": "KIT PÃO CASEIRO", "Kit Raminho": "KIT RAMINHO", "Kit Pão De Milho Salgado": "KIT PÃO DE MILHO SALGADO", "Kit Pão Folhado": "KIT PÃO FOLHADO", "Kit Pão Brioche": "KIT PÃO BRIOCHE", "Kit Pão Integral": "KIT PÃO INTEGRAL", "Kit Grande Premium 6/8": "KIT GRANDE PREMIUM 6/8", "Kit Pão 7 Grãos": "KIT PÃO 7 GRÃOS"};
-let PINS = { confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314', admin:'2504', contagem:'0000', container:'0001', quadra:'2020', testes:'7070', simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030', estoque:'8080', patrick:'9090' }; // Será carregado do Firebase
+let PINS = { confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314', admin:null, contagem:'0000', container:'0001', quadra:'2020', testes:'7070', simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030', estoque:'8080', patrick:'9090' }; // Será carregado do Firebase
 const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo' };
 const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒' };
 const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home' };
@@ -5380,6 +5490,7 @@ onSnapshot(collection(db,'recheios'), snap=>{
 
 // ===== MODO TV VIA LINK (?tv=1) — para deixar rodando numa TV Android =====
 function _entrarModoTvLink(){
+  if(!_plLogado) return;   // a TV também precisa da conta; o login chama de novo
   if(!window._tvLinkMode || window._tvLinkIniciado) return;
   window._tvLinkIniciado=true;
   const loading=document.getElementById('loading'); if(loading) loading.style.display='none';
@@ -5535,9 +5646,9 @@ window.pinLimpar=pinLimpar;
 function verificarPin(){
   const inp=document.getElementById('pin-input');
   const val=String(_pinReal||'').trim();
-  // senha mestra de emergência do admin (sempre funciona, mesmo que o Firebase esteja com valor errado)
-  const ehAdminMestra = (setorAtivo==='admin' && val==='250406');
-  if(val===PINS[setorAtivo] || ehAdminMestra){
+  // admin confere só com a senha do banco; os setores, com o PIN de sempre
+  const pinOk = setorAtivo==='admin' ? _plSenhaAdminOk(val) : (val!=='' && val===PINS[setorAtivo]);
+  if(pinOk){
     window.setorAtual=setorAtivo; // Para validações de permissão
     if(setorAtivo==='admin'){ adminMode=true; window.adminMode=true; document.body.classList.add('admin-mode'); }
     else { adminMode=false; window.adminMode=false; document.body.classList.remove('admin-mode'); }
@@ -5622,6 +5733,7 @@ function voltar(){
 window.voltar=voltar;
 
 function goTo(id, semHistorico){
+  if(!_plLogado && id!=='s-login'){ id='s-login'; semHistorico=true; }   // sem login, só a tela de login
   const atual=_navTelaAtual();
   // guarda de onde veio, para o voltar saber o caminho
   if(!semHistorico && atual && atual!==id){
@@ -5633,6 +5745,7 @@ function goTo(id, semHistorico){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
+  if(id==='s-login') _plMostrarLogin();
   if(typeof mcGarantirTelaCheia==='function') mcGarantirTelaCheia();
   if(id==='s-mp-precos') mppRender();
   if(id==='s-emb') embRender();
@@ -15776,7 +15889,7 @@ async function _reqExcluir(reqId){
   const r=requisicoes.find(x=>x.firestoreId===reqId); if(!r) return;
   const senha=prompt('🔒 Excluir a requisição de "'+(r.fornecedorNome||'')+'".\n\nDigite a senha de administrador para confirmar:');
   if(senha===null) return; // cancelou
-  const ok = (typeof PINS!=='undefined' && senha===PINS['admin']) || senha==='250406';
+  const ok = _plSenhaAdminOk(senha);
   if(!ok){ alert('❌ Senha incorreta. A requisição não foi excluída.'); return; }
   try{
     await deleteDoc(doc(db,'requisicoes',reqId));
@@ -19688,10 +19801,9 @@ function laManuaisAbertos(){
 /* Pede a senha do admin. Usado nas limpezas, que são raras e não podem
    acontecer por um toque sem querer. */
 function laPedirSenhaAdmin(oque){
-  const senhaAdmin=(typeof PINS!=='undefined' && PINS.admin) ? String(PINS.admin) : '2504';
   const s=prompt('🔒 Senha do admin para '+oque+':');
   if(s===null) return false;
-  if(String(s).trim()!==senhaAdmin && String(s).trim()!=='250406'){
+  if(!_plSenhaAdminOk(s)){
     alert('Senha incorreta. Nada foi apagado.');
     return false;
   }
@@ -21109,7 +21221,7 @@ async function _ajmExcluir(id){
   const a=_ajmLista.find(x=>x.firestoreId===id); if(!a) return;
   const senha=prompt('🔒 Excluir este ajuste de "'+(a.nome||'')+'".\n\nDigite a senha de administrador:');
   if(senha===null) return;
-  const ok=(typeof PINS!=='undefined' && senha===PINS['admin'])||senha==='250406';
+  const ok=_plSenhaAdminOk(senha);
   if(!ok){ alert('❌ Senha incorreta.'); return; }
   try{ await deleteDoc(doc(db,'ajustesEstoqueManual',id)); }catch(e){ alert('Erro: '+e.message); }
 }
@@ -27494,8 +27606,7 @@ async function amSalvarConfig(){
   const dias=parseInt((document.getElementById('am-cfg-dias')||{}).value);
   const senha=String((document.getElementById('am-cfg-senha')||{}).value||'').trim();
   if(isNaN(dias)||dias<0){ alert('Informe os dias de antecedência.'); return; }
-  const senhaAdmin=(typeof PINS!=='undefined' && PINS.admin) ? String(PINS.admin) : '2504';
-  if(senha!==senhaAdmin && senha!=='250406'){ alert('Senha de admin incorreta.'); return; }
+  if(!_plSenhaAdminOk(senha)){ alert('Senha de admin incorreta.'); return; }
   try{
     await setDoc(doc(db,'configuracoes','amostras'),{prazoMinDias:dias, atualizadoEm:agora(), autor:_elevSetor()},{merge:true});
     document.getElementById('am-cfg-modal')?.remove();
@@ -29436,8 +29547,7 @@ async function estZerar(onde){
     '\nFica registrado nas movimentações como ajuste. Não dá para desfazer.')) return;
   const senha=prompt('🔒 Senha do admin para confirmar:');
   if(senha===null) return;
-  const senhaAdmin=(typeof PINS!=='undefined' && PINS.admin) ? String(PINS.admin) : '2504';
-  if(String(senha).trim()!==senhaAdmin && String(senha).trim()!=='250406'){ alert('Senha incorreta. Nada foi alterado.'); return; }
+  if(!_plSenhaAdminOk(senha)){ alert('Senha incorreta. Nada foi alterado.'); return; }
 
   let erros=[];
   // dentro: lança a saída do saldo atual, mantendo o rastro
