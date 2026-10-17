@@ -3821,7 +3821,7 @@
         <div class="mc-sector-icon red">🔐</div>
         <div class="mc-sector-info">
           <div class="mc-sector-title" style="color:#dc2626;">Gerenciar Senhas</div>
-          <div class="mc-sector-desc">Alterar senhas de acesso dos setores</div>
+          <div class="mc-sector-desc">Alterar a senha do admin</div>
         </div>
         <span class="mc-sector-arrow" style="color:#dc2626;">›</span>
       </button>
@@ -4229,7 +4229,7 @@
       <div class="mc-divider-v"></div>
       <div class="mc-page-info">
         <div class="mc-page-title">🔐 Gerenciar Senhas</div>
-        <div class="mc-page-sub">Alterar senhas de acesso dos setores</div>
+        <div class="mc-page-sub">Alterar a senha do admin</div>
       </div>
     </div>
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
@@ -5520,7 +5520,7 @@ let QUADRA_PRODUTOS = [];
 let QUADRA_KITS_RECEITAS = {};
   let QUADRA_KITS = []; // Lista de nomes de kits da Quadra
 let QUADRA_KIT_MAPPING = {"Kit Massa Especial Mini Sonho": "KIT MASSA ESPECIAL MINI SONHO", "Kit Pão Sovado": "KIT PÃO SOVADO", "Kit Pao De Milho Salgado Cacetinho": "KIT PAO DE MILHO SALGADO CACETINHO", "Kit Cuca Alemã": "KIT CUCA ALEMÃ", "Kit Rosca De Polvilho": "KIT ROSCA DE POLVILHO", "Kit Massa Especial Donuts E Cueca Grande": "KIT MASSA ESPECIAL DONUTS E CUECA GRANDE", "Kit Pão Preto": "KIT PÃO PRETO", "Kit Massa Sonho": "KIT MASSA SONHO", "Kit Massa Especial": "KIT MASSA ESPECIAL", "Kit Massa Doce": "KIT MASSA DOCE", "Kit Pão De Cenoura": "KIT PÃO DE CENOURA", "Kit Cueca Virada": "KIT CUECA VIRADA", "Kit Pão De Leite": "KIT PÃO DE LEITE", "Kit Cuca Colonial": "KIT CUCA COLONIAL", "Kit Pão De Aipim": "KIT PÃO DE AIPIM", "Kit Cuca Frutas": "KIT CUCA FRUTAS", "Kit Cuca Chocolate": "KIT CUCA CHOCOLATE", "Kit Vovo/Gajeta": "KIT VOVO/GAJETA", "Kit Pão De Milho Doce": "KIT PÃO DE MILHO DOCE", "Kit Pão De Batata": "KIT PÃO DE BATATA", "Kit Pão Caseiro": "KIT PÃO CASEIRO", "Kit Raminho": "KIT RAMINHO", "Kit Pão De Milho Salgado": "KIT PÃO DE MILHO SALGADO", "Kit Pão Folhado": "KIT PÃO FOLHADO", "Kit Pão Brioche": "KIT PÃO BRIOCHE", "Kit Pão Integral": "KIT PÃO INTEGRAL", "Kit Grande Premium 6/8": "KIT GRANDE PREMIUM 6/8", "Kit Pão 7 Grãos": "KIT PÃO 7 GRÃOS"};
-let PINS = { confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314', admin:null, contagem:'0000', container:'0001', quadra:'2020', testes:'7070', simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030', estoque:'8080', patrick:'9090' }; // Será carregado do Firebase
+let PINS = { admin:null }; // senha do admin vem do banco (Gerenciar Senhas); setores entram sem PIN
 const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo' };
 const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒' };
 const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home' };
@@ -5691,6 +5691,15 @@ function sortDatas(arr){return arr.sort((a,b)=>b.split('/').reverse().join('-').
 // ===== PIN =====
 function abrirPin(setor){
   if(!_plSetorPermitido(setor)) return;   // setor fora da lista desta conta
+  // Desde 17/10/2026 os setores entram direto: quem vê o setor já foi
+  // liberado para ele na aba Acessos da Gestão. Só o admin pede senha.
+  if(setor!=='admin'){
+    setorAtivo=setor; pinBuffer='';
+    window.setorAtual=setor; adminMode=false; window.adminMode=false;
+    document.body.classList.remove('admin-mode');
+    goTo(DESTINOS[setor]);
+    return;
+  }
   setorAtivo=setor; pinBuffer='';
   document.getElementById('pin-setor-nome').textContent=NOMES[setor];
   const bg=document.getElementById('pin-bg');
@@ -9570,7 +9579,7 @@ let setorEmEdicao = '';
 
 window.renderSenhasList = () => {
   let html = '';
-  Object.keys(NOMES).forEach(setor => {
+  Object.keys(NOMES).filter(setor => setor==='admin').forEach(setor => {
     const nome = NOMES[setor];
     const senhaAtual = (typeof PINS!=='undefined' && PINS[setor]!=null) ? PINS[setor] : '—';
     const inputId = 'senha-val-'+setor;
