@@ -1153,7 +1153,8 @@
         <div class="pin-empresa">Monte Castelo</div>
         <div class="pin-sub">Panificadora · ProduLog</div>
       </div>
-      <div id="pl-login-wait" style="color:#fff;opacity:.85;font-size:14px;text-align:center;">Verificando acesso…</div>
+      <div id="pl-login-wait" style="color:#fff;opacity:.9;font-size:14px;text-align:center;max-width:320px;line-height:1.5;">Verificando acesso…</div>
+      <button id="pl-login-sair" class="pin-back" onclick="plSairConta()" style="display:none;">Desconectar esta conta</button>
       <div id="pl-login-form" style="width:100%;max-width:300px;margin:0 auto;display:none;">
         <div style="color:#fff;font-size:13px;opacity:.9;text-align:center;margin-bottom:16px;line-height:1.5;">Entre com a conta deste aparelho.<br>Só é preciso uma vez.</div>
         <input type="email" id="pl-login-email" placeholder="E-mail" autocomplete="username" autocapitalize="off" spellcheck="false"
@@ -3824,6 +3825,14 @@
         </div>
         <span class="mc-sector-arrow" style="color:#dc2626;">›</span>
       </button>
+      <button class="mc-sector-card" id="pl-card-acessos" style="display:none;border-left:4px solid var(--mc-azul);margin-bottom:10px;" onclick="plAbrirAcessos()">
+        <div class="mc-sector-icon blue">🔑</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Acessos</div>
+          <div class="mc-sector-desc">Abre a aba Acessos da Gestão: liberar contas e escolher os setores</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
     </div>
   </div>
 
@@ -5259,33 +5268,55 @@
   <!-- PLANEJAMENTO - IMPORTAR ESTOQUE -->
   <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, deleteDoc, setDoc, getDoc, onSnapshot as _fbOnSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // MODO TV VIA LINK (?tv=1): detectado logo no início, antes de qualquer snapshot do Firebase
 window._tvLinkMode = /[?&]tv=1\b/.test(location.search);
 
+// Desde a migração, o Produlog usa o mesmo Firebase dos outros apps
+// (manutencao-comodato). O projeto antigo (montecastelo-a0764) foi fechado.
 const firebaseConfig = {
-  apiKey: "AIzaSyDY5ma_NbCmZ2dyXUjKm6GZQ3ibhwgcdmI",
-  authDomain: "montecastelo-a0764.firebaseapp.com",
-  projectId: "montecastelo-a0764",
-  storageBucket: "montecastelo-a0764.firebasestorage.app",
-  messagingSenderId: "158891969912",
-  appId: "1:158891969912:web:0541e828e0e0743cef0c8d"
+  apiKey: "AIzaSyCH_t074MvkJn-qVMvCtLfEMaQHf_e_d7M",
+  authDomain: "manutencao-comodato.firebaseapp.com",
+  projectId: "manutencao-comodato",
+  storageBucket: "manutencao-comodato.firebasestorage.app",
+  messagingSenderId: "89709396101",
+  appId: "1:89709396101:web:22ee225ffa806e07a269ec"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ===== LOGIN DA CONTA (Firebase Auth) =====
-// O banco deve responder só a quem fez login. Cada aparelho entra uma vez
-// com a conta do setor e fica conectado; a tela de PIN continua só para
-// escolher o setor. Toda leitura em tempo real espera o login: com o banco
-// fechado, uma leitura aberta antes do login falharia e não tentaria de novo.
-// Por isso onSnapshot abaixo é um porteiro: antes do login, guarda o pedido
-// numa fila; depois do login, liga tudo de uma vez.
+// ===== PREFIXO pl_ =====
+// No banco do Comodato, toda coleção do Produlog leva o prefixo pl_
+// (registros -> pl_registros), para não colidir com as dos outros apps.
+// collection() e doc() abaixo põem o prefixo sozinhas: o resto do código
+// continua escrevendo os nomes de sempre. Só o cadastro da conta
+// (usuarios/{uid}, do Comodato) usa _fbDoc direto, sem prefixo.
+const PL_PREFIXO='pl_';
+function _plNome(n){ n=String(n); return n.indexOf(PL_PREFIXO)===0 ? n : PL_PREFIXO+n; }
+function collection(base, nome, ...resto){
+  if(base===db) return _fbCollection(db, _plNome(nome), ...resto);
+  return _fbCollection(base, nome, ...resto);
+}
+function doc(base, ...resto){
+  if(base===db && resto.length) return _fbDoc(db, _plNome(resto[0]), ...resto.slice(1));
+  return _fbDoc(base, ...resto);
+}
+
+// ===== LOGIN DA CONTA E LIBERAÇÃO (contas do Comodato) =====
+// Mesmas contas e mesmo cadastro (usuarios/{uid}) dos outros apps. Entra quem
+// está liberado e tem a chave Produlog (ou é admin), definidas na aba Acessos
+// da Gestão. Na primeira entrada nasce o cadastro pendente, igual ao Comodato.
+// A tela de PIN continua só para escolher o setor.
+// onSnapshot abaixo é um porteiro: antes da liberação, guarda os pedidos de
+// leitura numa fila; liberada a conta, liga tudo de uma vez (com o banco
+// fechado, uma leitura aberta antes falharia e não tentaria de novo).
 const auth = getAuth(app);
-var _plLogado=false, _plAuthPronto=false, _plFila=[];
+var _plLogado=false, _plAuthPronto=false, _plFila=[];   // _plLogado = logado E liberado
+var _plUser=null, _plConta=null, _plContaUnsub=null, _plCriando=false;
+var _plEstado={ modo:'espera', texto:'Verificando acesso…', sair:false };
 window._plLogado=false;
 function onSnapshot(ref, ...args){
   if(_plLogado) return _fbOnSnapshot(ref, ...args);
@@ -5300,11 +5331,19 @@ function _plLigarFila(){
     try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }catch(e){ console.error('leitura:', e); }
   });
 }
+/* tela s-login tem três jeitos: formulário, mensagem de espera, ou mensagem + desconectar */
 function _plMostrarLogin(){
-  const f=document.getElementById('pl-login-form'), w=document.getElementById('pl-login-wait');
-  if(f) f.style.display=_plAuthPronto?'':'none';
-  if(w) w.style.display=_plAuthPronto?'none':'';
-  if(_plAuthPronto){ const e=document.getElementById('pl-login-email'); if(e && !e.value) setTimeout(()=>e.focus(),50); }
+  const f=document.getElementById('pl-login-form'), w=document.getElementById('pl-login-wait'), x=document.getElementById('pl-login-sair');
+  const form=_plEstado.modo==='form';
+  if(f) f.style.display=form?'':'none';
+  if(w){ w.style.display=form?'none':''; w.textContent=_plEstado.texto||''; }
+  if(x) x.style.display=(!form && _plEstado.sair)?'':'none';
+  if(form){ const e=document.getElementById('pl-login-email'); if(e && !e.value) setTimeout(()=>e.focus(),50); }
+}
+function _plTelaLogin(modo, texto, sair){
+  _plEstado={ modo, texto:texto||'', sair:!!sair };
+  const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
+  if(_navTelaAtual()!=='s-login') goTo('s-login', true); else _plMostrarLogin();
 }
 window.plEntrar=function(){
   const em=(document.getElementById('pl-login-email').value||'').trim();
@@ -5337,31 +5376,84 @@ window.plSairConta=function(){
   if(!confirm('Desconectar este aparelho? Para voltar a usar, vai precisar do e-mail e da senha da conta.')) return;
   signOut(auth).then(()=>location.reload()).catch(e=>alert('Não foi possível desconectar: '+(e.code||e.message)));
 };
+/* Setores que esta conta vê na tela inicial (produlogSetores, na aba Acessos
+   da Gestão). Lista vazia = todos; admin vê todos. É organização da tela:
+   o banco não separa os dados por setor. */
+function _plSetorPermitido(setor){
+  if(_plConta && _plConta.role==='admin') return true;
+  const l=(_plConta && Array.isArray(_plConta.produlogSetores)) ? _plConta.produlogSetores : [];
+  return !l.length || l.indexOf(setor)>=0;
+}
+function _plPodeUsar(c){ return !!c && c.ativo===true && (c.role==='admin' || c.produlog===true); }
+window._plSetorPermitido=_plSetorPermitido;
+function _plAplicarConta(){
+  document.querySelectorAll('#s-inicio [onclick^="abrirPin("]').forEach(b=>{
+    const m=(b.getAttribute('onclick')||'').match(/abrirPin\('([^']+)'\)/); if(!m) return;
+    b.style.display=_plSetorPermitido(m[1])?'':'none';
+  });
+  const card=document.getElementById('pl-card-acessos');
+  if(card) card.style.display=(_plConta && _plConta.role==='admin')?'':'none';
+  const conta=document.getElementById('pl-conta');
+  if(conta && _plUser){
+    conta.textContent='Conectado como '+(((_plConta&&_plConta.nome)||'').trim() || _plUser.email || 'conta sem e-mail')+' · ';
+    const a=document.createElement('a'); a.href='#'; a.textContent='desconectar'; a.style.color='inherit';
+    a.onclick=function(ev){ ev.preventDefault(); plSairConta(); };
+    conta.appendChild(a);
+  }
+}
+function _plEscutarConta(user){
+  if(_plContaUnsub) return;
+  _plTelaLogin('espera','Verificando acesso…',false);
+  const ref=_fbDoc(db,'usuarios',user.uid);   // cadastro do Comodato, sem prefixo
+  _plContaUnsub=_fbOnSnapshot(ref, snap=>{
+    if(!snap.exists()){
+      // primeira entrada desta conta: registra e espera a liberação
+      if(!_plCriando){
+        _plCriando=true;
+        // mesmo formato do cadastro pendente do Comodato
+        setDoc(ref,{ email:user.email||'', nome:user.email||'', role:'leitura', ativo:false, criadoEm:Date.now() })
+          .catch(e=>{ console.error('registrar conta:',e); _plTelaLogin('espera','Não foi possível registrar esta conta ('+(e.code||e.message)+'). Avise o administrador.',true); });
+      }
+      return;
+    }
+    _plConta=snap.data()||{};
+    if(_plPodeUsar(_plConta)){
+      const primeira=!_plLogado;
+      _plLogado=true; window._plLogado=true;
+      _plAplicarConta();
+      if(primeira){
+        _plLigarFila();
+        const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
+        if(window._tvLinkMode){ window._tvLinkIniciado=false; _entrarModoTvLink(); }
+        else { const t=_navTelaAtual(); if(!t || t==='s-login') goTo('s-inicio', true); }
+      }
+    } else {
+      if(_plLogado){ location.reload(); return; }   // bloqueada durante o uso
+      _plTelaLogin('espera', _plConta.ativo===true
+        ? 'A conta '+(user.email||'')+' não tem acesso ao Produlog. Peça ao administrador para ligar a chave Produlog na aba Acessos da Gestão.'
+        : 'Conta '+(user.email||'')+' registrada. Aguardando o administrador liberar este acesso na aba Acessos da Gestão.', true);
+    }
+  }, err=>{
+    console.error('conta:',err);
+    _plTelaLogin('espera','Não foi possível conferir o acesso desta conta ('+(err.code||err.message)+').',true);
+  });
+}
 onAuthStateChanged(auth, user=>{
   _plAuthPronto=true;
-  const conta=document.getElementById('pl-conta');
   if(user){
-    const primeira=!_plLogado;
-    _plLogado=true; window._plLogado=true;
-    if(conta){
-      conta.textContent='Conectado como '+(user.email||'conta sem e-mail')+' · ';
-      const a=document.createElement('a'); a.href='#'; a.textContent='desconectar'; a.style.color='inherit';
-      a.onclick=function(ev){ ev.preventDefault(); plSairConta(); };
-      conta.appendChild(a);
-    }
-    _plLigarFila();
-    if(primeira){
-      const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
-      if(window._tvLinkMode){ window._tvLinkIniciado=false; _entrarModoTvLink(); }
-      else { const t=_navTelaAtual(); if(!t || t==='s-login') goTo('s-inicio', true); }
-    }
+    if(_plUser && _plUser.uid!==user.uid){ location.reload(); return; }
+    _plUser=user;
+    _plEscutarConta(user);
   } else {
-    if(_plLogado){ location.reload(); return; }   // a conta saiu (outra aba ou desativada)
-    if(conta) conta.textContent='';
-    const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
-    goTo('s-login', true);
+    if(_plUser){ location.reload(); return; }   // a conta saiu (outra aba ou desativada)
+    const conta=document.getElementById('pl-conta'); if(conta) conta.textContent='';
+    _plTelaLogin('form');
   }
 });
+
+// Acessos do Produlog ficam na aba Acessos da Gestão (mesmo cadastro).
+window.plAbrirAcessos=function(){ window.open('https://monte-castelo-ind.github.io/gestao/','_blank'); };
+
 
 // Carregar senhas dos setores do Firebase EM TEMPO REAL (atualiza sozinho em todos os aparelhos)
 function escutarSetoresDoFirebase(){
@@ -5598,6 +5690,7 @@ function sortDatas(arr){return arr.sort((a,b)=>b.split('/').reverse().join('-').
 
 // ===== PIN =====
 function abrirPin(setor){
+  if(!_plSetorPermitido(setor)) return;   // setor fora da lista desta conta
   setorAtivo=setor; pinBuffer='';
   document.getElementById('pin-setor-nome').textContent=NOMES[setor];
   const bg=document.getElementById('pin-bg');
