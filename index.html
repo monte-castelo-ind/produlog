@@ -31063,10 +31063,25 @@ async function agendaExcluir(id){
 window.agendaExcluir=agendaExcluir;
 
 function abrirPlanejamento(){
-  try{
-    const base=window.location.href.replace(/[^/]*$/,'');
-    window.open(base+'planejamento.html','_blank');
-  }catch(e){ window.open('planejamento.html','_blank'); }
+  const base=window.location.href.replace(/[^/]*$/,'');
+  const url=base+'planejamento.html';
+  let janela=null;
+  try{ janela=window.open(url,'_blank'); }catch(e){}
+  /* O navegador bloqueia a janela com frequência, e aí o botão parecia
+     não fazer nada. Quando isso acontece, mostramos o endereço para
+     abrir à mão. */
+  if(!janela || janela.closed || typeof janela.closed==='undefined'){
+    const ov=document.createElement('div');
+    ov.id='plan-bloq';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3500;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:430px;width:100%;padding:18px;">'+
+      '<div style="font-size:17px;font-weight:800;">📅 Planejamento</div>'+
+      '<div style="font-size:13px;color:var(--text-secondary);margin-top:6px;line-height:1.5;">O navegador bloqueou a abertura em nova aba. Use o botão abaixo ou libere os pop-ups para este site.</div>'+
+      '<a href="'+url+'" target="_blank" rel="noopener" class="btn btn-primary" style="display:block;width:100%;margin-top:14px;text-align:center;text-decoration:none;">Abrir o planejamento</a>'+
+      '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="document.getElementById(\'plan-bloq\').remove()">Fechar</button>'+
+    '</div>';
+    document.body.appendChild(ov);
+  }
 }
 window.abrirPlanejamento=abrirPlanejamento;
 
