@@ -4128,6 +4128,7 @@
       <div class="mc-header-actions">
         <input type="file" id="cls-import-file" accept=".xlsx,.xls" style="display:none" onchange="importarClassesPlanilha(this)" />
         <button class="mc-act-btn-secondary" onclick="document.getElementById('cls-import-file').click()">📥 Classes</button>
+        <button class="mc-act-btn-secondary" onclick="pcImportarAbrir()" title="Colar lista do ERP">📥 Importar</button>
         <button class="mc-act-btn-primary" onclick="abrirNovoProdConf()">+ Novo</button>
       </div>
     </div>
@@ -13872,6 +13873,103 @@ function renderAdmProdConfList(){
 
   el.innerHTML=html;
 }
+
+/* ── IMPORTAR PRODUTOS EM LOTE ───────────────────────────────────
+   Cadastrar dezenas de produtos um a um é inviável. Aqui dá para colar
+   a lista do ERP: código e nome por linha. A gramatura fica em branco
+   e é preenchida depois, produto por produto. */
+function pcImportarAbrir(){
+  const ov=document.createElement('div');
+  ov.id='pc-imp-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:540px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">📥 Importar produtos</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Cole a lista do ERP: c&oacute;digo e nome por linha, separados por TAB.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      '<textarea id="pc-imp-txt" rows="10" placeholder="826&#9;(C&amp;F) CACHORRO ALEMÃO&#10;815&#9;(C&amp;F) CACHORRO FOLHADO" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:14px;font-family:monospace;box-sizing:border-box;resize:vertical;"></textarea>'+
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;font-size:12px;color:var(--text-secondary);">'+
+        '<input type="checkbox" id="pc-imp-classe" checked style="width:17px;height:17px;cursor:pointer;">'+
+        'marcar como <strong style="margin:0 3px;">salgado</strong></label>'+
+      '<div id="pc-imp-previa" style="font-size:12px;margin-top:10px;"></div>'+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'pc-imp-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="pcImportarSalvar()">Cadastrar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  const ta=document.getElementById('pc-imp-txt');
+  ta.addEventListener('input', pcImportarPrevia);
+  setTimeout(()=>ta.focus(),60);
+}
+window.pcImportarAbrir=pcImportarAbrir;
+
+function pcImportarLer(txt){
+  const itens=[], ruins=[];
+  String(txt||'').split(/\r?\n/).forEach(l=>{
+    const t=l.trim(); if(!t) return;
+    // código no começo, o resto é o nome
+    const m=t.match(/^(\S+)[\t;]+(.+)$/) || t.match(/^(\d+)\s+(.+)$/);
+    if(!m){ ruins.push(t); return; }
+    const cod=String(m[1]).trim();
+    const nome=String(m[2]).trim();
+    if(!cod || !nome){ ruins.push(t); return; }
+    itens.push({cod, nome});
+  });
+  return {itens, ruins};
+}
+
+function pcImportarPrevia(){
+  const el=document.getElementById('pc-imp-previa'); if(!el) return;
+  const r=pcImportarLer((document.getElementById('pc-imp-txt')||{}).value||'');
+  if(!r.itens.length){ el.innerHTML=r.ruins.length?'<span style="color:#dc2626;">Não entendi nenhuma linha.</span>':''; return; }
+  const jaTem=r.itens.filter(x=>(produtosConfFirebase||[]).some(p=>String(p.cod||'').trim()===x.cod));
+  const novos=r.itens.length-jaTem.length;
+  el.innerHTML='<div style="background:var(--bg-page);border-radius:9px;padding:10px 12px;line-height:1.6;">'+
+    '<strong style="color:#16a34a;">'+novos+'</strong> produto(s) novo(s)'+
+    (jaTem.length?('<br><strong style="color:#d97706;">'+jaTem.length+'</strong> já cadastrado(s) — serão atualizados'):'')+
+    (r.ruins.length?('<br><strong style="color:#dc2626;">'+r.ruins.length+'</strong> linha(s) não entendida(s)'):'')+
+  '</div>';
+}
+window.pcImportarPrevia=pcImportarPrevia;
+
+async function pcImportarSalvar(){
+  const r=pcImportarLer((document.getElementById('pc-imp-txt')||{}).value||'');
+  if(!r.itens.length){ alert('Cole a lista no formato: código, TAB, nome.'); return; }
+  const classe=(document.getElementById('pc-imp-classe')||{}).checked ? 'salgado' : '';
+  const jaTem=r.itens.filter(x=>(produtosConfFirebase||[]).some(p=>String(p.cod||'').trim()===x.cod));
+  if(!confirm('Cadastrar '+r.itens.length+' produto(s)?'+
+    (jaTem.length?('\n\n'+jaTem.length+' já existem e terão o nome atualizado.'):'')+
+    (r.ruins.length?('\n\n'+r.ruins.length+' linha(s) serão ignoradas.'):'')+
+    '\n\nA gramatura fica em branco — preencha depois em cada produto.')) return;
+
+  const ts=agora();
+  let ok=0, erros=0;
+  for(const it of r.itens){
+    try{
+      const existente=(produtosConfFirebase||[]).find(p=>String(p.cod||'').trim()===it.cod);
+      if(existente){
+        await setDoc(doc(db,'produtosConfeitaria',existente.firestoreId),
+          {nome:it.nome, atualizadoEm:ts},{merge:true});
+      } else {
+        await addDoc(collection(db,'produtosConfeitaria'), {
+          cod:it.cod, nome:it.nome, classe,
+          pesoPct:0, qtdPct:0,
+          tipoMassa:'', grMassa:0,
+          tipoRecheio:'', grRecheio:0,
+          tipoRecheio2:'', grRecheio2:0,
+          criadoEm:ts, atualizadoEm:ts, autor:_demAutor()
+        });
+      }
+      ok++;
+    }catch(e){ erros++; console.error('importar '+it.cod+':', e); }
+  }
+  document.getElementById('pc-imp-modal')?.remove();
+  alert('✓ '+ok+' produto(s) cadastrados.'+
+    (erros?('\n\n'+erros+' com erro — veja o console.'):'')+
+    '\n\nFalta preencher a gramatura de cada um para o controle de qualidade comparar o peso.');
+}
+window.pcImportarSalvar=pcImportarSalvar;
 
 function abrirNovoProdConf(){
   _prodConfEditando=null;
