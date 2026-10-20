@@ -3310,6 +3310,8 @@
     </div>
 
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
+      <div id="adm-mp-aviso"></div>
+
       <div class="agenda-aviso" style="display:none;"></div>
 
       <div class="mc-section-header" style="margin-top:18px;">📦 Produção do dia<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">o que está acontecendo agora</span></div>
@@ -4466,6 +4468,8 @@
       </div>
     </div>
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
+      <div id="patrick-mp-aviso"></div>
+
       <div class="mc-section-header">📋 Pauta</div>
       <div class="mc-sector-grid">
         <button class="mc-sector-card" onclick="pautaAbrir()">
@@ -4488,7 +4492,15 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
-      <button class="mc-sector-card" onclick="cdcAbrir('admin')">
+      <button class="mc-sector-card" onclick="goTo('s-acomp')">
+          <div class="mc-sector-icon blue">📋</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Acompanhamento do Plano</div>
+            <div class="mc-sector-desc">Confeitaria &middot; o que falta produzir hoje</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="mc-sector-card" onclick="cdcAbrir('admin')">
           <div class="mc-sector-icon purple">📊</div>
           <div class="mc-sector-info">
             <div class="mc-sector-title">Controle Diário Confeitaria</div>
@@ -5918,6 +5930,7 @@ function goTo(id, semHistorico){
   if(id==='s-cfped' && typeof renderCfPed==='function') renderCfPed();
   if(id==='s-pauta' && typeof renderPauta==='function') renderPauta();
   if(id==='s-qual' && typeof renderQual==='function') renderQual();
+  if((id==='s-adm-hub'||id==='s-patrick-home') && typeof mpPintarAvisos==='function') mpPintarAvisos();
   if(id==='s-emb-cfped' && typeof renderEmbCf==='function') renderEmbCf();
   if(id==='s-perdas') renderPerdas();
   if(id==='s-carreg-edit') renderCarregEdit();
@@ -10889,7 +10902,8 @@ onSnapshot(collection(db,'containerLotes'), snap=>{
     containerLotes=snap.docs.map(d=>({firestoreId:d.id,...d.data()})).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
     atualizarTela();
   }catch(e){ console.error('containerLotes snap:',e); }
-});
+    if(typeof mpPintarAvisos==='function') mpPintarAvisos();
+  });
 onSnapshot(collection(db,'containerMovs'), snap=>{
   try{
     containerMovs=snap.docs.map(d=>({firestoreId:d.id,...d.data()})).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
@@ -19382,7 +19396,9 @@ onSnapshot(doc(db,'configuracoes','laAnalise'), snap=>{
   try{
     const d=snap.data()||{};
     laEstoqueAtual=d.estoque||{};
-    laEstoqueTs=Number(d.estoqueTs)||0;
+    // estoques colados antes desta versão não têm o marcador novo;
+    // nesse caso vale a data de atualização que já era gravada
+    laEstoqueTs=Number(d.estoqueTs)||_laTsDeTexto(d.atualizadoEm)||0;
     laAnaliseCfg={diaSemana:d.diaSemana||'auto', margem:(d.margem===undefined?25:Number(d.margem)),
                   semanas:Number(d.semanas)||8, atualizadoEm:d.atualizadoEm||''};
     if(document.querySelector('.screen.active')?.id==='s-la-resumo') renderLaResumo();
@@ -19444,15 +19460,44 @@ function laMediaVenda(cod, diaSemana, semanas){
 /* Quanto foi liberado para este produto DEPOIS de colar o estoque.
    Só conta o que já entrou no ERP: o que ficou para lançar à mão ainda
    não está no saldo de lá. */
+/* Converte "09/10/2026 14:30" em tempo comparável */
+function _laTsDeTexto(txt){
+  const m=String(txt||'').match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if(!m) return 0;
+  return new Date(+m[3], +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0)).getTime();
+}
+
 function laLiberadoAposColagem(cod){
   if(!laEstoqueTs) return 0;
   const c=String(cod).trim();
-  return (laAjustes||[]).filter(a=>{
-    if(String(a.cod||'').trim()!==c) return false;
-    if(!(Number(a.timestamp)>laEstoqueTs)) return false;
-    // sem entrada no ERP, o saldo de lá não mudou
-    return !!a.eligoEntradaId && !a.eligoEntradaErro;
-  }).reduce((t,a)=>t+(parseInt(a.qtd)||0),0);
+  let noErp=0, aLancar=0;
+  (laAjustes||[]).forEach(a=>{
+    if(String(a.cod||'').trim()!==c) return;
+    if(!(Number(a.timestamp)>laEstoqueTs)) return;
+    const q=parseInt(a.qtd)||0;
+    if(!q) return;
+    // entrou no ERP de verdade × ainda falta lançar à mão
+    if(a.eligoEntradaId && !a.eligoEntradaErro) noErp+=q;
+    else aLancar+=q;
+  });
+  return noErp+aLancar;
+}
+window.laLiberadoAposColagem=laLiberadoAposColagem;
+
+/* Separa o que já está no ERP do que ainda falta lançar, para a tela
+   poder avisar quando o número ainda depende de lançamento manual. */
+function laLiberadoDetalhe(cod){
+  if(!laEstoqueTs) return {noErp:0, aLancar:0};
+  const c=String(cod).trim();
+  let noErp=0, aLancar=0;
+  (laAjustes||[]).forEach(a=>{
+    if(String(a.cod||'').trim()!==c) return;
+    if(!(Number(a.timestamp)>laEstoqueTs)) return;
+    const q=parseInt(a.qtd)||0;
+    if(!q) return;
+    if(a.eligoEntradaId && !a.eligoEntradaErro) noErp+=q; else aLancar+=q;
+  });
+  return {noErp, aLancar};
 }
 window.laLiberadoAposColagem=laLiberadoAposColagem;
 
@@ -19466,6 +19511,7 @@ function laAnaliseProduto(cod, nome){
      maior — somamos aqui para a coluna refletir o estoque de agora. */
   const estoqueErp=Number(laEstoqueAtual[String(cod)])||0;
   const liberadoDepois=laLiberadoAposColagem(cod);
+  const liberadoDet=laLiberadoDetalhe(cod);
   const estoque=estoqueErp+liberadoDepois;
   const diferenca=estoque-previsto;
   let c={embAntecip:0, jaLiberado:0, porDia:[]};
@@ -19483,7 +19529,7 @@ function laAnaliseProduto(cod, nome){
   else if(podeLiberar>0 || soFaltaEmbalar>0) resolve='parcial';       // cobre só uma parte
   else resolve='produzir';                                            // não tem nada
   return {
-    cod:String(cod), nome, estoque, estoqueErp, liberadoDepois, media:m.media, diasMedia:m.dias, previsto, margem,
+    cod:String(cod), nome, estoque, estoqueErp, liberadoDepois, liberadoDet, media:m.media, diasMedia:m.dias, previsto, margem,
     diferenca, falta, podeLiberar, soFaltaEmbalar, jaLiberado:c.jaLiberado||0,
     resolve, sobra: podeLiberar-falta
   };
@@ -19818,6 +19864,11 @@ window.laLancConfirmar=laLancConfirmar;
 
 function renderLaAnalise(el, html, ajustes){
   html+=laControlesAnalise();
+  // sem o momento da colagem não dá para saber o que é posterior
+  if(Object.keys(laEstoqueAtual||{}).length && !laEstoqueTs){
+    html+='<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#b45309;line-height:1.5;">'+
+      '⚠️ Cole o estoque do ERP de novo para a coluna passar a somar os ajustes que você fizer por aqui.</div>';
+  }
 
   // produtos a analisar: os que têm estoque colado, ajuste em aberto ou produção pendente
   const mapa={};
@@ -19898,7 +19949,10 @@ function renderLaAnalise(el, html, ajustes){
           (a.colado ? (a.estoque===0?'0':a.estoque) : '—')+
           // o que você liberou por aqui já está somado acima
           ((a.colado&&a.liberadoDepois)
-            ? '<div style="font-size:9px;color:#16a34a;font-weight:700;">'+a.estoqueErp+' +'+a.liberadoDepois+'</div>'
+            ? '<div style="font-size:9px;color:#16a34a;font-weight:700;">'+a.estoqueErp+' +'+a.liberadoDepois+'</div>'+
+              ((a.liberadoDet&&a.liberadoDet.aLancar)
+                ? '<div style="font-size:9px;color:#b45309;font-weight:700;">'+a.liberadoDet.aLancar+' a lançar no ERP</div>'
+                : '')
             : '')+'</td>'+
         '<td style="padding:8px 5px;text-align:right;">'+
           (a.media?('<strong>'+a.previsto+'</strong><div style="font-size:9px;color:var(--text-muted);">'+a.media+' +'+a.margem+'% · '+a.diasMedia+'x</div>'):'<span style="color:var(--text-muted);">sem dados</span>')+'</td>'+
@@ -22723,6 +22777,102 @@ async function libEntrarNoContainer(reg, qtd, validade, setor){
 }
 window.libEntrarNoContainer=libEntrarNoContainer;
 
+/* ── MATÉRIA-PRIMA PERTO DE VENCER ───────────────────────────────
+   Lotes do contêiner com saldo e validade dentro dos próximos dias.
+   Aparece na entrada do admin e do Patrick, para ninguém descobrir
+   tarde demais. */
+const MP_AVISO_DIAS=15;
+
+function mpVencendo(dias){
+  const limite=(dias===undefined?MP_AVISO_DIAS:dias);
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const out=[];
+  (containerLotes||[]).forEach(l=>{
+    const saldo=Number(l.saldo)||0;
+    if(saldo<=0 || !l.validade) return;
+    const p=String(l.validade).split('/');
+    if(p.length!==3) return;
+    const v=new Date(+p[2], +p[1]-1, +p[0]); v.setHours(0,0,0,0);
+    const d=Math.round((v-hoje)/86400000);
+    if(d>limite) return;                 // ainda longe
+    out.push({nome:l.item||'', saldo, validade:l.validade, dias:d,
+              lote:l.firestoreId, obs:l.obs||''});
+  });
+  return out.sort((a,b)=>a.dias-b.dias);
+}
+window.mpVencendo=mpVencendo;
+
+/* O bloco de aviso, usado nas duas telas */
+function mpAvisoHtml(){
+  const l=mpVencendo();
+  if(!l.length) return '';
+  const vencidos=l.filter(x=>x.dias<0);
+  const hoje0=l.filter(x=>x.dias===0);
+  const cor=vencidos.length?'#dc2626':'#d97706';
+  const fundo=vencidos.length?'#fef2f2':'#fffbeb';
+  return '<button onclick="mpAbrirVencendo()" style="display:block;width:100%;text-align:left;background:'+fundo+';border:2px solid '+cor+';border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+    '<div style="display:flex;align-items:center;gap:9px;">'+
+      '<span style="font-size:22px;">'+(vencidos.length?'🚨':'⏳')+'</span>'+
+      '<span style="flex:1;min-width:0;">'+
+        '<span style="display:block;font-size:14px;font-weight:800;color:'+cor+';">'+
+          (vencidos.length
+            ? vencidos.length+' matéria-prima vencida'+(vencidos.length>1?'s':'')+(l.length>vencidos.length?(' · '+(l.length-vencidos.length)+' perto'):'')
+            : l.length+' matéria-prima'+(l.length>1?'s':'')+' vencendo em até '+MP_AVISO_DIAS+' dias')+'</span>'+
+        '<span style="display:block;font-size:11px;color:'+cor+';margin-top:2px;">'+
+          l.slice(0,3).map(x=>x.nome+' ('+(x.dias<0?('venceu há '+Math.abs(x.dias)+'d'):(x.dias===0?'hoje':x.dias+'d'))+')').join(' · ')+
+          (l.length>3?(' · +'+(l.length-3)):'')+'</span></span>'+
+      '<span style="color:'+cor+';font-size:18px;">›</span>'+
+    '</div></button>';
+}
+window.mpAvisoHtml=mpAvisoHtml;
+
+function mpAbrirVencendo(){
+  const l=mpVencendo(30);   // na janela, mostra um pouco mais
+  const ov=document.createElement('div');
+  ov.id='mp-venc-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:480px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">⏳ Matéria-prima a vencer</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">Lotes do contêiner com saldo, nos próximos 30 dias.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      (l.length
+        ? l.map(x=>{
+            const venc=x.dias<0, hoje0=x.dias===0, perto=x.dias>=0&&x.dias<=MP_AVISO_DIAS;
+            const cor=venc?'#dc2626':(perto?'#d97706':'#16a34a');
+            const fundo=venc?'#fef2f2':(perto?'#fffbeb':'#fff');
+            return '<div class="card" style="margin-bottom:8px;background:'+fundo+';border-color:'+cor+'44;">'+
+              '<div style="display:flex;align-items:center;gap:9px;">'+
+                '<span style="flex:1;min-width:0;">'+
+                  '<span style="display:block;font-size:15px;font-weight:800;">'+x.nome+'</span>'+
+                  '<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px;">saldo '+_fmtKg(x.saldo)+' · validade '+x.validade+'</span>'+
+                  (x.obs?'<span style="display:block;font-size:11px;color:var(--text-muted);margin-top:1px;">'+x.obs+'</span>':'')+
+                '</span>'+
+                '<span style="text-align:right;white-space:nowrap;">'+
+                  '<span style="display:block;font-size:17px;font-weight:900;color:'+cor+';">'+
+                    (venc?('−'+Math.abs(x.dias)):(hoje0?'hoje':x.dias))+'</span>'+
+                  '<span style="display:block;font-size:10px;color:'+cor+';">'+(venc?'dias vencido':(hoje0?'':'dias'))+'</span></span>'+
+              '</div></div>';
+          }).join('')
+        : '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">Nada vencendo nos próximos 30 dias.</div>')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'mp-venc-modal\').remove();goTo(\'s-rafael-home\')">Abrir contêiner</button>'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'mp-venc-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.mpAbrirVencendo=mpAbrirVencendo;
+
+/* Coloca o aviso no topo das telas que o mostram */
+function mpPintarAvisos(){
+  ['adm-mp-aviso','patrick-mp-aviso'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.innerHTML=mpAvisoHtml();
+  });
+}
+window.mpPintarAvisos=mpPintarAvisos;
+
 /* ══════════════════════════════════════════════════════════════════
    CONTROLE DE QUALIDADE
    Para cada produto embalado: separar a amostra (vigilância) e fazer o
@@ -22881,6 +23031,7 @@ function qualRelLinhas(){
           Tipo:(tipo==='pao'?'Pão':'Salgado'),
           Codigo:pr.cod,
           Produto:pr.nome,
+          PacotesProduzidos:pr.prod||0,
           PacotesEmbalados:pr.emb,
           AmostraSeparada:it.amostra?'Sim':'Não',
           AmostraEm:it.amostraEm||'',
@@ -22923,9 +23074,9 @@ async function qualRelExcel(){
       sc.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
       sc.onload=res; sc.onerror=rej; document.head.appendChild(sc);
     });
-    const cab=['Data','Tipo','Codigo','Produto','PacotesEmbalados','AmostraSeparada','AmostraEm','AmostraPor',
+    const cab=['Data','Tipo','Codigo','Produto','PacotesProduzidos','PacotesEmbalados','AmostraSeparada','AmostraEm','AmostraPor',
                'TesteRealizado','Avaliacao','PesoMedido','PesoPadrao','DesvioPct','Observacoes','TesteEm','TestePor'];
-    const titulos={Data:'Data',Tipo:'Tipo',Codigo:'Código',Produto:'Produto',PacotesEmbalados:'Pacotes embalados',
+    const titulos={Data:'Data',Tipo:'Tipo',Codigo:'Código',Produto:'Produto',PacotesProduzidos:'Pacotes produzidos',PacotesEmbalados:'Pacotes embalados',
       AmostraSeparada:'Amostra separada',AmostraEm:'Amostra em',AmostraPor:'Amostra por',
       TesteRealizado:'Teste realizado',Avaliacao:'Avaliação',PesoMedido:'Peso medido (g)',
       PesoPadrao:'Peso padrão (g)',DesvioPct:'Desvio (%)',Observacoes:'Observações',TesteEm:'Teste em',TestePor:'Teste por'};
@@ -22935,7 +23086,7 @@ async function qualRelExcel(){
       const cel=XLSX.utils.encode_cell({r:0,c:i});
       ws[cel]={t:'s', v:titulos[c]||c, s:{font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'334155'}},alignment:{horizontal:'center',wrapText:true}}};
     });
-    ws['!cols']=[{wch:11},{wch:9},{wch:8},{wch:36},{wch:11},{wch:9},{wch:16},{wch:16},{wch:9},{wch:17},{wch:11},{wch:11},{wch:10},{wch:44},{wch:16},{wch:16}];
+    ws['!cols']=[{wch:11},{wch:9},{wch:8},{wch:36},{wch:11},{wch:11},{wch:9},{wch:16},{wch:16},{wch:9},{wch:17},{wch:11},{wch:11},{wch:10},{wch:44},{wch:16},{wch:16}];
     ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:linhas.length,c:cab.length-1}})};
     ws['!freeze']={xSplit:0,ySplit:1};
     const wb=XLSX.utils.book_new();
@@ -22999,7 +23150,7 @@ function qualRelPdf(){
       '<div class="bloco"><b style="color:#2563eb;">'+comT+'</b><span>com teste realizado</span></div>'+
     '</div>'+
     '<table><thead><tr>'+
-      '<th>Data</th><th>Tipo</th><th>Cód</th><th>Produto</th><th class="c">Pct</th>'+
+      '<th>Data</th><th>Tipo</th><th>Cód</th><th>Produto</th><th class="c">Produz.</th><th class="c">Embal.</th>'+
       '<th class="c">Amostra</th><th class="c">Teste</th><th>Avaliação</th>'+
       '<th class="c">Peso</th><th class="c">Padrão</th><th class="c">Desvio</th><th>Observações</th>'+
     '</tr></thead><tbody>'+
@@ -23008,6 +23159,7 @@ function qualRelPdf(){
       '<td>'+esc(l.Tipo)+'</td>'+
       '<td>'+esc(l.Codigo)+'</td>'+
       '<td>'+esc(l.Produto)+'</td>'+
+      '<td class="c">'+esc(l.PacotesProduzidos)+'</td>'+
       '<td class="c">'+esc(l.PacotesEmbalados)+'</td>'+
       '<td class="c"><span class="'+(l.AmostraSeparada==='Sim'?'sim':'nao')+'">'+esc(l.AmostraSeparada)+'</span></td>'+
       '<td class="c"><span class="'+(l.TesteRealizado==='Sim'?'sim':'nao')+'">'+esc(l.TesteRealizado)+'</span></td>'+
@@ -23482,7 +23634,8 @@ function _qualRenderDia(){
       '<div style="display:flex;align-items:flex-start;gap:10px;">'+
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-size:15px;font-weight:800;line-height:1.3;">'+pr.nome+'</div>'+
-          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">cód '+pr.cod+' · '+pr.emb+' pct embalados</div>'+
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">cód '+pr.cod+' · '+(pr.prod||0)+' pct produzidos'+
+            (pr.emb?(' · '+pr.emb+' embalados'):' · <span style="color:#b45309;">ainda não embalado</span>')+'</div>'+
         '</div>'+
         // o A da amostra, igual ao que já existe na embalagem
         '<button onclick="qualToggleAmostra(\''+escapeJsStr(pr.cod)+'\')" title="'+(temA?('Amostra separada '+(it.amostraEm||'')):'Marcar que separou a amostra')+'" '+
@@ -23574,16 +23727,21 @@ function _qualDoc(dia, tipo){ return qualDados[_qualChave(dia,tipo)]||{itens:{}}
 
 /* O que foi embalado num dia, do tipo escolhido */
 function qualProdutosDoDia(dia, tipo){
+  /* A amostra e o teste são feitos sobre o produto recém-saído, não
+     sobre o pacote. Por isso a lista aparece assim que a PRODUÇÃO é
+     lançada — esperar a embalagem atrasava o teste em horas. */
   const out={};
   (registros||[]).forEach(r=>{
     if(r.data!==dia) return;
+    const prod=Number(r.qtd)||0;
     const emb=laEmbalado(r.embalagem||{});
-    if(emb<=0) return;
+    if(prod<=0 && emb<=0) return;
     const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
     if(t!==tipo) return;
     const cod=String(r.cod||'');
-    if(!out[cod]) out[cod]={cod, nome:r.produto||'', emb:0};
+    if(!out[cod]) out[cod]={cod, nome:r.produto||'', emb:0, prod:0};
     out[cod].emb+=emb;
+    out[cod].prod+=prod;
   });
   return Object.values(out).sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR'));
 }
@@ -23610,7 +23768,7 @@ function qualDiasDoMes(mes, tipo){
   const dias={};
   (registros||[]).forEach(r=>{
     if(!r.data) return;
-    if(laEmbalado(r.embalagem||{})<=0) return;
+    if((Number(r.qtd)||0)<=0 && laEmbalado(r.embalagem||{})<=0) return;
     const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
     if(t!==tipo) return;
     const p=String(r.data).split('/');
@@ -23627,7 +23785,8 @@ function qualDiasDoMes(mes, tipo){
 function qualMeses(tipo){
   const ms={};
   (registros||[]).forEach(r=>{
-    if(!r.data || laEmbalado(r.embalagem||{})<=0) return;
+    if(!r.data) return;
+    if((Number(r.qtd)||0)<=0 && laEmbalado(r.embalagem||{})<=0) return;
     const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
     if(t!==tipo) return;
     const p=String(r.data).split('/');
