@@ -296,18 +296,94 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
 
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { getFirestore, collection, doc, setDoc, onSnapshot, getDocs, getDoc, deleteDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
+/* MESMO projeto do ProduLog. O app foi movido para "manutencao-comodato"
+   e o planejamento ficou apontando para o projeto antigo — por isso
+   carregava 0 produtos e o histórico dava "insufficient permissions". */
 const app = initializeApp({
-  apiKey: "AIzaSyDfFT80SMTsSMml0BpWYLDBrxrFGFG5Jk78",
-  authDomain: "montecastelo-a0764.firebaseapp.com",
-  projectId: "montecastelo-a0764",
-  storageBucket: "montecastelo-a0764.firebasestorage.app",
-  messagingSenderId: "590787056451",
-  appId: "1:590787056451:web:f0a0cf2db9e5b51e2bb45f"
+  apiKey: "AIzaSyCH_t074MvkJn-qVMvCtLfEMaQHf_e_d7M",
+  authDomain: "manutencao-comodato.firebaseapp.com",
+  projectId: "manutencao-comodato",
+  storageBucket: "manutencao-comodato.firebasestorage.app",
+  messagingSenderId: "89709396101",
+  appId: "1:89709396101:web:22ee225ffa806e07a269ec"
 });
 
 const db = getFirestore(app);
+const auth = getAuth(app);
+
+/* ── ACESSO ──────────────────────────────────────────────────────
+   O banco agora exige conta autenticada. Sem isso o Firestore recusa
+   tudo e a tela fica vazia. Usa a mesma conta do ProduLog. */
+let _plPronto=false;
+
+function _plTela(msg, mostrarForm, erro){
+  let el=document.getElementById('pl-login');
+  if(!el){
+    el=document.createElement('div');
+    el.id='pl-login';
+    el.style.cssText='position:fixed;inset:0;background:#f8fafc;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit;';
+    document.body.appendChild(el);
+  }
+  el.style.display='flex';
+  el.innerHTML='<div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;max-width:380px;width:100%;padding:24px;box-shadow:0 2px 12px rgba(0,0,0,.06);">'+
+    '<div style="font-size:19px;font-weight:800;color:#0f172a;">📊 Planejamento</div>'+
+    '<div style="font-size:13px;color:#64748b;margin-top:4px;">Monte Castelo</div>'+
+    (msg?'<div style="font-size:13px;color:'+(erro?'#dc2626':'#475569')+';margin-top:14px;line-height:1.5;">'+msg+'</div>':'')+
+    (mostrarForm
+      ? '<input type="email" id="pl-email" placeholder="e-mail" autocomplete="username" style="width:100%;padding:12px;min-height:48px;border:1px solid #cbd5e1;border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;margin-top:14px;">'+
+        '<input type="password" id="pl-senha" placeholder="senha" autocomplete="current-password" style="width:100%;padding:12px;min-height:48px;border:1px solid #cbd5e1;border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;margin-top:8px;">'+
+        '<button onclick="plEntrar()" style="width:100%;margin-top:12px;background:#1e4620;color:#fff;border:none;border-radius:9px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">Entrar</button>'
+      : '')+
+  '</div>';
+  if(mostrarForm){
+    const foco=document.getElementById('pl-email');
+    if(foco) setTimeout(()=>foco.focus(),80);
+    ['pl-email','pl-senha'].forEach(id=>{
+      const i=document.getElementById(id);
+      if(i) i.addEventListener('keydown', e=>{ if(e.key==='Enter') plEntrar(); });
+    });
+  }
+}
+
+function _plFechar(){
+  const el=document.getElementById('pl-login');
+  if(el) el.style.display='none';
+}
+
+window.plEntrar = async () => {
+  const em=((document.getElementById('pl-email')||{}).value||'').trim();
+  const se=((document.getElementById('pl-senha')||{}).value||'');
+  if(!em || !se){ _plTela('Informe e-mail e senha.', true, true); return; }
+  _plTela('Entrando…', false);
+  try{
+    await setPersistence(auth, browserLocalPersistence);
+    await signInWithEmailAndPassword(auth, em, se);
+  }catch(e){
+    const cod=String(e.code||'');
+    const msg = /wrong-password|invalid-credential|user-not-found/.test(cod)
+      ? 'E-mail ou senha incorretos.'
+      : (/too-many-requests/.test(cod) ? 'Muitas tentativas. Aguarde um pouco.' : 'Não consegui entrar: '+(e.message||cod));
+    _plTela(msg, true, true);
+  }
+};
+
+// mostra a tela antes de qualquer coisa: se o Firebase demorar ou
+// falhar, a pessoa vê o motivo em vez de uma tela vazia
+_plTela('Verificando acesso…', false);
+setTimeout(()=>{ if(!_plPronto && !document.getElementById('pl-email')) _plTela('Use a mesma conta do ProduLog.', true); }, 2500);
+
+onAuthStateChanged(auth, user=>{
+  if(!user){ _plPronto=false; _plTela('Use a mesma conta do ProduLog.', true); return; }
+  if(_plPronto) return;
+  _plPronto=true;
+  _plFechar();
+  // só agora vale buscar os dados: antes o banco recusa
+  try{ if(typeof iniciar==='function') iniciar(); }catch(e){ console.error('iniciar:',e); }
+});
+
 let produtos = [];
 let setorAtivo = 'quadra';
 const plano = {};
@@ -1810,7 +1886,10 @@ window.limparTudo = async () => {
 });
 
 // Carrega os registros do Produlog uma vez e então renderiza
-carregarRegistros().then(render);
+/* Só carrega depois do login: sem conta autenticada o Firestore
+   recusa a leitura e a tela ficava vazia com erro de permissão. */
+function iniciar(){ carregarRegistros().then(render).catch(e=>console.error('carregar:',e)); }
+window.iniciar=iniciar;
 </script>
 
 </body>
