@@ -5520,7 +5520,14 @@ let QUADRA_PRODUTOS = [];
 let QUADRA_KITS_RECEITAS = {};
   let QUADRA_KITS = []; // Lista de nomes de kits da Quadra
 let QUADRA_KIT_MAPPING = {"Kit Massa Especial Mini Sonho": "KIT MASSA ESPECIAL MINI SONHO", "Kit Pão Sovado": "KIT PÃO SOVADO", "Kit Pao De Milho Salgado Cacetinho": "KIT PAO DE MILHO SALGADO CACETINHO", "Kit Cuca Alemã": "KIT CUCA ALEMÃ", "Kit Rosca De Polvilho": "KIT ROSCA DE POLVILHO", "Kit Massa Especial Donuts E Cueca Grande": "KIT MASSA ESPECIAL DONUTS E CUECA GRANDE", "Kit Pão Preto": "KIT PÃO PRETO", "Kit Massa Sonho": "KIT MASSA SONHO", "Kit Massa Especial": "KIT MASSA ESPECIAL", "Kit Massa Doce": "KIT MASSA DOCE", "Kit Pão De Cenoura": "KIT PÃO DE CENOURA", "Kit Cueca Virada": "KIT CUECA VIRADA", "Kit Pão De Leite": "KIT PÃO DE LEITE", "Kit Cuca Colonial": "KIT CUCA COLONIAL", "Kit Pão De Aipim": "KIT PÃO DE AIPIM", "Kit Cuca Frutas": "KIT CUCA FRUTAS", "Kit Cuca Chocolate": "KIT CUCA CHOCOLATE", "Kit Vovo/Gajeta": "KIT VOVO/GAJETA", "Kit Pão De Milho Doce": "KIT PÃO DE MILHO DOCE", "Kit Pão De Batata": "KIT PÃO DE BATATA", "Kit Pão Caseiro": "KIT PÃO CASEIRO", "Kit Raminho": "KIT RAMINHO", "Kit Pão De Milho Salgado": "KIT PÃO DE MILHO SALGADO", "Kit Pão Folhado": "KIT PÃO FOLHADO", "Kit Pão Brioche": "KIT PÃO BRIOCHE", "Kit Pão Integral": "KIT PÃO INTEGRAL", "Kit Grande Premium 6/8": "KIT GRANDE PREMIUM 6/8", "Kit Pão 7 Grãos": "KIT PÃO 7 GRÃOS"};
-let PINS = { admin:null }; // senha do admin vem do banco (Gerenciar Senhas); setores entram sem PIN
+/* PINs de reserva. O que vale é o que está no Firebase (Gerenciar
+   Senhas); estes aqui só evitam que alguém fique sem entrar caso o
+   banco não tenha o setor cadastrado. A senha do admin vem só do banco. */
+let PINS = { admin:null,
+  confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314',
+  contagem:'0000', container:'0001', quadra:'2020', testes:'7070',
+  simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030',
+  estoque:'8080', patrick:'9090' };
 const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo' };
 const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒' };
 const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home' };
@@ -5691,15 +5698,9 @@ function sortDatas(arr){return arr.sort((a,b)=>b.split('/').reverse().join('-').
 // ===== PIN =====
 function abrirPin(setor){
   if(!_plSetorPermitido(setor)) return;   // setor fora da lista desta conta
-  // Desde 17/10/2026 os setores entram direto: quem vê o setor já foi
-  // liberado para ele na aba Acessos da Gestão. Só o admin pede senha.
-  if(setor!=='admin'){
-    setorAtivo=setor; pinBuffer='';
-    window.setorAtual=setor; adminMode=false; window.adminMode=false;
-    document.body.classList.remove('admin-mode');
-    goTo(DESTINOS[setor]);
-    return;
-  }
+  /* A conta define quais setores a pessoa ENXERGA; o PIN continua sendo
+     pedido em todos eles. São duas camadas diferentes: a conta é de quem
+     está no aparelho, o PIN é de quem está no posto de trabalho. */
   setorAtivo=setor; pinBuffer='';
   document.getElementById('pin-setor-nome').textContent=NOMES[setor];
   const bg=document.getElementById('pin-bg');
@@ -19374,12 +19375,14 @@ window.laNegar=laNegar;
    Guarda em: configuracoes/laAnalise
    ══════════════════════════════════════════════════════════════════ */
 let laEstoqueAtual={};      // {cod: qtd} colado pelo admin
+let laEstoqueTs=0;          // quando foi colado: só os ajustes depois disso somam
 let laAnaliseCfg={diaSemana:'auto', margem:25, semanas:8, atualizadoEm:''};
 
 onSnapshot(doc(db,'configuracoes','laAnalise'), snap=>{
   try{
     const d=snap.data()||{};
     laEstoqueAtual=d.estoque||{};
+    laEstoqueTs=Number(d.estoqueTs)||0;
     laAnaliseCfg={diaSemana:d.diaSemana||'auto', margem:(d.margem===undefined?25:Number(d.margem)),
                   semanas:Number(d.semanas)||8, atualizadoEm:d.atualizadoEm||''};
     if(document.querySelector('.screen.active')?.id==='s-la-resumo') renderLaResumo();
@@ -19438,12 +19441,32 @@ function laMediaVenda(cod, diaSemana, semanas){
 }
 
 /* Monta a linha de análise de um produto */
+/* Quanto foi liberado para este produto DEPOIS de colar o estoque.
+   Só conta o que já entrou no ERP: o que ficou para lançar à mão ainda
+   não está no saldo de lá. */
+function laLiberadoAposColagem(cod){
+  if(!laEstoqueTs) return 0;
+  const c=String(cod).trim();
+  return (laAjustes||[]).filter(a=>{
+    if(String(a.cod||'').trim()!==c) return false;
+    if(!(Number(a.timestamp)>laEstoqueTs)) return false;
+    // sem entrada no ERP, o saldo de lá não mudou
+    return !!a.eligoEntradaId && !a.eligoEntradaErro;
+  }).reduce((t,a)=>t+(parseInt(a.qtd)||0),0);
+}
+window.laLiberadoAposColagem=laLiberadoAposColagem;
+
 function laAnaliseProduto(cod, nome){
   const dia=laDiaAlvo();
   const m=laMediaVenda(cod, dia, laAnaliseCfg.semanas);
   const margem=Number(laAnaliseCfg.margem)||0;
   const previsto=Math.round(m.media*(1+margem/100));
-  const estoque=Number(laEstoqueAtual[String(cod)])||0;
+  /* O número colado é uma foto do ERP naquele instante. O que você
+     libera por esta tela entra no ERP depois, então o saldo real já é
+     maior — somamos aqui para a coluna refletir o estoque de agora. */
+  const estoqueErp=Number(laEstoqueAtual[String(cod)])||0;
+  const liberadoDepois=laLiberadoAposColagem(cod);
+  const estoque=estoqueErp+liberadoDepois;
   const diferenca=estoque-previsto;
   let c={embAntecip:0, jaLiberado:0, porDia:[]};
   try{ c=laCalcular(cod, nome); }catch(e){}
@@ -19460,7 +19483,7 @@ function laAnaliseProduto(cod, nome){
   else if(podeLiberar>0 || soFaltaEmbalar>0) resolve='parcial';       // cobre só uma parte
   else resolve='produzir';                                            // não tem nada
   return {
-    cod:String(cod), nome, estoque, media:m.media, diasMedia:m.dias, previsto, margem,
+    cod:String(cod), nome, estoque, estoqueErp, liberadoDepois, media:m.media, diasMedia:m.dias, previsto, margem,
     diferenca, falta, podeLiberar, soFaltaEmbalar, jaLiberado:c.jaLiberado||0,
     resolve, sobra: podeLiberar-falta
   };
@@ -19526,7 +19549,7 @@ async function laSalvarEstoque(){
   if(!ok){ document.getElementById('la-est-result').innerHTML='<span style="color:#dc2626;">Nada reconhecido. Use código, TAB, quantidade.</span>'; return; }
   try{
     await setDoc(doc(db,'configuracoes','laAnalise'),
-      {estoque, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+      {estoque, atualizadoEm:agora(), estoqueTs:Date.now(), autor:_demAutor()},{merge:true});
     document.getElementById('la-est-modal')?.remove();
     alert('✓ '+ok+' produto(s) importado(s).'+(ruins.length?('\n\n'+ruins.length+' linha(s) ignorada(s).'):''));
   }catch(e){ alert('Erro: '+e.message); }
@@ -19872,7 +19895,11 @@ function renderLaAnalise(el, html, ajustes){
           a.nome+
           (a.jaLiberado?('<div style="font-size:10px;color:var(--text-muted);">'+a.jaLiberado+' já liberado</div>'):'')+'</td>'+
         '<td style="padding:8px 5px;text-align:right;font-weight:700;'+(a.colado&&a.estoque===0?'color:#dc2626;':'')+'">'+
-          (a.colado ? (a.estoque===0?'0':a.estoque) : '—')+'</td>'+
+          (a.colado ? (a.estoque===0?'0':a.estoque) : '—')+
+          // o que você liberou por aqui já está somado acima
+          ((a.colado&&a.liberadoDepois)
+            ? '<div style="font-size:9px;color:#16a34a;font-weight:700;">'+a.estoqueErp+' +'+a.liberadoDepois+'</div>'
+            : '')+'</td>'+
         '<td style="padding:8px 5px;text-align:right;">'+
           (a.media?('<strong>'+a.previsto+'</strong><div style="font-size:9px;color:var(--text-muted);">'+a.media+' +'+a.margem+'% · '+a.diasMedia+'x</div>'):'<span style="color:var(--text-muted);">sem dados</span>')+'</td>'+
         '<td style="padding:8px 5px;text-align:right;font-weight:900;color:'+corD+';">'+
