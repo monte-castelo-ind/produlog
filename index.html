@@ -22880,6 +22880,9 @@ window.libEntrarNoContainer=libEntrarNoContainer;
    Aparece na entrada do admin e do Patrick, para ninguém descobrir
    tarde demais. */
 const MP_AVISO_DIAS=15;
+/* Sobras mínimas não valem aviso: lote com 10 g parado só polui a lista
+   e esconde o que realmente importa. */
+const MP_SALDO_MIN=0.5;
 
 function mpVencendo(dias){
   const limite=(dias===undefined?MP_AVISO_DIAS:dias);
@@ -22887,7 +22890,7 @@ function mpVencendo(dias){
   const out=[];
   (containerLotes||[]).forEach(l=>{
     const saldo=Number(l.saldo)||0;
-    if(saldo<=0 || !l.validade) return;
+    if(saldo<MP_SALDO_MIN || !l.validade) return;
     const p=String(l.validade).split('/');
     if(p.length!==3) return;
     const v=new Date(+p[2], +p[1]-1, +p[0]); v.setHours(0,0,0,0);
@@ -22987,7 +22990,10 @@ const QUAL_AVALIACOES=[
   {id:'fora',      nome:'Fora do padrão',   icone:'✕',  cor:'#dc2626', bg:'#fef2f2'}
 ];
 
-const QUAL_PROBLEMAS=[
+/* Observações padrão. As de fábrica não mudam; as que a equipe cadastrar
+   vêm do banco e entram na mesma lista. Usar opções fixas é o que
+   permite filtrar depois — texto livre, cada um escreve de um jeito. */
+const QUAL_PROBLEMAS_BASE=[
   {id:'maior',       nome:'Maior que o padrão'},
   {id:'menor',       nome:'Menor que o padrão'},
   {id:'recheio_mais',nome:'Recheio demais'},
@@ -22999,6 +23005,25 @@ const QUAL_PROBLEMAS=[
   {id:'selagem',     nome:'Mal selado / abrindo'},
   {id:'peso',        nome:'Peso fora'}
 ];
+let qualProblemasCustom=[];   // cadastradas pela equipe
+
+/* A lista completa, sempre lida por aqui */
+function qualProblemas(){ return QUAL_PROBLEMAS_BASE.concat(qualProblemasCustom); }
+window.qualProblemas=qualProblemas;
+
+function qualProblemaNome(id){
+  const p=qualProblemas().find(x=>x.id===id);
+  return p?p.nome:String(id);
+}
+window.qualProblemaNome=qualProblemaNome;
+
+onSnapshot(doc(db,'configuracoes','qualProblemas'), snap=>{
+  try{
+    const d=snap.data()||{};
+    qualProblemasCustom=Array.isArray(d.lista)?d.lista:[];
+    if(document.querySelector('.screen.active')?.id==='s-qual') renderQual();
+  }catch(e){ console.error('qualProblemas snap',e); }
+});
 
 onSnapshot(collection(db,'qualidade'), snap=>{
   try{
@@ -23139,7 +23164,7 @@ function qualRelLinhas(){
           PesoMedido:t.peso||'',
           PesoPadrao:t.pesoEsperado||qualPesoEsperado(pr.cod)||'',
           DesvioPct:(t.pesoDesvio===0||t.pesoDesvio)?t.pesoDesvio:'',
-          Observacoes:[(t.problemas||[]).map(x=>(QUAL_PROBLEMAS.find(q=>q.id===x)||{nome:x}).nome).join('; '), t.obs||''].filter(Boolean).join(' — '),
+          Observacoes:[(t.problemas||[]).map(x=>qualProblemaNome(x)).join('; '), t.obs||''].filter(Boolean).join(' — '),
           TesteEm:t.em||'',
           TestePor:t.por||''
         });
@@ -23284,7 +23309,12 @@ function _qualRenderCalendario(){
   const dias=qualDiasDoMes(_qualMes, _qualTipo);
 
   // abas pão / salgado
-  let h='<button onclick="qualAbrirRelatorio()" style="width:100%;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:10px;">📄 Relatório para a vigilância</button>';
+  let h='<div style="display:flex;gap:7px;margin-bottom:10px;">'+
+    '<button onclick="qualAbrirRelatorio()" style="flex:1;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">📄 Relatório</button>'+
+    (window.adminMode===true
+      ? '<button onclick="qualGerirProblemas()" title="Observações padrão" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px 14px;font-size:13px;cursor:pointer;font-family:inherit;">🏷</button>'
+      : '')+
+  '</div>';
   h+='<div style="display:flex;gap:7px;margin-bottom:12px;">'+
     [['salgado','🥐 Salgados'],['pao','🍞 Pães']].map(([id,nome])=>
       '<button onclick="qualSetTipo(\''+id+'\')" style="flex:1;background:'+(_qualTipo===id?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_qualTipo===id?'#fff':'var(--text-secondary)')+';border:1px solid '+(_qualTipo===id?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">'+nome+'</button>').join('')+
@@ -23551,6 +23581,104 @@ function _qtPesoMudou(cod){
 }
 window._qtPesoMudou=_qtPesoMudou;
 
+/* Cadastra uma observação padrão nova, para a equipe não escrever a
+   mesma coisa de dez jeitos diferentes e poder filtrar depois. */
+async function qualNovoProblema(){
+  const nome=prompt('Nova observação padrão:\n\nex: "Recheio escorrendo", "Fundo queimado"', '');
+  if(nome===null) return;
+  const t=String(nome).trim();
+  if(!t){ return; }
+  if(t.length>48){ alert('Use um texto curto — os detalhes vão no campo de observação.'); return; }
+  // já existe?
+  const igual=qualProblemas().find(x=>_normNome(x.nome)===_normNome(t));
+  if(igual){
+    alert('Já existe: "'+igual.nome+'"');
+    _qtToggleProb(igual.id);
+    return;
+  }
+  const id='c'+Date.now().toString(36);
+  const lista=[...qualProblemasCustom, {id, nome:t, criadoEm:agora(), criadoPor:_demAutor()}];
+  qualProblemasCustom=lista;   // mostra na hora
+  _qtRedesenharProbs();
+  _qtToggleProb(id);           // já deixa marcada
+  try{
+    await setDoc(doc(db,'configuracoes','qualProblemas'),
+      {lista, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Não consegui salvar a observação: '+e.message); }
+}
+window.qualNovoProblema=qualNovoProblema;
+
+/* Redesenha só as etiquetas, sem fechar a janela do teste */
+function _qtRedesenharProbs(){
+  const ov=document.getElementById('qual-teste'); if(!ov) return;
+  const area=document.getElementById('qt-probs-lista'); if(!area) return;
+  let probs=[];
+  try{ probs=JSON.parse(ov.dataset.probs||'[]'); }catch(e){}
+  area.innerHTML=qualProblemas().map(q=>'<button type="button" onclick="_qtToggleProb(\''+q.id+'\')" data-qt-prob="'+q.id+'" '+
+      'style="background:'+(probs.includes(q.id)?'#d97706':'#fff')+';color:'+(probs.includes(q.id)?'#fff':'var(--text-secondary)')+';border:1px solid '+(probs.includes(q.id)?'#d97706':'var(--border)')+';border-radius:99px;padding:8px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+q.nome+'</button>').join('')+
+    '<button type="button" onclick="qualNovoProblema()" style="background:#fff;border:1px dashed var(--border-md,#cbd5e1);color:var(--mc-azul,#2563eb);border-radius:99px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ nova</button>';
+}
+window._qtRedesenharProbs=_qtRedesenharProbs;
+
+/* Gerir as observações cadastradas: renomear ou tirar da lista */
+function qualGerirProblemas(){
+  if(window.adminMode!==true){ alert('Só o admin organiza a lista.'); return; }
+  const ov=document.createElement('div');
+  ov.id='qual-probs-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🏷 Observações padrão</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">As de fábrica não podem ser alteradas.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      '<div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:6px;">DE FÁBRICA</div>'+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px;">'+
+        QUAL_PROBLEMAS_BASE.map(q=>'<span style="background:var(--bg-page);border:1px solid var(--border);border-radius:99px;padding:6px 11px;font-size:12px;color:var(--text-secondary);">'+q.nome+'</span>').join('')+
+      '</div>'+
+      '<div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:6px;">CADASTRADAS AQUI ('+qualProblemasCustom.length+')</div>'+
+      (qualProblemasCustom.length
+        ? qualProblemasCustom.map(q=>'<div class="card" style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">'+
+            '<span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:600;">'+q.nome+'</span>'+
+            (q.criadoEm?'<span style="display:block;font-size:10px;color:var(--text-muted);">'+q.criadoEm+(q.criadoPor?(' · '+q.criadoPor):'')+'</span>':'')+'</span>'+
+            '<button onclick="qualRenomearProblema(\''+escapeJsStr(q.id)+'\')" style="background:none;border:none;color:var(--mc-azul,#2563eb);font-size:13px;cursor:pointer;padding:3px;font-family:inherit;">✏️</button>'+
+            '<button onclick="qualTirarProblema(\''+escapeJsStr(q.id)+'\')" style="background:none;border:none;color:#dc2626;font-size:13px;cursor:pointer;padding:3px;font-family:inherit;">🗑</button>'+
+          '</div>').join('')
+        : '<div style="font-size:12px;color:var(--text-secondary);padding:6px 0;">Nenhuma ainda. Use o "+ nova" ao registrar um teste.</div>')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'qual-probs-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.qualGerirProblemas=qualGerirProblemas;
+
+async function _qualSalvarProblemas(lista){
+  qualProblemasCustom=lista;
+  document.getElementById('qual-probs-modal')?.remove();
+  try{
+    await setDoc(doc(db,'configuracoes','qualProblemas'),
+      {lista, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+    qualGerirProblemas();
+  }catch(e){ alert('Erro: '+e.message); }
+}
+
+async function qualRenomearProblema(id){
+  const q=qualProblemasCustom.find(x=>x.id===id); if(!q) return;
+  const nome=prompt('Observação:', q.nome);
+  if(nome===null) return;
+  const t=String(nome).trim();
+  if(!t || t===q.nome) return;
+  await _qualSalvarProblemas(qualProblemasCustom.map(x=>x.id===id?{...x, nome:t}:x));
+}
+window.qualRenomearProblema=qualRenomearProblema;
+
+async function qualTirarProblema(id){
+  const q=qualProblemasCustom.find(x=>x.id===id); if(!q) return;
+  if(!confirm('Tirar "'+q.nome+'" da lista?\n\nOs testes que já usaram continuam mostrando.')) return;
+  await _qualSalvarProblemas(qualProblemasCustom.filter(x=>x.id!==id));
+}
+window.qualTirarProblema=qualTirarProblema;
+
 function qualAbrirTeste(cod){
   const prods=qualProdutosDoDia(_qualDia,_qualTipo);
   const pr=prods.find(x=>x.cod===cod); if(!pr) return;
@@ -23582,9 +23710,11 @@ function qualAbrirTeste(cod){
 
       '<div id="qt-probs-area" style="display:'+(t.avaliacao&&t.avaliacao!=='ok'?'block':'none')+';">'+
         '<div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:7px;">O que foi observado?</div>'+
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">'+
-          QUAL_PROBLEMAS.map(q=>'<button type="button" onclick="_qtToggleProb(\''+q.id+'\')" data-qt-prob="'+q.id+'" '+
+        '<div id="qt-probs-lista" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">'+
+          qualProblemas().map(q=>'<button type="button" onclick="_qtToggleProb(\''+q.id+'\')" data-qt-prob="'+q.id+'" '+
             'style="background:'+(probs.includes(q.id)?'#d97706':'#fff')+';color:'+(probs.includes(q.id)?'#fff':'var(--text-secondary)')+';border:1px solid '+(probs.includes(q.id)?'#d97706':'var(--border)')+';border-radius:99px;padding:8px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+q.nome+'</button>').join('')+
+          // cadastrar uma observação que ainda não existe
+          '<button type="button" onclick="qualNovoProblema()" style="background:#fff;border:1px dashed var(--border-md,#cbd5e1);color:var(--mc-azul,#2563eb);border-radius:99px;padding:8px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ nova</button>'+
         '</div></div>'+
 
       // peso medido no teste
@@ -23752,7 +23882,7 @@ function _qualRenderDia(){
                   return '<span style="display:block;font-size:11px;font-weight:700;color:'+c.cor+';margin-top:2px;">⚖️ '+_qualNum(t.peso)+' g'+
                     (t.pesoEsperado?(' · padrão '+t.pesoEsperado+' g · '+((t.pesoDesvio||0)>0?'+':'')+_qualNum(t.pesoDesvio||0)+'%'):'')+'</span>';
                 })():'')+
-                (t.problemas&&t.problemas.length?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+t.problemas.map(x=>(QUAL_PROBLEMAS.find(q=>q.id===x)||{nome:x}).nome).join(' · ')+'</span>':'')+
+                (t.problemas&&t.problemas.length?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+t.problemas.map(x=>qualProblemaNome(x)).join(' · ')+'</span>':'')+
                 (t.obs?'<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;white-space:pre-wrap;">'+t.obs+'</span>':'')+
                 '<span style="display:block;font-size:10px;color:var(--text-muted);margin-top:3px;">'+(t.em||'')+(t.por?(' · '+t.por):'')+'</span>'+
               '</span>'+
