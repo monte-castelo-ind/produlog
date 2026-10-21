@@ -23136,7 +23136,10 @@ function qualRelLinhas(){
   tipos.forEach(tipo=>{
     const dias={};
     (registros||[]).forEach(r=>{
-      if(!r.data || laEmbalado(r.embalagem||{})<=0) return;
+      // o relatório segue a mesma regra da tela: entra com a produção,
+      // sem esperar a embalagem confirmar
+      if(!r.data) return;
+      if((Number(r.qtd)||0)<=0 && laEmbalado(r.embalagem||{})<=0) return;
       const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
       if(t!==tipo) return;
       const n=estDataNum(r.data);
