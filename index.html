@@ -23025,6 +23025,203 @@ function mpPintarAvisos(){
 }
 window.mpPintarAvisos=mpPintarAvisos;
 
+/* ── FERIADOS ────────────────────────────────────────────────────
+   O Símix imprime "Falta" no feriado para quem não bateu ponto, mas
+   não conta no total. Aqui os feriados nacionais são calculados e os
+   municipais entram no cadastro. Também avisamos quando muita gente
+   falta no mesmo dia — costuma ser feriado que ninguém cadastrou. */
+let pontoFeriados={};   // {'DD/MM/AAAA': 'nome'}
+/* Como tratar a ausência no feriado. Padrão: não é falta. */
+let _pontoFeriadoConta=false;
+function pontoFeriadoConta(){ return _pontoFeriadoConta===true; }
+window.pontoFeriadoConta=pontoFeriadoConta;
+
+async function pontoAlternarFeriadoConta(){
+  _pontoFeriadoConta=!_pontoFeriadoConta;
+  try{
+    await setDoc(doc(db,'configuracoes','pontoFeriados'),
+      {contaComoFalta:_pontoFeriadoConta, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Erro: '+e.message); }
+  alert(_pontoFeriadoConta
+    ? 'Ausência em feriado passa a contar como falta — igual ao Símix.'
+    : 'Ausência em feriado deixa de contar como falta.\n\nSeus números vão divergir do total do Símix, que conta.');
+  document.getElementById('pfer-modal')?.remove();
+  const t=document.querySelector('.screen.active')?.id;
+  if(t==='s-ponto-mes') renderPontoMes();
+  if(t==='s-ponto-dash') renderPdash();
+  if(t==='s-ponto') renderPonto();
+}
+window.pontoAlternarFeriadoConta=pontoAlternarFeriadoConta;
+
+
+onSnapshot(doc(db,'configuracoes','pontoFeriados'), snap=>{
+  try{
+    const dd=snap.data()||{};
+    pontoFeriados=dd.lista||{};
+    _pontoFeriadoConta=dd.contaComoFalta===true;
+    const t=document.querySelector('.screen.active')?.id;
+    if(t==='s-ponto') renderPonto();
+    if(t==='s-ponto-mes') renderPontoMes();
+    if(t==='s-ponto-dash') renderPdash();
+  }catch(e){ console.error('pontoFeriados snap',e); }
+});
+
+/* Páscoa pelo método de Meeus: dela saem carnaval, sexta-feira santa
+   e Corpus Christi. */
+function _ferPascoa(ano){
+  const a=ano%19, b=Math.floor(ano/100), c=ano%100;
+  const d=Math.floor(b/4), e=b%4, f=Math.floor((b+8)/25);
+  const g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30;
+  const i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7;
+  const m=Math.floor((a+11*h+22*l)/451);
+  const mes=Math.floor((h+l-7*m+114)/31);
+  const dia=((h+l-7*m+114)%31)+1;
+  return new Date(ano, mes-1, dia);
+}
+
+function _ferMais(base, dias){
+  const d=new Date(base); d.setDate(d.getDate()+dias); return d;
+}
+function _ferBr(d){
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+
+function pontoFeriadosNacionais(ano){
+  const pa=_ferPascoa(ano);
+  const f={};
+  f['01/01/'+ano]='Confraternização Universal';
+  f[_ferBr(_ferMais(pa,-48))]='Carnaval';
+  f[_ferBr(_ferMais(pa,-47))]='Carnaval';
+  f[_ferBr(_ferMais(pa,-2))]='Sexta-feira Santa';
+  f['21/04/'+ano]='Tiradentes';
+  f['01/05/'+ano]='Dia do Trabalho';
+  f[_ferBr(_ferMais(pa,60))]='Corpus Christi';
+  f['07/09/'+ano]='Independência';
+  f['12/10/'+ano]='Nossa Senhora Aparecida';
+  f['02/11/'+ano]='Finados';
+  f['15/11/'+ano]='Proclamação da República';
+  f['20/11/'+ano]='Consciência Negra';
+  f['25/12/'+ano]='Natal';
+  return f;
+}
+window.pontoFeriadosNacionais=pontoFeriadosNacionais;
+
+/* O feriado daquela data, se houver */
+function pontoFeriado(dataBR, ano){
+  if(pontoFeriados[dataBR]) return pontoFeriados[dataBR];
+  const p=String(dataBR).split('/');
+  const a=p[2]||ano||new Date().getFullYear();
+  const nac=pontoFeriadosNacionais(+a);
+  const ch=p.length===3?dataBR:(dataBR+'/'+a);
+  return nac[ch]||'';
+}
+window.pontoFeriado=pontoFeriado;
+
+/* Dias em que quase todo mundo faltou: provável feriado sem cadastro */
+function pontoSuspeitosFeriado(ch){
+  const d=pontoMeses[ch]; if(!d||!d.ponto) return [];
+  const ano=+String(ch).split('-')[0];
+  const porDia={};
+  d.ponto.forEach(p=>{
+    (p.dias||[]).forEach(x=>{
+      if(x.foraDoPeriodo || x.folga) return;
+      const k=x.data+'/'+ano;
+      if(!porDia[k]) porDia[k]={data:x.data, completa:k, total:0, faltas:0};
+      porDia[k].total++;
+      if(x.falta) porDia[k].faltas++;
+    });
+  });
+  return Object.values(porDia)
+    .filter(x=>x.total>=5 && (x.faltas/x.total)>=0.6 && !pontoFeriado(x.completa))
+    .map(x=>({...x, pct:x.faltas/x.total*100, nomeSugerido:pontoFeriado(x.completa)}))
+    .sort((a,b)=>b.pct-a.pct);
+}
+window.pontoSuspeitosFeriado=pontoSuspeitosFeriado;
+
+async function pontoCadastrarFeriado(dataCompleta, nomeSug){
+  const nome=prompt('Nome do feriado em '+dataCompleta+':', nomeSug||'');
+  if(nome===null) return;
+  const t=String(nome).trim();
+  if(!t) return;
+  const lista={...pontoFeriados}; lista[dataCompleta]=t;
+  pontoFeriados=lista;
+  try{
+    await setDoc(doc(db,'configuracoes','pontoFeriados'),
+      {lista, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Erro: '+e.message); }
+  const t2=document.querySelector('.screen.active')?.id;
+  if(t2==='s-ponto-mes') renderPontoMes();
+  if(t2==='s-ponto-dash') renderPdash();
+}
+window.pontoCadastrarFeriado=pontoCadastrarFeriado;
+
+/* Gerir a lista de feriados próprios */
+function pontoGerirFeriados(){
+  const ano=new Date().getFullYear();
+  const nac=pontoFeriadosNacionais(ano);
+  const meus=Object.keys(pontoFeriados).sort((a,b)=>estDataNum(a)-estDataNum(b));
+  const ov=document.createElement('div');
+  ov.id='pfer-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🎌 Feriados</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Em feriado ninguém falta. Os nacionais já vêm calculados; cadastre os municipais e os pontos facultativos.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      '<div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:6px;">NACIONAIS '+ano+' (automáticos)</div>'+
+      '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px;">'+
+        Object.keys(nac).sort((a,b)=>estDataNum(a)-estDataNum(b)).map(k=>
+          '<span style="font-size:11px;background:var(--bg-page);border-radius:99px;padding:5px 10px;color:var(--text-secondary);">'+k.slice(0,5)+' '+nac[k]+'</span>').join('')+
+      '</div>'+
+      '<div style="font-size:11px;font-weight:800;color:var(--text-muted);margin-bottom:6px;">CADASTRADOS AQUI ('+meus.length+')</div>'+
+      (meus.length
+        ? meus.map(k=>'<div class="card" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'+
+            '<span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:600;">'+pontoFeriados[k]+'</span>'+
+            '<span style="display:block;font-size:11px;color:var(--text-muted);">'+k+'</span></span>'+
+            '<button onclick="pontoTirarFeriado(\''+escapeJsStr(k)+'\')" style="background:none;border:none;color:#dc2626;font-size:13px;cursor:pointer;padding:4px;font-family:inherit;">🗑</button>'+
+          '</div>').join('')
+        : '<div style="font-size:12px;color:var(--text-secondary);padding:6px 0;">Nenhum ainda.</div>')+
+      '<button onclick="pontoNovoFeriado()" class="btn btn-secondary" style="width:100%;margin-top:9px;">+ Cadastrar feriado</button>'+
+      // a decisão que mais pesa nos números
+      '<div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px;">'+
+        '<div style="font-size:12px;font-weight:800;color:var(--text-secondary);margin-bottom:5px;">QUEM NÃO TRABALHA NO FERIADO</div>'+
+        '<label for="pfer-conta" style="display:flex;align-items:flex-start;gap:9px;padding:11px;background:'+(pontoFeriadoConta()?'#fffbeb':'var(--bg-page)')+';border:2px solid '+(pontoFeriadoConta()?'#d97706':'var(--border)')+';border-radius:10px;cursor:pointer;">'+
+          '<input type="checkbox" id="pfer-conta"'+(pontoFeriadoConta()?' checked':'')+' onchange="pontoAlternarFeriadoConta()" style="width:20px;height:20px;margin:1px 0 0;flex:0 0 auto;cursor:pointer;">'+
+          '<span style="flex:1;"><span style="display:block;font-size:13px;font-weight:700;">Contar como falta</span>'+
+          '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;line-height:1.45;">'+
+            'O Símix conta. Se a padaria funciona no feriado e as pessoas estavam escaladas, deixe marcado. Se o dia é de folga para todos, desmarque — e seus números vão divergir do total do Símix.</span></span></label>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'pfer-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.pontoGerirFeriados=pontoGerirFeriados;
+
+function pontoNovoFeriado(){
+  const dt=prompt('Data do feriado (DD/MM/AAAA):','');
+  if(dt===null) return;
+  const t=String(dt).trim();
+  if(!/^\d{2}\/\d{2}\/\d{4}$/.test(t)){ alert('Use o formato DD/MM/AAAA.'); return; }
+  document.getElementById('pfer-modal')?.remove();
+  pontoCadastrarFeriado(t, '');
+}
+window.pontoNovoFeriado=pontoNovoFeriado;
+
+async function pontoTirarFeriado(k){
+  if(!confirm('Tirar "'+pontoFeriados[k]+'" da lista?')) return;
+  const lista={...pontoFeriados}; delete lista[k];
+  pontoFeriados=lista;
+  document.getElementById('pfer-modal')?.remove();
+  try{
+    await setDoc(doc(db,'configuracoes','pontoFeriados'),
+      {lista, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Erro: '+e.message); }
+  pontoGerirFeriados();
+}
+window.pontoTirarFeriado=pontoTirarFeriado;
+
 /* ══════════════════════════════════════════════════════════════════
    PAINEL DA EQUIPE — a visão que o gestor terá do seu setor
    Por enquanto só o admin abre: é um modelo para validar antes de
@@ -23130,33 +23327,64 @@ function _pdFaixas(d){
   const f=pdashFaixasChegada(d);
   if(!f.length) return '';
   const tot=f.reduce((t,x)=>t+x.n,0);
-  // rosca
-  const R=54, C=2*Math.PI*R;
-  let acum=0;
-  const anel=f.map(x=>{
-    const frac=x.n/tot;
-    const el='<circle cx="70" cy="70" r="'+R+'" fill="none" stroke="'+x.cor+'" stroke-width="22" '+
-      'stroke-dasharray="'+(frac*C)+' '+C+'" stroke-dashoffset="'+(-acum*C)+'" transform="rotate(-90 70 70)"/>';
-    acum+=frac; return el;
-  }).join('');
   const noPrazo=f.filter(x=>x.min<=PONTO_TOL_ATRASO).reduce((t,x)=>t+x.n,0);
+  const pct=noPrazo/tot*100;
+
+  /* Rosca desenhada com arcos de verdade, não com traço pontilhado:
+     o tracejado deformava as fatias pequenas e o número ficava por
+     cima do desenho. */
+  const CX=110, CY=110, RE=96, RI=62;
+  const arco=(ini,fim,cor)=>{
+    const total=fim-ini;
+    if(total<=0) return '';
+    // círculo inteiro não fecha com arco: desenha um anel
+    if(total>=0.9999){
+      return '<circle cx="'+CX+'" cy="'+CY+'" r="'+((RE+RI)/2)+'" fill="none" stroke="'+cor+'" stroke-width="'+(RE-RI)+'"/>';
+    }
+    const a0=ini*2*Math.PI-Math.PI/2, a1=fim*2*Math.PI-Math.PI/2;
+    const grande=total>0.5?1:0;
+    const x0=CX+RE*Math.cos(a0), y0=CY+RE*Math.sin(a0);
+    const x1=CX+RE*Math.cos(a1), y1=CY+RE*Math.sin(a1);
+    const x2=CX+RI*Math.cos(a1), y2=CY+RI*Math.sin(a1);
+    const x3=CX+RI*Math.cos(a0), y3=CY+RI*Math.sin(a0);
+    return '<path d="M'+x0+','+y0+' A'+RE+','+RE+' 0 '+grande+',1 '+x1+','+y1+
+           ' L'+x2+','+y2+' A'+RI+','+RI+' 0 '+grande+',0 '+x3+','+y3+' Z" fill="'+cor+'"/>';
+  };
+  let acum=0;
+  const fatias=f.map(x=>{
+    const ini=acum, fim=acum+x.n/tot;
+    acum=fim;
+    return arco(ini, fim, x.cor)+
+      '<title>'+x.rot+': '+x.n+'</title>';
+  }).join('');
+
+  const corPct=pct>=95?'#16a34a':(pct>=85?'#d97706':'#dc2626');
 
   return '<div class="card">'+
     '<div style="font-size:14px;font-weight:800;">Como a equipe chega</div>'+
-    '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;margin-bottom:9px;">'+tot+' entradas registradas</div>'+
-    '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">'+
-      '<div style="position:relative;flex:0 0 auto;">'+
-        '<svg viewBox="0 0 140 140" style="width:124px;height:124px;display:block;">'+anel+'</svg>'+
-        '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">'+
-          '<span style="font-size:24px;font-weight:900;line-height:1;">'+_fmtKg(noPrazo/tot*100)+'%</span>'+
-          '<span style="font-size:9px;color:var(--text-secondary);">no horário</span></div>'+
-      '</div>'+
-      '<div style="flex:1;min-width:128px;">'+
-        f.map(x=>'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">'+
-          '<span style="width:9px;height:9px;border-radius:2px;background:'+x.cor+';flex:0 0 auto;"></span>'+
-          '<span style="flex:1;min-width:0;font-size:11px;color:var(--text-secondary);">'+x.rot+'</span>'+
-          '<span style="font-size:12px;font-weight:700;">'+x.n+'</span>'+
-        '</div>').join('')+
+    '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;margin-bottom:14px;">'+tot+' entradas registradas no mês</div>'+
+    '<div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:center;">'+
+      // o número vai dentro do SVG, centralizado de verdade
+      '<svg viewBox="0 0 220 220" style="width:190px;height:190px;flex:0 0 auto;display:block;">'+
+        '<circle cx="'+CX+'" cy="'+CY+'" r="'+((RE+RI)/2)+'" fill="none" stroke="var(--bg-page)" stroke-width="'+(RE-RI)+'"/>'+
+        fatias+
+        '<text x="'+CX+'" y="'+(CY-2)+'" text-anchor="middle" font-size="40" font-weight="800" fill="'+corPct+'">'+Math.round(pct)+'%</text>'+
+        '<text x="'+CX+'" y="'+(CY+20)+'" text-anchor="middle" font-size="13" fill="var(--text-secondary)">no horário</text>'+
+      '</svg>'+
+      '<div style="flex:1;min-width:190px;">'+
+        f.map(x=>{
+          const p=x.n/tot*100;
+          return '<div style="margin-bottom:9px;">'+
+            '<div style="display:flex;align-items:center;gap:8px;">'+
+              '<span style="width:11px;height:11px;border-radius:3px;background:'+x.cor+';flex:0 0 auto;"></span>'+
+              '<span style="flex:1;min-width:0;font-size:13px;color:var(--text-primary);">'+x.rot+'</span>'+
+              '<span style="font-size:14px;font-weight:800;">'+x.n+'</span>'+
+              '<span style="font-size:11px;color:var(--text-muted);width:40px;text-align:right;">'+_fmtKg(p)+'%</span>'+
+            '</div>'+
+            '<div style="height:5px;background:var(--bg-page);border-radius:99px;margin-top:4px;overflow:hidden;">'+
+              '<div style="height:100%;width:'+p+'%;background:'+x.cor+';"></div></div>'+
+          '</div>';
+        }).join('')+
       '</div>'+
     '</div></div>';
 }
@@ -23801,7 +24029,8 @@ function renderPontoMes(){
     _pmesCardArquivo('📊','Lista de colaboradores', d&&d.equipe?d.equipe.length+' pessoa(s)':'', d&&d.equipeArquivo,
       '<label style="display:block;cursor:pointer;"><span style="display:block;background:'+(d&&d.equipe?'var(--mc-azul,#2563eb)':'#16a34a')+';color:#fff;border-radius:8px;padding:9px;font-size:12px;font-weight:700;text-align:center;">'+(d&&d.equipe?'Trocar':'Importar Excel')+'</span>'+
       '<input type="file" accept=".xlsx,.xls" onchange="pmesImportarEquipe(this)" style="display:none;"></label>')+
-  '</div>';
+  '</div>'+
+  '<button onclick="pontoGerirFeriados()" style="width:100%;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:12px;">🎌 Feriados</button>';
 
   if(!d||!d.ponto){
     el.innerHTML=h+'<div class="card" style="text-align:center;padding:26px;">'+
@@ -23809,6 +24038,22 @@ function renderPontoMes(){
       '<div style="font-size:15px;font-weight:800;margin-top:8px;">Comece pelo espelho de ponto</div>'+
       '<div style="font-size:12px;color:var(--text-secondary);margin-top:5px;line-height:1.5;">Depois importe a lista de colaboradores para trazer os setores.</div></div>';
     return;
+  }
+
+  // dias em que quase todo mundo faltou: provável feriado
+  const susp=(typeof pontoSuspeitosFeriado==='function')?pontoSuspeitosFeriado(_pmesSel):[];
+  if(susp.length){
+    h+='<div class="card" style="margin-bottom:12px;border:2px solid #2563eb;background:#eff6ff;">'+
+      '<div style="font-size:14px;font-weight:900;color:#1d4ed8;">🎌 '+susp.length+' dia(s) parecem feriado</div>'+
+      '<div style="font-size:11px;color:#1e40af;margin-top:3px;line-height:1.5;">'+
+        'Quase todo mundo faltou nestes dias. Cadastrando como feriado, eles deixam de contar como falta.</div>'+
+      susp.slice(0,5).map(x=>'<button onclick="pontoCadastrarFeriado(\''+x.completa+'\',\'\')" style="display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:#fff;border:1px solid #bfdbfe;border-radius:9px;padding:9px 11px;margin-top:7px;cursor:pointer;font-family:inherit;">'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:14px;font-weight:700;">'+x.data+'</span>'+
+          '<span style="display:block;font-size:11px;color:var(--text-secondary);">'+x.faltas+' de '+x.total+' faltaram ('+_fmtKg(x.pct)+'%)</span></span>'+
+        '<span style="font-size:11px;font-weight:700;color:#2563eb;white-space:nowrap;">cadastrar ›</span>'+
+      '</button>').join('')+
+    '</div>';
   }
 
   // pendências de setor
@@ -24828,12 +25073,21 @@ function _pontoLerDia(linha, prevEntrada, emissao){
     if(e!==null && prevEntrada!==null) atraso=e-prevEntrada;
   }
 
+  /* Feriado: a padaria às vezes funciona, às vezes não. O Símix conta
+     como falta quem não bateu ponto no feriado — pode ser certo (estava
+     escalado) ou não (ninguém trabalhou). Quem decide é o admin, na
+     configuração; aqui só marcamos o dia. */
+  const anoRef=(emissao&&emissao.a)||new Date().getFullYear();
+  const feriado=(typeof pontoFeriado==='function') ? pontoFeriado(data+'/'+anoRef) : '';
+  const feriadoConta=(typeof pontoFeriadoConta==='function') ? pontoFeriadoConta() : false;
+
   return {
     data, semana, entrada, batidas,
     saida: batidas.length>1?batidas[batidas.length-1]:null,
     atraso,
-    falta: !foraDoPeriodo && baixo.includes('falta'),
-    afastamento: afast,
+    feriado,
+    falta: !foraDoPeriodo && baixo.includes('falta') && (feriadoConta || !feriado),
+    afastamento: afast||((feriado && !feriadoConta)?'feriado':''),
     folga: !batidas.length && !obs,
     foraDoPeriodo, inativo,
     obs
