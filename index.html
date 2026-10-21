@@ -4434,6 +4434,17 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="prioridade-form-content"></div>
   </div>
 
+  <!-- PONTO: DASHBOARD DO GESTOR -->
+  <div class="screen" id="s-ponto-dash">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Gestão</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title" id="pdash-titulo">📊 Painel da Equipe</div><div class="mc-page-sub" id="pdash-sub">visão do gestor</div></div>
+    </div>
+    <div style="flex:1;padding:16px;background:var(--bg-page);overflow-y:auto;" id="pdash-content"></div>
+  </div>
+
   <!-- PONTO: UM MÊS -->
   <div class="screen" id="s-ponto-mes">
     <div class="mc-header">
@@ -5866,6 +5877,7 @@ function voltar(){
   if(atual==='s-pauta'     && typeof _pautaSel!=='undefined' && _pautaSel){ pautaVoltar(); return; }
   if(atual==='s-qual'      && typeof _qualDia!=='undefined' && _qualDia){ qualVoltar(); return; }
   if(atual==='s-ponto'     && typeof _pontoPessoa!=='undefined' && _pontoPessoa){ pontoVoltar(); return; }
+  if(atual==='s-ponto-dash' && typeof _pdPessoa!=='undefined' && _pdPessoa){ pdVoltar(); return; }
   if(atual==='s-cfped'     && typeof _cfSemSel!=='undefined' && _cfSemSel){ cfVoltarLista(); return; }
   if(atual==='s-emb-cfped' && typeof _embCfSel!=='undefined' && _embCfSel){ embCfVoltar(); return; }
   if(atual==='s-ajcont'    && typeof _ajContSel!=='undefined' && _ajContSel){ ajContVoltar(); return; }
@@ -5969,6 +5981,7 @@ function goTo(id, semHistorico){
   if(id==='s-qual' && typeof renderQual==='function') renderQual();
   if(id==='s-ponto' && typeof renderPonto==='function') renderPonto();
   if(id==='s-ponto-mes' && typeof renderPontoMes==='function') renderPontoMes();
+  if(id==='s-ponto-dash' && typeof renderPdash==='function') renderPdash();
   if((id==='s-adm-hub'||id==='s-patrick-home') && typeof mpPintarAvisos==='function') mpPintarAvisos();
   if(id==='s-emb-cfped' && typeof renderEmbCf==='function') renderEmbCf();
   if(id==='s-perdas') renderPerdas();
@@ -23013,6 +23026,522 @@ function mpPintarAvisos(){
 window.mpPintarAvisos=mpPintarAvisos;
 
 /* ══════════════════════════════════════════════════════════════════
+   PAINEL DA EQUIPE — a visão que o gestor terá do seu setor
+   Por enquanto só o admin abre: é um modelo para validar antes de
+   liberar para os gestores.
+   ══════════════════════════════════════════════════════════════════ */
+let _pdSetor='', _pdMes='', _pdComparar='', _pdPessoa='';
+
+function pdashAbrir(setor){
+  _pdSetor=setor||'';
+  const meses=pdashMesesDisponiveis();
+  _pdMes=_pdMes||meses[meses.length-1]||'';
+  _pdComparar=_pdComparar||(meses.length>1?meses[meses.length-2]:'');
+  _pdPessoa='';
+  goTo('s-ponto-dash');
+  renderPdash();
+}
+window.pdashAbrir=pdashAbrir;
+
+/* ── EVOLUÇÃO: linha ao longo dos meses ─────────────────────────── */
+function _pdEvolucao(){
+  const meses=pdashMesesDisponiveis();
+  if(meses.length<2) return '';
+  const serie=meses.map(ch=>{
+    const d=pdashDados(ch, _pdSetor);
+    return {ch, abs:d?d.absenteismo:0, pont:d?d.pontualidade:100, n:d?d.n:0, temDados:!!d};
+  }).filter(x=>x.temDados);
+  if(serie.length<2) return '';
+
+  const L=46, R=16, T=16, B=28, W=620, H=190;
+  const iw=W-L-R, ih=H-T-B;
+  const maxAbs=Math.max(...serie.map(x=>x.abs), 6);
+  const px=i=>L+(serie.length>1?(i/(serie.length-1))*iw:iw/2);
+  const pyA=v=>T+ih-(v/maxAbs)*ih;
+  const pyP=v=>T+ih-((v-70)/30)*ih;   // pontualidade: foco de 70 a 100
+
+  const linha=(pts,cor,larg)=>'<polyline fill="none" stroke="'+cor+'" stroke-width="'+larg+'" stroke-linejoin="round" stroke-linecap="round" points="'+pts+'"/>';
+  const ptsAbs=serie.map((x,i)=>px(i)+','+pyA(x.abs)).join(' ');
+  const ptsPont=serie.map((x,i)=>px(i)+','+pyP(x.pont)).join(' ');
+
+  return '<div class="card" style="margin-bottom:14px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">'+
+      '<span style="font-size:14px;font-weight:800;">Evolução</span>'+
+      '<span style="display:flex;gap:11px;font-size:11px;">'+
+        '<span style="color:#dc2626;font-weight:700;">● absenteísmo</span>'+
+        '<span style="color:#2563eb;font-weight:700;">● pontualidade</span></span>'+
+    '</div>'+
+    '<div style="overflow-x:auto;">'+
+    '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:400px;height:auto;display:block;">'+
+      // grade
+      [0,.25,.5,.75,1].map(f=>'<line x1="'+L+'" y1="'+(T+ih*f)+'" x2="'+(W-R)+'" y2="'+(T+ih*f)+'" stroke="var(--border)" stroke-width="1"/>').join('')+
+      [0,.5,1].map(f=>'<text x="'+(L-6)+'" y="'+(T+ih*f+4)+'" text-anchor="end" font-size="10" fill="var(--text-muted)">'+_fmtKg(maxAbs*(1-f))+'%</text>').join('')+
+      // área sob o absenteísmo
+      '<polygon fill="#dc262618" points="'+L+','+(T+ih)+' '+ptsAbs+' '+px(serie.length-1)+','+(T+ih)+'"/>'+
+      linha(ptsPont,'#2563eb',2.5)+
+      linha(ptsAbs,'#dc2626',2.5)+
+      serie.map((x,i)=>{
+        const sel=x.ch===_pdMes;
+        return '<circle cx="'+px(i)+'" cy="'+pyA(x.abs)+'" r="'+(sel?6:4)+'" fill="#dc2626" stroke="#fff" stroke-width="2"/>'+
+               '<circle cx="'+px(i)+'" cy="'+pyP(x.pont)+'" r="'+(sel?6:4)+'" fill="#2563eb" stroke="#fff" stroke-width="2"/>'+
+               (sel?'<line x1="'+px(i)+'" y1="'+T+'" x2="'+px(i)+'" y2="'+(T+ih)+'" stroke="var(--text-muted)" stroke-width="1" stroke-dasharray="3 3"/>':'');
+      }).join('')+
+      serie.map((x,i)=>'<text x="'+px(i)+'" y="'+(H-9)+'" text-anchor="middle" font-size="10" font-weight="'+(x.ch===_pdMes?'800':'400')+'" fill="'+(x.ch===_pdMes?'var(--text-primary)':'var(--text-muted)')+'">'+_pdMesNome(x.ch)+'</text>').join('')+
+    '</svg></div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'+
+      serie.map(x=>'<button onclick="pdSetMes(\''+x.ch+'\')" style="flex:1;min-width:72px;background:'+(x.ch===_pdMes?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(x.ch===_pdMes?'#fff':'var(--text-secondary)')+';border:1px solid var(--border);border-radius:8px;padding:7px 4px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">'+
+        _pdMesNome(x.ch)+'<br><span style="font-size:10px;opacity:.85;">'+_fmtKg(x.abs)+'%</span></button>').join('')+
+    '</div>'+
+  '</div>';
+}
+
+/* ── POR DIA DA SEMANA ───────────────────────────────────────────── */
+function _pdDiaSemana(d){
+  const l=pdashPorDiaSemana(d);
+  if(!l.length) return '';
+  const max=Math.max(...l.map(x=>x.faltas+x.atrasos), 1);
+  const pior=l.slice().sort((a,b)=>(b.faltas/b.total)-(a.faltas/a.total))[0];
+  return '<div class="card">'+
+    '<div style="font-size:14px;font-weight:800;">Por dia da semana</div>'+
+    '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;margin-bottom:11px;">'+
+      (pior && pior.faltas ? ('a '+_pdDiaNome(pior.dia)+' concentra mais faltas') : 'faltas e atrasos distribuídos')+'</div>'+
+    l.map(x=>{
+      const t=x.faltas+x.atrasos;
+      return '<div style="margin-bottom:9px;">'+
+        '<div style="display:flex;justify-content:space-between;font-size:12px;">'+
+          '<span style="font-weight:600;text-transform:capitalize;">'+x.dia+'</span>'+
+          '<span style="color:var(--text-secondary);">'+(x.faltas?x.faltas+'F ':'')+(x.atrasos?x.atrasos+'A':'')+(t?'':'—')+'</span></div>'+
+        '<div style="display:flex;height:9px;border-radius:99px;overflow:hidden;background:var(--bg-page);margin-top:3px;">'+
+          '<div style="width:'+(x.faltas/max*100)+'%;background:#dc2626;"></div>'+
+          '<div style="width:'+(x.atrasos/max*100)+'%;background:#d97706;"></div>'+
+        '</div></div>';
+    }).join('')+
+    '<div style="display:flex;gap:11px;font-size:10px;color:var(--text-secondary);margin-top:3px;">'+
+      '<span><span style="display:inline-block;width:8px;height:8px;background:#dc2626;border-radius:2px;"></span> faltas</span>'+
+      '<span><span style="display:inline-block;width:8px;height:8px;background:#d97706;border-radius:2px;"></span> atrasos</span></div>'+
+  '</div>';
+}
+function _pdDiaNome(d){
+  return {seg:'segunda', ter:'terça', qua:'quarta', qui:'quinta', sex:'sexta', 'sáb':'sábado', dom:'domingo'}[d]||d;
+}
+
+/* ── FAIXAS DE CHEGADA ───────────────────────────────────────────── */
+function _pdFaixas(d){
+  const f=pdashFaixasChegada(d);
+  if(!f.length) return '';
+  const tot=f.reduce((t,x)=>t+x.n,0);
+  // rosca
+  const R=54, C=2*Math.PI*R;
+  let acum=0;
+  const anel=f.map(x=>{
+    const frac=x.n/tot;
+    const el='<circle cx="70" cy="70" r="'+R+'" fill="none" stroke="'+x.cor+'" stroke-width="22" '+
+      'stroke-dasharray="'+(frac*C)+' '+C+'" stroke-dashoffset="'+(-acum*C)+'" transform="rotate(-90 70 70)"/>';
+    acum+=frac; return el;
+  }).join('');
+  const noPrazo=f.filter(x=>x.min<=PONTO_TOL_ATRASO).reduce((t,x)=>t+x.n,0);
+
+  return '<div class="card">'+
+    '<div style="font-size:14px;font-weight:800;">Como a equipe chega</div>'+
+    '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;margin-bottom:9px;">'+tot+' entradas registradas</div>'+
+    '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;">'+
+      '<div style="position:relative;flex:0 0 auto;">'+
+        '<svg viewBox="0 0 140 140" style="width:124px;height:124px;display:block;">'+anel+'</svg>'+
+        '<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;">'+
+          '<span style="font-size:24px;font-weight:900;line-height:1;">'+_fmtKg(noPrazo/tot*100)+'%</span>'+
+          '<span style="font-size:9px;color:var(--text-secondary);">no horário</span></div>'+
+      '</div>'+
+      '<div style="flex:1;min-width:128px;">'+
+        f.map(x=>'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">'+
+          '<span style="width:9px;height:9px;border-radius:2px;background:'+x.cor+';flex:0 0 auto;"></span>'+
+          '<span style="flex:1;min-width:0;font-size:11px;color:var(--text-secondary);">'+x.rot+'</span>'+
+          '<span style="font-size:12px;font-weight:700;">'+x.n+'</span>'+
+        '</div>').join('')+
+      '</div>'+
+    '</div></div>';
+}
+
+/* ── MAPA DE CALOR DO MÊS ────────────────────────────────────────── */
+function _pdCalor(d){
+  const l=pdashPorDiaMes(d);
+  if(!l.length) return '';
+  const max=Math.max(...l.map(x=>x.faltas+x.atrasos), 1);
+  const piores=l.slice().sort((a,b)=>(b.faltas+b.atrasos)-(a.faltas+a.atrasos)).slice(0,3).filter(x=>x.faltas+x.atrasos);
+  return '<div class="card" style="margin:14px 0;">'+
+    '<div style="font-size:14px;font-weight:800;">Dia a dia do mês</div>'+
+    '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;margin-bottom:11px;">'+
+      (piores.length?('pior dia: '+piores[0].data+' com '+(piores[0].faltas+piores[0].atrasos)+' ocorrência(s)'):'nenhuma ocorrência no mês')+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:5px;">'+
+      l.map(x=>{
+        const t=x.faltas+x.atrasos;
+        const int=t/max;
+        const cor=!t?'var(--bg-page)':(x.faltas>=x.atrasos
+          ? 'rgba(220,38,38,'+(0.18+int*0.72)+')'
+          : 'rgba(217,119,6,'+(0.18+int*0.72)+')');
+        const txt=int>0.55?'#fff':'var(--text-primary)';
+        return '<div title="'+x.data+' — '+x.faltas+' falta(s), '+x.atrasos+' atraso(s)" style="background:'+cor+';border-radius:7px;padding:6px 3px;text-align:center;">'+
+          '<div style="font-size:13px;font-weight:800;color:'+txt+';line-height:1;">'+x.dia+'</div>'+
+          '<div style="font-size:8px;color:'+(int>0.55?'rgba(255,255,255,.85)':'var(--text-muted)')+';">'+x.semana+'</div>'+
+          (t?'<div style="font-size:10px;font-weight:700;color:'+txt+';margin-top:2px;">'+t+'</div>':'<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">·</div>')+
+        '</div>';
+      }).join('')+
+    '</div></div>';
+}
+
+/* ── A EQUIPE ────────────────────────────────────────────────────── */
+function _pdEquipe(d, ant){
+  const ps=d.pessoas.slice().sort((a,b)=>
+    (b.faltas*3+b.atrasos)-(a.faltas*3+a.atrasos) || a.nome.localeCompare(b.nome,'pt-BR'));
+  const antMap={};
+  if(ant) ant.pessoas.forEach(p=>{ antMap[p.codigo]=p; });
+
+  const atencao=ps.filter(p=>p.faltas>=2 || p.atrasos>=3);
+  const ok=ps.filter(p=>!p.faltas && !p.atrasos);
+
+  let h='<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:11px;">'+
+      '<span style="font-size:14px;font-weight:800;">Equipe · '+ps.length+' pessoa(s)</span>'+
+      '<span style="display:flex;gap:7px;">'+
+        (atencao.length?'<span style="font-size:11px;font-weight:700;color:#b91c1c;background:#fef2f2;border-radius:99px;padding:3px 10px;">'+atencao.length+' atenção</span>':'')+
+        (ok.length?'<span style="font-size:11px;font-weight:700;color:#15803d;background:#f0fdf4;border-radius:99px;padding:3px 10px;">'+ok.length+' sem ocorrência</span>':'')+
+      '</span>'+
+    '</div>';
+
+  h+=ps.map(p=>{
+    const a=antMap[p.codigo];
+    const barra=(v,max,cor)=>'<div style="flex:1;height:6px;background:var(--bg-page);border-radius:99px;overflow:hidden;"><div style="height:100%;width:'+(max?Math.min(v/max*100,100):0)+'%;background:'+cor+';"></div></div>';
+    const maxF=Math.max(...ps.map(x=>x.faltas),1);
+    const maxA=Math.max(...ps.map(x=>x.atrasos),1);
+    const grave=p.faltas>=2||p.atrasos>=3;
+    const limpo=!p.faltas&&!p.atrasos;
+    return '<button onclick="pdVerPessoa(\''+escapeJsStr(p.codigo)+'\')" style="display:block;width:100%;text-align:left;background:'+(grave?'#fef2f2':(limpo?'#f0fdf4':'transparent'))+';border:none;border-radius:10px;border-top:1px solid var(--border);padding:11px 10px;cursor:pointer;font-family:inherit;color:inherit;margin-bottom:2px;">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:14px;font-weight:700;">'+p.nome+'</div>'+
+          '<div style="font-size:11px;color:var(--text-secondary);">'+(p.cargo||'')+'</div>'+
+        '</div>'+
+        '<div style="flex:0 0 auto;text-align:right;">'+
+          '<div style="font-size:12px;font-weight:800;color:'+(p.pontualidade>=95?'#16a34a':(p.pontualidade>=85?'#d97706':'#dc2626'))+';">'+_fmtKg(p.pontualidade)+'%</div>'+
+          '<div style="font-size:9px;color:var(--text-muted);">pontualidade</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:7px;">'+
+        '<span style="flex:0 0 58px;font-size:11px;color:'+(p.faltas?'#dc2626':'var(--text-muted)')+';font-weight:'+(p.faltas?'700':'400')+';">'+(p.faltas||0)+' falta'+(p.faltas===1?'':'s')+'</span>'+
+        barra(p.faltas, maxF, '#dc2626')+
+        '<span style="flex:0 0 66px;font-size:11px;color:'+(p.atrasos?'#d97706':'var(--text-muted)')+';font-weight:'+(p.atrasos?'700':'400')+';text-align:right;">'+(p.atrasos||0)+' atraso'+(p.atrasos===1?'':'s')+'</span>'+
+        barra(p.atrasos, maxA, '#d97706')+
+      '</div>'+
+      (a
+        ? '<div style="font-size:10px;color:var(--text-muted);margin-top:5px;">vs '+_pdMesNome(_pdComparar)+': '+
+            _pdDelta(p.faltas, a.faltas, 'falta')+' · '+_pdDelta(p.atrasos, a.atrasos, 'atraso')+'</div>'
+        : '')+
+    '</button>';
+  }).join('');
+  return h+'</div>';
+}
+
+function _pdDelta(agora, antes, nome){
+  const d=agora-antes;
+  if(d===0) return '<span style="color:var(--text-muted);">mesmo nº de '+nome+'s</span>';
+  const cor=d<0?'#16a34a':'#dc2626';
+  return '<span style="color:'+cor+';font-weight:700;">'+(d>0?'+':'')+d+' '+nome+(Math.abs(d)===1?'':'s')+'</span>';
+}
+
+/* ── UMA PESSOA ──────────────────────────────────────────────────── */
+function _pdPessoaDetalhe(){
+  const d=pdashDados(_pdMes, _pdSetor);
+  const p=d&&d.pessoas.find(x=>String(x.codigo)===String(_pdPessoa));
+  if(!p) { _pdPessoa=''; return _vazio('Pessoa não encontrada neste mês.'); }
+  const dias=(p.diasUteis||[]).slice().sort((a,b)=>_pontoDataNum(a.data)-_pontoDataNum(b.data));
+
+  let h='<button onclick="pdVoltar()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 10px;font-family:inherit;">&lsaquo; Voltar à equipe</button>';
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<div style="font-size:19px;font-weight:800;">'+p.nome+'</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">'+(p.cargo||'')+(p.setor?(' · '+p.setor):'')+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:7px;margin-top:12px;">'+
+      '<div style="text-align:center;background:'+(p.faltas?'#fef2f2':'#f0fdf4')+';border-radius:9px;padding:10px 6px;">'+
+        '<div style="font-size:22px;font-weight:900;color:'+(p.faltas?'#dc2626':'#16a34a')+';line-height:1;">'+p.faltas+'</div>'+
+        '<div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">faltas</div></div>'+
+      '<div style="text-align:center;background:'+(p.atrasos?'#fffbeb':'#f0fdf4')+';border-radius:9px;padding:10px 6px;">'+
+        '<div style="font-size:22px;font-weight:900;color:'+(p.atrasos?'#d97706':'#16a34a')+';line-height:1;">'+p.atrasos+'</div>'+
+        '<div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">atrasos</div></div>'+
+      '<div style="text-align:center;background:var(--bg-page);border-radius:9px;padding:10px 6px;">'+
+        '<div style="font-size:22px;font-weight:900;line-height:1;">'+(p.atrasoMedio||0)+'</div>'+
+        '<div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">min médio</div></div>'+
+      '<div style="text-align:center;background:var(--bg-page);border-radius:9px;padding:10px 6px;">'+
+        '<div style="font-size:22px;font-weight:900;line-height:1;">'+p.trabalhados+'</div>'+
+        '<div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">dias</div></div>'+
+      '<div style="text-align:center;background:var(--bg-page);border-radius:9px;padding:10px 6px;">'+
+        '<div style="font-size:22px;font-weight:900;color:'+((p.horasSaldo||0)<0?'#dc2626':'#16a34a')+';line-height:1;">'+(p.horasSaldo!==null?_pontoHhmm(p.horasSaldo):'—')+'</div>'+
+        '<div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">saldo</div></div>'+
+    '</div></div>';
+
+  // a régua de chegadas: cada dia um ponto na linha do horário
+  const comHora=dias.filter(x=>x.atraso!==null);
+  if(comHora.length){
+    const min=Math.min(-20, ...comHora.map(x=>x.atraso));
+    const max=Math.max(30, ...comHora.map(x=>x.atraso));
+    const W=620, H=108, L=10, R=10, T=26, B=24;
+    const iw=W-L-R;
+    const px=v=>L+((v-min)/(max-min))*iw;
+    const zero=px(0), tol=px(PONTO_TOL_ATRASO);
+    h+='<div class="card" style="margin-bottom:12px;">'+
+      '<div style="font-size:14px;font-weight:800;">Horário de chegada</div>'+
+      '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;margin-bottom:8px;">cada ponto é um dia · a linha verde é o horário previsto</div>'+
+      '<div style="overflow-x:auto;"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:380px;height:auto;display:block;">'+
+        '<rect x="'+L+'" y="'+T+'" width="'+(zero-L)+'" height="'+(H-T-B)+'" fill="#16a34a10"/>'+
+        '<rect x="'+zero+'" y="'+T+'" width="'+(tol-zero)+'" height="'+(H-T-B)+'" fill="#22c55e10"/>'+
+        '<rect x="'+tol+'" y="'+T+'" width="'+(W-R-tol)+'" height="'+(H-T-B)+'" fill="#d9770610"/>'+
+        '<line x1="'+zero+'" y1="'+(T-6)+'" x2="'+zero+'" y2="'+(H-B)+'" stroke="#16a34a" stroke-width="2"/>'+
+        '<text x="'+zero+'" y="'+(T-11)+'" text-anchor="middle" font-size="10" font-weight="700" fill="#16a34a">no horário</text>'+
+        comHora.map(x=>{
+          const atrasado=x.atraso>PONTO_TOL_ATRASO;
+          const y=T+(H-T-B)/2;
+          return '<circle cx="'+px(x.atraso)+'" cy="'+y+'" r="6" fill="'+(atrasado?'#d97706':'#16a34a')+'" fill-opacity=".75" stroke="#fff" stroke-width="1.5"><title>'+x.data+' — '+x.entrada+' ('+(x.atraso>0?'+':'')+x.atraso+' min)</title></circle>';
+        }).join('')+
+        '<text x="'+L+'" y="'+(H-7)+'" font-size="10" fill="var(--text-muted)">'+min+' min</text>'+
+        '<text x="'+(W-R)+'" y="'+(H-7)+'" text-anchor="end" font-size="10" fill="var(--text-muted)">+'+max+' min</text>'+
+      '</svg></div></div>';
+  }
+
+  h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
+    '<table class="cf-tab" style="border-collapse:collapse;font-size:13px;white-space:nowrap;width:100%;">'+
+    '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
+      '<th style="padding:9px 12px;text-align:left;">DIA</th>'+
+      '<th style="padding:9px 8px;text-align:center;">ENTRADA</th>'+
+      '<th style="padding:9px 8px;text-align:center;">SAÍDA</th>'+
+      '<th style="padding:9px 8px;text-align:center;">ATRASO</th>'+
+      '<th style="padding:9px 10px;text-align:left;">SITUAÇÃO</th>'+
+    '</tr></thead><tbody>'+
+    dias.map((x,i)=>{
+      const atrasado=x.atraso!==null && x.atraso>PONTO_TOL_ATRASO;
+      const bg=x.falta?'#fef2f2':(atrasado?'#fffbeb':(i%2?'#fafbfc':'#fff'));
+      let sit='', cor='var(--text-secondary)';
+      if(x.falta){ sit='Falta'; cor='#dc2626'; }
+      else if(x.afastamento){ sit=x.afastamento.charAt(0).toUpperCase()+x.afastamento.slice(1); cor='#2563eb'; }
+      else if(atrasado){ sit='Atraso de '+x.atraso+' min'; cor='#d97706'; }
+      else if(x.batidas&&x.batidas.length){ sit='Normal'; cor='#16a34a'; }
+      return '<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
+        '<td style="padding:8px 12px;">'+x.data+' <span style="color:var(--text-muted);font-size:11px;">'+x.semana+'</span></td>'+
+        '<td style="padding:8px;text-align:center;font-weight:'+(atrasado?'800':'400')+';">'+(x.entrada||'—')+'</td>'+
+        '<td style="padding:8px;text-align:center;">'+(x.saida||'—')+'</td>'+
+        '<td style="padding:8px;text-align:center;font-weight:'+(atrasado?'800':'400')+';color:'+(atrasado?'#d97706':'var(--text-muted)')+';">'+(x.atraso===null?'—':((x.atraso>0?'+':'')+x.atraso+'min'))+'</td>'+
+        '<td style="padding:8px 10px;color:'+cor+';font-weight:'+(sit==='Normal'?'400':'700')+';">'+sit+'</td>'+
+      '</tr>';
+    }).join('')+
+  '</tbody></table></div>';
+  return h;
+}
+
+/* ── A TELA ──────────────────────────────────────────────────────── */
+function renderPdash(){
+  const el=document.getElementById('pdash-content'); if(!el) return;
+  const tit=document.getElementById('pdash-titulo');
+  const sub=document.getElementById('pdash-sub');
+  if(tit) tit.textContent=_pdSetor||'Todos os setores';
+  if(sub) sub.textContent=_pdMesNome(_pdMes)+(_pdComparar?(' · comparando com '+_pdMesNome(_pdComparar)):'');
+
+  if(_pdPessoa){ el.innerHTML=_pdCabecalho()+_pdPessoaDetalhe(); return; }
+
+  const d=pdashDados(_pdMes, _pdSetor);
+  if(!d){ el.innerHTML=_pdCabecalho()+_vazio('Sem dados para este setor neste mês.'); return; }
+  const ant=_pdComparar?pdashDados(_pdComparar, _pdSetor):null;
+
+  el.innerHTML=_pdCabecalho()+_pdIndicadores(d,ant)+_pdEvolucao()+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:12px;">'+
+      _pdDiaSemana(d)+_pdFaixas(d)+
+    '</div>'+
+    _pdCalor(d)+_pdEquipe(d,ant);
+}
+window.renderPdash=renderPdash;
+
+/* ── seletores no topo ── */
+function _pdCabecalho(){
+  const meses=pdashMesesDisponiveis();
+  const setores=pontoSetoresLista().filter(x=>x!=='(sem setor)');
+  return '<div class="card" style="margin-bottom:14px;">'+
+    '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);letter-spacing:.5px;margin-bottom:6px;">EQUIPE</div>'+
+    '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px;">'+
+      '<button onclick="pdSetSetor(\'\')" style="background:'+(!_pdSetor?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(!_pdSetor?'#fff':'var(--text-secondary)')+';border:1px solid '+(!_pdSetor?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:99px;padding:7px 13px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Todos</button>'+
+      setores.map(x=>'<button onclick="pdSetSetor(\''+escapeJsStr(x)+'\')" style="background:'+(_pdSetor===x?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_pdSetor===x?'#fff':'var(--text-secondary)')+';border:1px solid '+(_pdSetor===x?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:99px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+x+'</button>').join('')+
+    '</div>'+
+    '<div style="display:flex;gap:9px;flex-wrap:wrap;">'+
+      '<div style="flex:1;min-width:148px;">'+
+        '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);letter-spacing:.5px;margin-bottom:4px;">MÊS</div>'+
+        '<select onchange="pdSetMes(this.value)" style="width:100%;padding:10px;min-height:44px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:14px;font-family:inherit;background:#fff;">'+
+          meses.map(m=>'<option value="'+m+'"'+(m===_pdMes?' selected':'')+'>'+_pdMesNome(m)+'</option>').join('')+
+        '</select></div>'+
+      '<div style="flex:1;min-width:148px;">'+
+        '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);letter-spacing:.5px;margin-bottom:4px;">COMPARAR COM</div>'+
+        '<select onchange="pdSetComparar(this.value)" style="width:100%;padding:10px;min-height:44px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:14px;font-family:inherit;background:#fff;">'+
+          '<option value="">— sem comparação —</option>'+
+          meses.filter(m=>m!==_pdMes).map(m=>'<option value="'+m+'"'+(m===_pdComparar?' selected':'')+'>'+_pdMesNome(m)+'</option>').join('')+
+        '</select></div>'+
+    '</div></div>';
+}
+function pdSetSetor(x){ _pdSetor=x; _pdPessoa=''; renderPdash(); }
+window.pdSetSetor=pdSetSetor;
+function pdSetMes(x){ _pdMes=x; renderPdash(); }
+window.pdSetMes=pdSetMes;
+function pdSetComparar(x){ _pdComparar=x; renderPdash(); }
+window.pdSetComparar=pdSetComparar;
+function pdVerPessoa(c){ _pdPessoa=c; renderPdash(); }
+window.pdVerPessoa=pdVerPessoa;
+function pdVoltar(){ _pdPessoa=''; renderPdash(); }
+window.pdVoltar=pdVoltar;
+
+/* ── indicadores com comparação ── */
+function _pdVariacao(agora, antes, menorEhMelhor){
+  if(antes===null||antes===undefined||!isFinite(antes)) return '';
+  const dif=agora-antes;
+  if(Math.abs(dif)<0.05) return '<span style="font-size:11px;color:var(--text-muted);">= igual</span>';
+  const bom=menorEhMelhor?(dif<0):(dif>0);
+  const cor=bom?'#16a34a':'#dc2626';
+  const seta=dif>0?'▲':'▼';
+  return '<span style="font-size:11px;font-weight:700;color:'+cor+';">'+seta+' '+_fmtKg(Math.abs(dif))+
+    (menorEhMelhor||agora<=100?'':'')+'</span>';
+}
+
+function _pdCartao(rotulo, valor, unidade, sub, cor, variacao){
+  return '<div class="card" style="padding:15px;">'+
+    '<div style="font-size:10px;font-weight:800;color:var(--text-secondary);letter-spacing:.6px;">'+rotulo+'</div>'+
+    '<div style="display:flex;align-items:baseline;gap:4px;margin-top:4px;">'+
+      '<span style="font-size:34px;font-weight:900;color:'+cor+';line-height:1;letter-spacing:-.02em;">'+valor+'</span>'+
+      (unidade?'<span style="font-size:14px;font-weight:700;color:'+cor+';">'+unidade+'</span>':'')+
+    '</div>'+
+    '<div style="display:flex;align-items:center;gap:7px;margin-top:5px;flex-wrap:wrap;">'+
+      '<span style="font-size:11px;color:var(--text-secondary);">'+sub+'</span>'+
+      (variacao||'')+
+    '</div></div>';
+}
+
+function _pdIndicadores(d, ant){
+  const absCor=d.absenteismo>5?'#dc2626':(d.absenteismo>2?'#d97706':'#16a34a');
+  const ptCor=d.pontualidade>=95?'#16a34a':(d.pontualidade>=85?'#d97706':'#dc2626');
+  return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;margin-bottom:14px;">'+
+    _pdCartao('ABSENTEÍSMO', _fmtKg(d.absenteismo), '%',
+      d.faltas+' falta(s) em '+d.previstos+' dias', absCor,
+      ant?_pdVariacao(d.absenteismo, ant.absenteismo, true)+'<span style="font-size:10px;color:var(--text-muted);">pts vs '+_pdMesNome(_pdComparar)+'</span>':'')+
+    _pdCartao('PONTUALIDADE', _fmtKg(d.pontualidade), '%',
+      d.atrasos+' atraso(s) em '+d.trabalhados+' dias', ptCor,
+      ant?_pdVariacao(d.pontualidade, ant.pontualidade, false)+'<span style="font-size:10px;color:var(--text-muted);">pts</span>':'')+
+    _pdCartao('EQUIPE', String(d.n), '',
+      d.semOcorrencia+' sem nenhuma ocorrência', 'var(--text-primary)',
+      ant?_pdVariacao(d.n, ant.n, false)+'<span style="font-size:10px;color:var(--text-muted);">pessoa(s)</span>':'')+
+    _pdCartao('TEMPO PERDIDO', _pontoHhmm(d.atrasoMin), '',
+      'somando todos os atrasos', d.atrasoMin>600?'#dc2626':(d.atrasoMin?'#d97706':'#16a34a'),
+      ant?_pdVariacao(d.atrasoMin/60, ant.atrasoMin/60, true)+'<span style="font-size:10px;color:var(--text-muted);">h</span>':'')+
+  '</div>';
+}
+
+function pdashMesesDisponiveis(){
+  return Object.keys(pontoMeses).filter(ch=>((pontoMeses[ch]||{}).ponto||[]).length).sort();
+}
+
+function _pdMesNome(ch){
+  if(!ch) return '—';
+  const [a,m]=ch.split('-');
+  return PONTO_MES_NOMES[+m]+'/'+String(a).slice(-2);
+}
+
+/* Os números de um setor num mês. É daqui que todo o painel bebe. */
+function pdashDados(ch, setor){
+  const d=pontoMeses[ch];
+  if(!d||!d.ponto) return null;
+  const pessoas=d.ponto
+    .map(p=>({...p, setor:_pmesSetorDe(p, ch)}))
+    .filter(p=>!setor || p.setor===setor)
+    .map(p=>{
+      const dias=(p.dias||[]).filter(x=>!x.foraDoPeriodo && !x.folga);
+      const atrasosD=dias.filter(x=>x.atraso!==null && x.atraso>PONTO_TOL_ATRASO);
+      const faltas=dias.filter(x=>x.falta).length;
+      const trabalhados=dias.filter(x=>x.batidas&&x.batidas.length).length;
+      const previstos=dias.filter(x=>!x.afastamento).length;
+      const afast=dias.filter(x=>x.afastamento).length;
+      return {...p, diasUteis:dias, faltas, afast,
+        atrasos:atrasosD.length,
+        atrasoMin:atrasosD.reduce((t,x)=>t+x.atraso,0),
+        atrasoMedio:atrasosD.length?Math.round(atrasosD.reduce((t,x)=>t+x.atraso,0)/atrasosD.length):0,
+        trabalhados, previstos,
+        absenteismo:previstos?(faltas/previstos*100):0,
+        pontualidade:trabalhados?((trabalhados-atrasosD.length)/trabalhados*100):100};
+    });
+  if(!pessoas.length) return null;
+
+  const faltas=pessoas.reduce((t,p)=>t+p.faltas,0);
+  const previstos=pessoas.reduce((t,p)=>t+p.previstos,0);
+  const atrasos=pessoas.reduce((t,p)=>t+p.atrasos,0);
+  const atrasoMin=pessoas.reduce((t,p)=>t+p.atrasoMin,0);
+  const trabalhados=pessoas.reduce((t,p)=>t+p.trabalhados,0);
+  const saldos=pessoas.filter(p=>p.horasSaldo!==null);
+
+  return {
+    mes:ch, setor, pessoas,
+    n:pessoas.length,
+    faltas, atrasos, atrasoMin, trabalhados, previstos,
+    afastados:pessoas.filter(p=>p.afast>0).length,
+    absenteismo:previstos?(faltas/previstos*100):0,
+    pontualidade:trabalhados?((trabalhados-atrasos)/trabalhados*100):100,
+    semOcorrencia:pessoas.filter(p=>!p.faltas && !p.atrasos).length,
+    saldoTotal:saldos.length?saldos.reduce((t,p)=>t+p.horasSaldo,0):null,
+    comFalta:pessoas.filter(p=>p.faltas>0).length,
+    comAtraso:pessoas.filter(p=>p.atrasos>0).length
+  };
+}
+window.pdashDados=pdashDados;
+
+/* Faltas e atrasos por dia da semana: mostra se segunda-feira é um
+   problema recorrente, coisa que número solto não revela. */
+function pdashPorDiaSemana(dados){
+  const ordem=['seg','ter','qua','qui','sex','sáb','dom'];
+  const m={};
+  ordem.forEach(d=>{ m[d]={dia:d, faltas:0, atrasos:0, total:0}; });
+  (dados.pessoas||[]).forEach(p=>{
+    (p.diasUteis||[]).forEach(x=>{
+      const k=(x.semana||'').replace('a','á');
+      if(!m[k]) return;
+      m[k].total++;
+      if(x.falta) m[k].faltas++;
+      if(x.atraso!==null && x.atraso>PONTO_TOL_ATRASO) m[k].atrasos++;
+    });
+  });
+  return ordem.map(d=>m[d]).filter(x=>x.total);
+}
+
+/* Cada dia do mês, para o mapa de calor */
+function pdashPorDiaMes(dados){
+  const m={};
+  (dados.pessoas||[]).forEach(p=>{
+    (p.diasUteis||[]).forEach(x=>{
+      const dd=String(x.data).split('/')[0];
+      if(!m[dd]) m[dd]={dia:+dd, data:x.data, semana:x.semana, faltas:0, atrasos:0, total:0};
+      m[dd].total++;
+      if(x.falta) m[dd].faltas++;
+      if(x.atraso!==null && x.atraso>PONTO_TOL_ATRASO) m[dd].atrasos++;
+    });
+  });
+  return Object.values(m).sort((a,b)=>a.dia-b.dia);
+}
+
+/* Em que faixa de horário as pessoas chegam */
+function pdashFaixasChegada(dados){
+  const f=[{rot:'adiantado', min:-999, max:-1, n:0, cor:'#16a34a'},
+           {rot:'no horário', min:0, max:PONTO_TOL_ATRASO, n:0, cor:'#22c55e'},
+           {rot:'até 15 min', min:PONTO_TOL_ATRASO+1, max:15, n:0, cor:'#eab308'},
+           {rot:'15 a 30', min:16, max:30, n:0, cor:'#f59e0b'},
+           {rot:'30 a 60', min:31, max:60, n:0, cor:'#ea580c'},
+           {rot:'mais de 1h', min:61, max:99999, n:0, cor:'#dc2626'}];
+  (dados.pessoas||[]).forEach(p=>{
+    (p.diasUteis||[]).forEach(x=>{
+      if(x.atraso===null) return;
+      const faixa=f.find(y=>x.atraso>=y.min && x.atraso<=y.max);
+      if(faixa) faixa.n++;
+    });
+  });
+  return f.filter(x=>x.n);
+}
+
+/* ══════════════════════════════════════════════════════════════════
    PONTO — CADA MÊS É UM BLOCO
    Em cada mês entram dois arquivos: o espelho de ponto (PDF do Símix)
    e a lista de colaboradores (Excel), de onde vem o setor de cada um.
@@ -24034,6 +24563,17 @@ function _pontoFiltros(){
   }
   h+='</div>';
 
+  // o painel do gestor, por enquanto só para o admin conferir
+  h+=(window.adminMode===true
+    ? '<button onclick="pdashAbrir(\'\')" style="display:block;width:100%;text-align:left;background:linear-gradient(135deg,#1e40af,#2563eb);border:none;border-radius:12px;padding:14px 16px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+        '<div style="display:flex;align-items:center;gap:11px;">'+
+          '<span style="font-size:24px;">📊</span>'+
+          '<span style="flex:1;min-width:0;">'+
+            '<span style="display:block;font-size:15px;font-weight:800;color:#fff;">Painel da Equipe</span>'+
+            '<span style="display:block;font-size:11px;color:#bfdbfe;margin-top:1px;">visão que o gestor terá · modelo para validar</span></span>'+
+          '<span style="color:#bfdbfe;font-size:18px;">›</span>'+
+        '</div></button>'
+    : '');
   h+='<div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px;">'+
     abas.map(([id,nome])=>'<button onclick="pontoSetAba(\''+id+'\')" style="flex:0 0 auto;background:'+(_pontoAba===id?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_pontoAba===id?'#fff':'var(--text-secondary)')+';border:1px solid '+(_pontoAba===id?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:9px;padding:10px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">'+nome+'</button>').join('')+
   '</div>';
