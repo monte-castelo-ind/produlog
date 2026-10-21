@@ -4434,6 +4434,17 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="prioridade-form-content"></div>
   </div>
 
+  <!-- PONTO: UM MÊS -->
+  <div class="screen" id="s-ponto-mes">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Pessoas</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title" id="pmes-titulo">Mês</div><div class="mc-page-sub">Arquivos e conferência</div></div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="pmes-content"></div>
+  </div>
+
   <!-- CONTROLE DE PONTO -->
   <div class="screen" id="s-ponto">
     <div class="mc-header">
@@ -5957,6 +5968,7 @@ function goTo(id, semHistorico){
   if(id==='s-pauta' && typeof renderPauta==='function') renderPauta();
   if(id==='s-qual' && typeof renderQual==='function') renderQual();
   if(id==='s-ponto' && typeof renderPonto==='function') renderPonto();
+  if(id==='s-ponto-mes' && typeof renderPontoMes==='function') renderPontoMes();
   if((id==='s-adm-hub'||id==='s-patrick-home') && typeof mpPintarAvisos==='function') mpPintarAvisos();
   if(id==='s-emb-cfped' && typeof renderEmbCf==='function') renderEmbCf();
   if(id==='s-perdas') renderPerdas();
@@ -23001,6 +23013,420 @@ function mpPintarAvisos(){
 window.mpPintarAvisos=mpPintarAvisos;
 
 /* ══════════════════════════════════════════════════════════════════
+   PONTO — CADA MÊS É UM BLOCO
+   Em cada mês entram dois arquivos: o espelho de ponto (PDF do Símix)
+   e a lista de colaboradores (Excel), de onde vem o setor de cada um.
+   O cruzamento é por nome, e nomes parecidos NÃO são associados
+   automaticamente: um "Carlos Eduardo Silva" e um "Carlos Eduardo
+   Carvalho" são pessoas diferentes.
+   Coleções: pontoMeses/{AAAA-MM} · configuracoes/pontoSetores
+   ══════════════════════════════════════════════════════════════════ */
+let pontoMeses={};        // {AAAA-MM: {ponto:[], equipe:[], ...}}
+let _pmesSel='';          // mês aberto
+let _pmesAno=new Date().getFullYear();
+
+const PONTO_MES_NOMES=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                       'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+onSnapshot(collection(db,'pontoMeses'), snap=>{
+  try{
+    pontoMeses={};
+    snap.docs.forEach(d=>{ pontoMeses[d.id]=d.data(); });
+    const t=document.querySelector('.screen.active')?.id;
+    if(t==='s-ponto') renderPonto();
+    if(t==='s-ponto-mes') renderPontoMes();
+  }catch(e){ console.error('pontoMeses snap',e); }
+});
+
+/* ── SALVAR OS ARQUIVOS NO MÊS ───────────────────────────────────── */
+async function _pmesSalvarPonto(pessoas, arquivo){
+  const d=_pmesDados(_pmesSel)||{};
+  const antes=(d.ponto||[]).length;
+  const emis=[...new Set(pessoas.map(p=>p.emissao?(String(p.emissao.d).padStart(2,'0')+'/'+String(p.emissao.m).padStart(2,'0')):'').filter(Boolean))];
+  let aviso='';
+  if(emis.length>1) aviso='\n\n⚠️ Folhas emitidas em datas diferentes ('+emis.join(', ')+'). Quem tem data mais antiga só está medido até ali.';
+  if(!confirm('Importar '+pessoas.length+' pessoa(s) para este mês?'+
+    (antes?('\n\nSubstitui o arquivo anterior de '+antes+' pessoa(s).'):'')+aviso)) { renderPontoMes(); return; }
+  try{
+    await setDoc(doc(db,'pontoMeses',_pmesSel),
+      {ponto:pessoas, pontoArquivo:String(arquivo||''), emissoes:emis,
+       pontoEm:agora(), pontoPor:_demAutor(), mes:_pmesSel},{merge:true});
+    const pend=_pmesSemSetor(_pmesSel).length;
+    alert('✓ '+pessoas.length+' pessoa(s) importadas.'+
+      (pend?('\n\n⚠️ '+pend+' sem setor — importe a lista de colaboradores ou defina à mão.'):''));
+  }catch(e){
+    alert('Não consegui salvar: '+e.message+
+      (String(e.message||'').match(/too large|exceeds/i)?'\n\nO arquivo tem gente demais para um registro só.':''));
+    renderPontoMes();
+  }
+}
+
+async function _pmesSalvarEquipe(equipe, arquivo){
+  if(!_pmesSel){ alert('Abra um mês primeiro.'); return; }
+  const d=_pmesDados(_pmesSel)||{};
+  const antes=(d.equipe||[]).length;
+  try{
+    await setDoc(doc(db,'pontoMeses',_pmesSel),
+      {equipe, equipeArquivo:String(arquivo||''), equipeEm:agora(), equipePor:_demAutor(),
+       mes:_pmesSel},{merge:true});
+    const pend=_pmesSemSetor(_pmesSel).length;
+    alert('✓ '+equipe.length+' colaborador(es) na lista.'+
+      (antes?('\n\nSubstituiu a lista anterior de '+antes+'.'):'')+
+      (pend?('\n\n⚠️ '+pend+' pessoa(s) do ponto não foram encontradas e ficaram sem setor.'):'\n\nTodo mundo do ponto encontrou o seu setor.'));
+  }catch(e){
+    alert('Não consegui salvar: '+e.message+
+      (String(e.message||'').match(/too large|exceeds/i)?'\n\nA planilha tem gente demais para um registro só.':''));
+  }
+}
+
+/* Resolver quem ficou sem setor */
+function pmesResolverSetores(){
+  const pend=_pmesSemSetor(_pmesSel);
+  if(!pend.length){ alert('Ninguém pendente.'); return; }
+  const d=_pmesDados(_pmesSel)||{};
+  const equipe=d.equipe||[];
+  const setores=[...new Set(equipe.map(e=>e.setor).filter(Boolean))].sort();
+
+  const ov=document.createElement('div');
+  ov.id='pmes-set-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:540px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🏭 Pessoas sem setor</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">'+
+        'Quando o nome está parecido com alguém da lista, aparece a sugestão — mas confira, porque nome parecido nem sempre é a mesma pessoa.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      pend.map(p=>{
+        const r=_pnCasar(p.nome, equipe);
+        const sug=(r.tipo==='sugestao')?r.pessoa:null;
+        return '<div class="card" style="margin-bottom:8px;">'+
+          '<div style="font-size:14px;font-weight:700;">'+p.nome+'</div>'+
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:1px;">'+(p.cargo||'')+' · cód '+p.codigo+'</div>'+
+          (sug
+            ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;margin-top:7px;">'+
+                '<div style="font-size:11px;color:var(--mc-azul,#2563eb);font-weight:700;">parecido com:</div>'+
+                '<div style="font-size:13px;font-weight:600;margin-top:1px;">'+sug.nome+'</div>'+
+                '<div style="font-size:11px;color:var(--text-secondary);">'+(sug.cargo||'')+' · '+(sug.setor||'sem setor')+'</div>'+
+                '<button onclick="pmesAceitar(\''+escapeJsStr(p.codigo)+'\',\''+escapeJsStr(sug.setor||'')+'\')" style="width:100%;margin-top:7px;background:var(--mc-azul,#2563eb);color:#fff;border:none;border-radius:7px;padding:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">É a mesma pessoa — usar '+(sug.setor||'sem setor')+'</button>'+
+              '</div>'
+            : '')+
+          '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;">'+
+            setores.map(st=>'<button onclick="pmesAceitar(\''+escapeJsStr(p.codigo)+'\',\''+escapeJsStr(st)+'\')" style="background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:99px;padding:6px 11px;font-size:11px;cursor:pointer;font-family:inherit;">'+st+'</button>').join('')+
+            '<button onclick="pmesOutroSetor(\''+escapeJsStr(p.codigo)+'\')" style="background:#fff;border:1px dashed var(--border-md,#cbd5e1);color:var(--mc-azul,#2563eb);border-radius:99px;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">+ outro</button>'+
+          '</div>'+
+        '</div>';
+      }).join('')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'pmes-set-modal\').remove();renderPontoMes();">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.pmesResolverSetores=pmesResolverSetores;
+
+async function pmesAceitar(cod, setor){
+  if(!setor){ pmesOutroSetor(cod); return; }
+  const mapa={...pontoSetores}; mapa[cod]=setor;
+  pontoSetores=mapa;
+  document.getElementById('pmes-set-modal')?.remove();
+  try{
+    await setDoc(doc(db,'configuracoes','pontoSetores'),
+      {mapa, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+  }catch(e){ alert('Erro: '+e.message); }
+  const resta=_pmesSemSetor(_pmesSel);
+  if(resta.length) pmesResolverSetores(); else renderPontoMes();
+}
+window.pmesAceitar=pmesAceitar;
+
+function pmesOutroSetor(cod){
+  const st=prompt('Setor desta pessoa:','');
+  if(st===null) return;
+  const t=String(st).trim();
+  if(!t) return;
+  pmesAceitar(cod, _pmesSetorLimpo(t));
+}
+window.pmesOutroSetor=pmesOutroSetor;
+
+async function pmesExcluir(){
+  if(window.adminMode!==true){ alert('Só o admin pode excluir.'); return; }
+  const [ano,mes]=_pmesSel.split('-');
+  if(!confirm('Excluir '+PONTO_MES_NOMES[+mes]+' de '+ano+'?\n\nOs dois arquivos saem dos relatórios.')) return;
+  try{
+    await deleteDoc(doc(db,'pontoMeses',_pmesSel));
+    _pmesSel='';
+    goTo('s-ponto');
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.pmesExcluir=pmesExcluir;
+
+/* Pendências de todos os meses, logo na entrada */
+function _pontoPendencias(){
+  const todas=[];
+  Object.keys(pontoMeses).forEach(ch=>{
+    const pend=_pmesSemSetor(ch);
+    if(pend.length){
+      const [ano,mes]=ch.split('-');
+      todas.push({ch, mes:PONTO_MES_NOMES[+mes]+'/'+String(ano).slice(-2), n:pend.length, nomes:pend.map(p=>p.nome)});
+    }
+  });
+  if(!todas.length) return '';
+  const total=todas.reduce((t,x)=>t+x.n,0);
+  return '<button onclick="pmesAbrir(\''+todas[0].ch+'\')" style="display:block;width:100%;text-align:left;background:#fffbeb;border:2px solid #d97706;border-radius:12px;padding:13px 15px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+    '<div style="display:flex;align-items:center;gap:10px;">'+
+      '<span style="font-size:22px;">⚠️</span>'+
+      '<span style="flex:1;min-width:0;">'+
+        '<span style="display:block;font-size:14px;font-weight:900;color:#b45309;">'+total+' pessoa(s) sem setor</span>'+
+        '<span style="display:block;font-size:11px;color:#78350f;margin-top:2px;">'+
+          todas.map(x=>x.mes+' ('+x.n+')').join(' · ')+'</span>'+
+        '<span style="display:block;font-size:11px;color:#78350f;margin-top:3px;">'+
+          todas[0].nomes.slice(0,3).join(' · ')+(todas[0].nomes.length>3?(' · +'+(todas[0].nomes.length-3)):'')+'</span></span>'+
+      '<span style="color:#b45309;font-size:18px;">›</span>'+
+    '</div></button>';
+}
+window._pontoPendencias=_pontoPendencias;
+
+/* ── CALENDÁRIO DE MESES ─────────────────────────────────────────── */
+function _pontoCalendario(){
+  const anos=new Set([_pmesAno]);
+  Object.keys(pontoMeses).forEach(k=>anos.add(+k.split('-')[0]));
+  const lista=[...anos].sort((a,b)=>b-a);
+
+  let h='<div style="display:flex;gap:6px;margin-bottom:12px;align-items:center;">'+
+    '<button onclick="pmesAno(-1)" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 13px;font-size:15px;cursor:pointer;font-family:inherit;">‹</button>'+
+    '<span style="flex:1;text-align:center;font-size:17px;font-weight:800;">'+_pmesAno+'</span>'+
+    '<button onclick="pmesAno(1)" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 13px;font-size:15px;cursor:pointer;font-family:inherit;">›</button>'+
+  '</div>';
+
+  h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(138px,1fr));gap:9px;margin-bottom:14px;">';
+  for(let m=1;m<=12;m++){
+    const ch=_pmesChave(_pmesAno,m);
+    const d=_pmesDados(ch);
+    const temPonto=!!(d&&d.ponto&&d.ponto.length);
+    const temEquipe=!!(d&&d.equipe&&d.equipe.length);
+    const pend=temPonto?_pmesSemSetor(ch).length:0;
+    const cor= !temPonto ? 'var(--text-muted)' : (pend?'#d97706':'#16a34a');
+    const fundo= !temPonto ? '#fff' : (pend?'#fffbeb':'#f0fdf4');
+    const borda= !temPonto ? 'var(--border)' : (pend?'#fde68a':'#bbf7d0');
+    h+='<button onclick="pmesAbrir(\''+ch+'\')" style="background:'+fundo+';border:2px solid '+borda+';border-radius:12px;padding:12px 9px;cursor:pointer;font-family:inherit;text-align:left;">'+
+      '<div style="font-size:14px;font-weight:800;color:'+(temPonto?'var(--text-primary)':'var(--text-muted)')+';">'+PONTO_MES_NOMES[m]+'</div>'+
+      (temPonto
+        ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">'+(d.ponto.length)+' pessoa(s)</div>'+
+          '<div style="display:flex;gap:5px;margin-top:6px;">'+
+            '<span style="font-size:10px;font-weight:700;color:#16a34a;">📄 ponto</span>'+
+            (temEquipe?'<span style="font-size:10px;font-weight:700;color:#16a34a;">📊 equipe</span>'
+                      :'<span style="font-size:10px;font-weight:700;color:#d97706;">sem equipe</span>')+
+          '</div>'+
+          (pend?'<div style="font-size:10px;font-weight:800;color:#b45309;margin-top:5px;">⚠ '+pend+' sem setor</div>':'')
+        : '<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">vazio</div>'+
+          '<div style="font-size:10px;color:var(--mc-azul,#2563eb);font-weight:700;margin-top:6px;">+ importar</div>')+
+    '</button>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function pmesAno(d){ _pmesAno+=d; renderPonto(); }
+window.pmesAno=pmesAno;
+function pmesAbrir(ch){ _pmesSel=ch; goTo('s-ponto-mes'); renderPontoMes(); }
+window.pmesAbrir=pmesAbrir;
+
+/* Quem apareceu no ponto mas não foi encontrado na equipe */
+function _pmesSemSetor(ch){
+  const d=_pmesDados(ch); if(!d||!d.ponto) return [];
+  const manual=pontoSetores||{};
+  const equipe=d.equipe||[];
+  return d.ponto.filter(p=>{
+    if(manual[p.codigo]) return false;            // já resolvido à mão
+    const r=_pnCasar(p.nome, equipe);
+    return r.tipo!=='exato';                       // sugestão também precisa confirmar
+  });
+}
+window._pmesSemSetor=_pmesSemSetor;
+
+/* O setor de uma pessoa naquele mês */
+function _pmesSetorDe(p, ch){
+  const manual=(pontoSetores||{})[p.codigo];
+  if(manual) return manual;
+  const d=_pmesDados(ch);
+  if(d&&d.equipe){
+    const r=_pnCasar(p.nome, d.equipe);
+    if(r.tipo==='exato') return r.pessoa.setor||'';
+  }
+  return '';
+}
+
+/* ── A TELA DE UM MÊS ────────────────────────────────────────────── */
+function renderPontoMes(){
+  const el=document.getElementById('pmes-content'); if(!el) return;
+  const tit=document.getElementById('pmes-titulo');
+  const [ano,mes]=_pmesSel.split('-');
+  if(tit) tit.textContent=PONTO_MES_NOMES[+mes]+' de '+ano;
+  const d=_pmesDados(_pmesSel);
+
+  let h='';
+  // os dois arquivos
+  h+='<div style="display:flex;gap:9px;margin-bottom:12px;flex-wrap:wrap;">'+
+    _pmesCardArquivo('📄','Espelho de ponto', d&&d.ponto?d.ponto.length+' pessoa(s)':'', d&&d.pontoArquivo,
+      '<label style="display:block;cursor:pointer;"><span style="display:block;background:var(--mc-azul,#2563eb);color:#fff;border-radius:8px;padding:9px;font-size:12px;font-weight:700;text-align:center;">'+(d&&d.ponto?'Trocar':'Importar PDF')+'</span>'+
+      '<input type="file" accept="application/pdf" onchange="pontoImportarPDF(this)" style="display:none;"></label>')+
+    _pmesCardArquivo('📊','Lista de colaboradores', d&&d.equipe?d.equipe.length+' pessoa(s)':'', d&&d.equipeArquivo,
+      '<label style="display:block;cursor:pointer;"><span style="display:block;background:'+(d&&d.equipe?'var(--mc-azul,#2563eb)':'#16a34a')+';color:#fff;border-radius:8px;padding:9px;font-size:12px;font-weight:700;text-align:center;">'+(d&&d.equipe?'Trocar':'Importar Excel')+'</span>'+
+      '<input type="file" accept=".xlsx,.xls" onchange="pmesImportarEquipe(this)" style="display:none;"></label>')+
+  '</div>';
+
+  if(!d||!d.ponto){
+    el.innerHTML=h+'<div class="card" style="text-align:center;padding:26px;">'+
+      '<div style="font-size:32px;">📄</div>'+
+      '<div style="font-size:15px;font-weight:800;margin-top:8px;">Comece pelo espelho de ponto</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:5px;line-height:1.5;">Depois importe a lista de colaboradores para trazer os setores.</div></div>';
+    return;
+  }
+
+  // pendências de setor
+  const pend=_pmesSemSetor(_pmesSel);
+  if(pend.length){
+    h+='<div class="card" style="margin-bottom:12px;border:2px solid #d97706;background:#fffbeb;">'+
+      '<div style="font-size:14px;font-weight:900;color:#b45309;">⚠️ '+pend.length+' pessoa(s) sem setor</div>'+
+      '<div style="font-size:11px;color:#78350f;margin-top:3px;line-height:1.5;">'+
+        'Estão no ponto mas não foram encontradas na lista de colaboradores. Sem setor, ficam de fora dos relatórios por equipe.</div>'+
+      '<button onclick="pmesResolverSetores()" class="btn btn-primary" style="width:100%;margin-top:10px;">Resolver agora</button>'+
+    '</div>';
+  } else if(d.equipe){
+    h+='<div class="card" style="margin-bottom:12px;background:#f0fdf4;border:1px solid #bbf7d0;">'+
+      '<div style="font-size:13px;font-weight:800;color:#15803d;">✓ Todos com setor definido</div></div>';
+  }
+
+  // resumo rápido do mês
+  const ps=d.ponto;
+  const faltas=ps.reduce((t,p)=>t+(p.diasFaltas||0),0);
+  const setores={};
+  ps.forEach(p=>{ const st=_pmesSetorDe(p,_pmesSel)||'(sem setor)'; setores[st]=(setores[st]||0)+1; });
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<div style="font-size:13px;font-weight:800;margin-bottom:8px;">Resumo</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<div style="flex:1;min-width:88px;text-align:center;background:var(--bg-page);border-radius:9px;padding:10px;">'+
+        '<div style="font-size:21px;font-weight:900;">'+ps.length+'</div><div style="font-size:10px;color:var(--text-secondary);">pessoas</div></div>'+
+      '<div style="flex:1;min-width:88px;text-align:center;background:var(--bg-page);border-radius:9px;padding:10px;">'+
+        '<div style="font-size:21px;font-weight:900;color:'+(faltas?'#dc2626':'#16a34a')+';">'+faltas+'</div><div style="font-size:10px;color:var(--text-secondary);">faltas</div></div>'+
+      '<div style="flex:1;min-width:88px;text-align:center;background:var(--bg-page);border-radius:9px;padding:10px;">'+
+        '<div style="font-size:21px;font-weight:900;">'+Object.keys(setores).length+'</div><div style="font-size:10px;color:var(--text-secondary);">setores</div></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;">'+
+      Object.keys(setores).sort().map(st=>'<span style="font-size:11px;background:'+(st==='(sem setor)'?'#fffbeb':'var(--bg-page)')+';color:'+(st==='(sem setor)'?'#b45309':'var(--text-secondary)')+';border-radius:99px;padding:4px 10px;">'+st+' '+setores[st]+'</span>').join('')+
+    '</div>'+
+  '</div>';
+
+  if(window.adminMode===true){
+    h+='<button onclick="pmesExcluir()" style="width:100%;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;">🗑 Excluir este mês</button>';
+  }
+  el.innerHTML=h;
+}
+window.renderPontoMes=renderPontoMes;
+
+function _pmesCardArquivo(icone, titulo, sub, arquivo, botao){
+  return '<div class="card" style="flex:1;min-width:190px;">'+
+    '<div style="font-size:19px;">'+icone+'</div>'+
+    '<div style="font-size:13px;font-weight:800;margin-top:3px;">'+titulo+'</div>'+
+    (sub?'<div style="font-size:11px;color:#15803d;font-weight:700;margin-top:2px;">✓ '+sub+'</div>':'<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">nenhum arquivo</div>')+
+    (arquivo?'<div style="font-size:10px;color:var(--text-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+arquivo+'</div>':'')+
+    '<div style="margin-top:9px;">'+botao+'</div>'+
+  '</div>';
+}
+
+function _pmesChave(ano, mes){ return String(ano)+'-'+String(mes).padStart(2,'0'); }
+function _pmesDados(ch){ return pontoMeses[ch]||null; }
+
+/* ── NOMES ───────────────────────────────────────────────────────── */
+function _pnNorm(s){
+  return String(s||'')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^A-Za-z ]/g,' ')
+    .replace(/\s+/g,' ').trim().toUpperCase();
+}
+const PN_LIGACOES=['DE','DA','DO','DAS','DOS','E','D'];
+function _pnPartes(s){
+  return _pnNorm(s).split(' ').filter(x=>x.length>1 && PN_LIGACOES.indexOf(x)<0);
+}
+
+/* Procura a pessoa na equipe. Devolve o grau de certeza, porque
+   nome parecido não é a mesma pessoa. */
+function _pnCasar(nome, equipe){
+  const n=_pnNorm(nome);
+  const exato=equipe.find(e=>_pnNorm(e.nome)===n);
+  if(exato) return {pessoa:exato, tipo:'exato'};
+  const pp=_pnPartes(nome);
+  if(!pp.length) return {pessoa:null, tipo:''};
+  let melhor=null, nota=0;
+  equipe.forEach(e=>{
+    const qq=_pnPartes(e.nome);
+    if(!qq.length || pp[0]!==qq[0]) return;        // primeiro nome tem de bater
+    const comuns=pp.slice(1).filter(x=>qq.indexOf(x)>=0).length;
+    if(!comuns) return;
+    const v=comuns*10 + (pp[pp.length-1]===qq[qq.length-1]?10:0) - Math.abs(pp.length-qq.length);
+    if(v>nota){ nota=v; melhor=e; }
+  });
+  // mesmo parecido, não assume: devolve como sugestão
+  return melhor ? {pessoa:melhor, tipo:'sugestao', nota} : {pessoa:null, tipo:''};
+}
+
+/* ── LEITURA DO EXCEL DA EQUIPE ──────────────────────────────────── */
+async function pmesImportarEquipe(input){
+  const file=input.files&&input.files[0]; if(!file) return; input.value='';
+  try{
+    await new Promise(function(res,rej){
+      if(window.XLSX){res();return;}
+      var sc=document.createElement('script');
+      sc.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js';
+      sc.onload=res; sc.onerror=rej; document.head.appendChild(sc);
+    });
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf, {type:'array', cellDates:true});
+    // a aba certa é a que tem Nome, Cargo e Setor no cabeçalho
+    let linhas=null;
+    for(const nomeAba of wb.SheetNames){
+      const arr=XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], {header:1, defval:null});
+      const iCab=arr.findIndex(r=>r && String(r[0]||'').trim().toLowerCase()==='nome');
+      if(iCab<0) continue;
+      linhas=arr.slice(iCab+1);
+      break;
+    }
+    if(!linhas){ alert('Não achei uma aba com a coluna "Nome" no cabeçalho.'); return; }
+
+    // só as colunas que interessam: A nome, B admissão, I cargo, J setor
+    const equipe=[];
+    linhas.forEach(r=>{
+      if(!r) return;
+      const nome=String(r[0]||'').trim();
+      if(!nome) return;
+      equipe.push({
+        nome,
+        admissao:_pmesData(r[1]),
+        cargo:String(r[8]||'').trim(),
+        setor:_pmesSetorLimpo(r[9])
+      });
+    });
+    if(!equipe.length){ alert('Não encontrei colaboradores na planilha.'); return; }
+    _pmesSalvarEquipe(equipe, file.name);
+  }catch(e){ alert('Não consegui ler a planilha: '+(e.message||e)); }
+}
+window.pmesImportarEquipe=pmesImportarEquipe;
+
+function _pmesData(v){
+  if(!v) return '';
+  if(v instanceof Date) return String(v.getDate()).padStart(2,'0')+'/'+String(v.getMonth()+1).padStart(2,'0')+'/'+v.getFullYear();
+  const m=String(v).match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[3]+'/'+m[2]+'/'+m[1];
+  return String(v).trim();
+}
+
+/* "confeitaria" e "Confeitaria" são o mesmo setor */
+function _pmesSetorLimpo(v){
+  const s=String(v||'').trim();
+  if(!s) return '';
+  return s.split(' ').map(p=>p?(p.charAt(0).toUpperCase()+p.slice(1).toLowerCase()):p).join(' ');
+}
+
+/* ══════════════════════════════════════════════════════════════════
    CONTROLE DE PONTO
    Lê o espelho de ponto do Símix e transforma em dado para o gestor.
 
@@ -23221,7 +23647,14 @@ function _pontoPorSetor(){
 
 /* ── ARQUIVOS IMPORTADOS ─────────────────────────────────────────── */
 function _pontoImportacoes(){
-  return (pontoDados||[]).map(imp=>
+  return Object.keys(pontoMeses).sort().reverse().map(ch=>{
+    const d=pontoMeses[ch]||{};
+    const [ano,mes]=ch.split('-');
+    const imp={firestoreId:ch, arquivo:(d.pontoArquivo||'(sem PDF)'),
+      periodo:PONTO_MES_NOMES[+mes]+'/'+ano, total:(d.ponto||[]).length,
+      importadoEm:d.pontoEm, importadoPor:d.pontoPor, emissoes:d.emissoes||[]};
+    return imp;
+  }).map(imp=>
     '<div class="card" style="margin-bottom:8px;">'+
       '<div style="display:flex;align-items:flex-start;gap:9px;">'+
         '<div style="flex:1;min-width:0;">'+
@@ -23239,10 +23672,11 @@ function _pontoImportacoes(){
       '</div></div>').join('') || _vazio('Nenhum arquivo importado.');
 }
 
-async function pontoExcluirImport(id){
-  const imp=(pontoDados||[]).find(x=>x.firestoreId===id); if(!imp) return;
-  if(!confirm('Excluir a importação de "'+(imp.arquivo||'')+'"?\n\n'+(imp.total||0)+' pessoa(s) saem dos relatórios.')) return;
-  try{ await deleteDoc(doc(db,'pontoImportacoes',id)); }
+async function pontoExcluirImport(ch){
+  const d=pontoMeses[ch]; if(!d) return;
+  const [ano,mes]=ch.split('-');
+  if(!confirm('Excluir '+PONTO_MES_NOMES[+mes]+' de '+ano+'?\n\n'+((d.ponto||[]).length)+' pessoa(s) saem dos relatórios.')) return;
+  try{ await deleteDoc(doc(db,'pontoMeses',ch)); }
   catch(e){ alert('Erro: '+e.message); }
 }
 window.pontoExcluirImport=pontoExcluirImport;
@@ -23561,16 +23995,14 @@ window.pontoExportar=pontoExportar;
 function renderPonto(){
   const el=document.getElementById('ponto-content'); if(!el) return;
   if(_pontoPessoa){ el.innerHTML=_pontoDetalhe(); return; }
-  if(!(pontoDados||[]).length){
-    el.innerHTML=_vazio('Nenhum espelho de ponto importado.',
-      'Use "📄 Importar" com o PDF do Símix.');
-    return;
-  }
-  el.innerHTML=_pontoFiltros()+
+  const temAlgo=Object.keys(pontoMeses).length>0;
+  el.innerHTML=_pontoPendencias()+_pontoCalendario()+
+    (!temAlgo ? _vazio('Nenhum mês com dados ainda.','Toque num mês acima para importar os arquivos.') : '')+
+    (!temAlgo ? '' : _pontoFiltros()+
     (_pontoAba==='resumo'   ? _pontoResumo()   :
      _pontoAba==='pessoas'  ? _pontoListaPessoas() :
      _pontoAba==='setores'  ? _pontoPorSetor() :
-                              _pontoImportacoes());
+                              _pontoImportacoes()));
 }
 window.renderPonto=renderPonto;
 
@@ -23659,6 +24091,8 @@ function pontoVoltar(){ _pontoPessoa=''; renderPonto(); }
 window.pontoVoltar=pontoVoltar;
 
 function _pontoConfirmarImport(pessoas, arquivo){
+  // dentro de um mês, o arquivo pertence àquele mês
+  if(_pmesSel){ _pmesSalvarPonto(pessoas, arquivo); return; }
   const pers=[...new Set(pessoas.map(p=>p.periodo).filter(Boolean))];
   const emis=[...new Set(pessoas.map(p=>p.emissao?(String(p.emissao.d).padStart(2,'0')+'/'+String(p.emissao.m).padStart(2,'0')):'').filter(Boolean))];
   const semSetor=pessoas.filter(p=>!pontoSetores[p.codigo]).length;
@@ -23708,7 +24142,9 @@ function pontoPessoas(){
   const de=_pontoDe?estDataNum(_pontoDe):0;
   const ate=_pontoAte?estDataNum(_pontoAte):99999999;
   const mapa={};
-  (pontoDados||[]).forEach(imp=>{
+  // os meses são a fonte; cada um traz o seu próprio vínculo de setor
+  const fontes=Object.keys(pontoMeses).sort().map(ch=>({ch, pessoas:(pontoMeses[ch]||{}).ponto||[]}));
+  fontes.forEach(imp=>{
     (imp.pessoas||[]).forEach(p=>{
       const ano=(p.emissao&&p.emissao.a)||2026;
       const dias=(p.dias||[]).filter(d=>{
@@ -23718,7 +24154,8 @@ function pontoPessoas(){
       });
       if(!dias.length && (_pontoDe||_pontoAte)) return;
       const ch=String(p.codigo||p.nome);
-      if(!mapa[ch]) mapa[ch]={...p, dias:[], importacoes:0, setor:pontoSetores[p.codigo]||''};
+      if(!mapa[ch]) mapa[ch]={...p, dias:[], importacoes:0, setor:_pmesSetorDe(p, imp.ch)};
+      if(!mapa[ch].setor) mapa[ch].setor=_pmesSetorDe(p, imp.ch);
       mapa[ch].dias=mapa[ch].dias.concat(dias);
       mapa[ch].importacoes++;
     });
@@ -23747,9 +24184,11 @@ window.pontoPessoas=pontoPessoas;
 
 function pontoSetoresLista(){
   const s=new Set();
-  (pontoDados||[]).forEach(imp=>(imp.pessoas||[]).forEach(p=>{
-    s.add(pontoSetores[p.codigo]||'(sem setor)');
-  }));
+  Object.keys(pontoMeses).forEach(ch=>{
+    ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+      s.add(_pmesSetorDe(p, ch)||'(sem setor)');
+    });
+  });
   return [...s].sort();
 }
 
