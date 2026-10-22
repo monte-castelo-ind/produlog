@@ -297,7 +297,7 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, collection, doc, setDoc, onSnapshot, getDocs, getDoc, deleteDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, collection as _fbCollection, doc as _fbDoc, setDoc, onSnapshot, getDocs, getDoc, deleteDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 /* MESMO projeto do ProduLog. O app foi movido para "manutencao-comodato"
    e o planejamento ficou apontando para o projeto antigo — por isso
@@ -313,6 +313,21 @@ const app = initializeApp({
 
 const db = getFirestore(app);
 const auth = getAuth(app);
+
+/* As coleções do ProduLog neste projeto têm o prefixo pl_ (pl_registros,
+   pl_planejProdutos…), porque o banco é compartilhado com o Comodato e as
+   regras liberam só esse prefixo. Em vez de reescrever o arquivo inteiro,
+   o prefixo é acrescentado aqui — igual ao que o app faz. */
+const PL_PREFIXO='pl_';
+function _plNome(n){ n=String(n); return n.indexOf(PL_PREFIXO)===0 ? n : PL_PREFIXO+n; }
+function collection(base, nome, ...resto){
+  if(base===db) return _fbCollection(db, _plNome(nome), ...resto);
+  return _fbCollection(base, nome, ...resto);
+}
+function doc(base, ...resto){
+  if(base===db && resto.length) return _fbDoc(db, _plNome(resto[0]), ...resto.slice(1));
+  return _fbDoc(base, ...resto);
+}
 
 /* ── ACESSO ──────────────────────────────────────────────────────
    O banco agora exige conta autenticada. Sem isso o Firestore recusa
