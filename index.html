@@ -6949,6 +6949,111 @@ function renderSelDataEmb(){
 }
 function selecionarDataEmb(data){dataSelEmb=data;goTo('s-emb-home');}
 function irParaEmbalagem(){if(!dataSelEmb)return;goTo('s-emb-home');}
+/* ── EMBALAR UM GRUPO INTEIRO (só admin) ─────────────────────────
+   Lança como embalado exatamente o que foi produzido, para todos os
+   pães ou todos os salgados do dia. É um atalho para quando a
+   embalagem fecha tudo e ninguém marcou um a um — por isso pede senha
+   e registra que foi lançamento em lote. */
+function embLotePendentes(tipo){
+  const data=dataSelEmb||hoje();
+  return (registros||[]).filter(r=>{
+    if(r.data!==data) return;
+    if(r.embalagem && r.embalagem.feito) return false;     // já fechado
+    const qtd=Number(r.qtd)||0;
+    if(qtd<=0) return false;                                // nada produzido
+    const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
+    return t===tipo;
+  });
+}
+
+function embAbrirLote(){
+  if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
+  const data=dataSelEmb||hoje();
+  const paes=embLotePendentes('pao');
+  const salg=embLotePendentes('salgado');
+
+  const bloco=(tipo, lista, icone, nome, cor)=>{
+    const tot=lista.reduce((t,r)=>t+(Number(r.qtd)||0),0);
+    return '<button '+(lista.length?('onclick="embConfirmarLote(\''+tipo+'\')"'):'disabled')+' '+
+      'style="display:block;width:100%;text-align:left;background:'+(lista.length?'#fff':'var(--bg-page)')+';border:2px solid '+(lista.length?cor:'var(--border)')+';border-radius:11px;padding:13px;margin-bottom:9px;cursor:'+(lista.length?'pointer':'default')+';font-family:inherit;opacity:'+(lista.length?'1':'.55')+';">'+
+      '<div style="display:flex;align-items:center;gap:11px;">'+
+        '<span style="font-size:24px;">'+icone+'</span>'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:15px;font-weight:800;color:'+(lista.length?cor:'var(--text-muted)')+';">Embalar todos os '+nome+'</span>'+
+          '<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px;">'+
+            (lista.length
+              ? (lista.length+' produto(s) pendente(s) · '+tot+' pacote(s)')
+              : 'nenhum pendente neste dia')+'</span></span>'+
+        (lista.length?'<span style="color:'+cor+';font-size:18px;">›</span>':'')+
+      '</div></button>';
+  };
+
+  const ov=document.createElement('div');
+  ov.id='emb-lote-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">📦 Embalar em lote</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">'+
+        'Lança como embalado exatamente a quantidade produzida, para o grupo inteiro do dia '+data+'.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      bloco('pao', paes, '🍞', 'pães', '#b45309')+
+      bloco('salgado', salg, '🥐', 'salgados', '#2563eb')+
+      '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:11px 13px;margin-top:6px;">'+
+        '<div style="font-size:12px;font-weight:700;color:#b45309;">⚠️ O que isso faz</div>'+
+        '<div style="font-size:11px;color:#78350f;margin-top:3px;line-height:1.5;">'+
+          'Marca como embalado o mesmo tanto que foi produzido, sem conferência. Produtos já fechados não são tocados. Fica registrado que o lançamento foi em lote, com seu nome.</div></div>'+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'emb-lote-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.embAbrirLote=embAbrirLote;
+
+async function embConfirmarLote(tipo){
+  if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
+  const lista=embLotePendentes(tipo);
+  if(!lista.length){ alert('Nada pendente neste grupo.'); return; }
+  const data=dataSelEmb||hoje();
+  const nome=tipo==='pao'?'pães':'salgados';
+  const tot=lista.reduce((t,r)=>t+(Number(r.qtd)||0),0);
+
+  const amostra=lista.slice(0,6).map(r=>'• '+r.produto+' — '+(Number(r.qtd)||0)+' pct').join('\n');
+  if(!confirm('Embalar todos os '+nome+' de '+data+'?\n\n'+
+    lista.length+' produto(s) · '+tot+' pacote(s)\n\n'+amostra+
+    (lista.length>6?('\n… e mais '+(lista.length-6)):'')+
+    '\n\nTudo será marcado como embalado na quantidade produzida.')) return;
+
+  // a senha do admin, como em qualquer ação em massa
+  const senha=prompt('Senha do admin para confirmar:');
+  if(senha===null) return;
+  const ok=(typeof _plSenhaAdminOk==='function') ? _plSenhaAdminOk(senha)
+          : (String(senha)===String((typeof PINS!=='undefined'&&PINS)?PINS.admin:''));
+  if(!ok){ alert('Senha incorreta. Nada foi lançado.'); return; }
+
+  document.getElementById('emb-lote-modal')?.remove();
+  const marca={por:_demAutor(), em:agora(), tipo};
+  let feitos=0, erros=0;
+  for(const r of lista){
+    const qtd=Number(r.qtd)||0;
+    try{
+      await updateDoc(doc(db,'registros',r.firestoreId),{
+        'embalagem.feito':true,
+        'embalagem.qtdEmbalada':qtd,
+        'embalagem.qtdProduzida':qtd,
+        'embalagem.horaFeito':agora(),
+        'embalagem.emLote':marca            // fica claro que não foi conferido um a um
+      });
+      feitos++;
+    }catch(e){ erros++; console.error('lote '+r.produto+':', e); }
+  }
+  alert('✓ '+feitos+' produto(s) marcados como embalados.'+
+    (erros?('\n\n'+erros+' com erro — veja o console.'):''));
+  if(typeof renderEmbalagem==='function') renderEmbalagem();
+}
+window.embConfirmarLote=embConfirmarLote;
+
 function renderEmbalagem(){
   document.getElementById('emb-data-topbar').textContent=dataSelEmb||hoje();
   const el=document.getElementById('emb-content');
@@ -6957,6 +7062,16 @@ function renderEmbalagem(){
   const total=regs.length+manuais.length;
   const feitos=regs.filter(r=>r.embalagem&&r.embalagem.feito).length+manuais.length; // manuais são sempre feitos
   if(!total){el.innerHTML=_vazio('Nenhum produto neste dia.');return;}
+  // atalho do admin: fechar um grupo inteiro de uma vez
+  const loteBtn=(window.adminMode===true && regs.some(r=>!(r.embalagem&&r.embalagem.feito)))
+    ? '<button onclick="embAbrirLote()" style="display:block;width:100%;text-align:left;background:#fff;border:1px dashed var(--mc-dourado,#d97706);border-radius:11px;padding:11px 14px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+        '<div style="display:flex;align-items:center;gap:10px;">'+
+          '<span style="font-size:19px;">📦</span>'+
+          '<span style="flex:1;min-width:0;">'+
+            '<span style="display:block;font-size:13px;font-weight:800;color:#b45309;">Embalar em lote</span>'+
+            '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:1px;">todos os pães ou todos os salgados deste dia</span></span>'+
+          '<span style="color:#b45309;font-size:16px;">›</span></div></button>'
+    : '';
   const pct=Math.round(feitos/total*100);const barColor=pct===100?'#4caf50':'var(--mc-dourado)';
   // Coletar alertas não lidos dos registros do dia
   const alertasDia=[];
@@ -6987,7 +7102,7 @@ function renderEmbalagem(){
     alertasHTML+='</div>';
   }
 
-  el.innerHTML=alertasHTML+`
+  el.innerHTML=alertasHTML+loteBtn+`
     <div class="card" style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
         <div style="font-size:13px;font-weight:600;color:var(--mc-azul);">Progresso do dia</div>
