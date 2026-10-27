@@ -1664,6 +1664,14 @@
           </div>
           <span class="mc-sector-arrow">›</span>
         </button>
+        <button class="mc-sector-card" onclick="fichaAbrir()">
+          <div class="mc-sector-icon" style="background:#fef3c7;">📋</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Ficha Técnica</div>
+            <div class="mc-sector-desc">Conferir massa, recheio e gramatura</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
         <button class="mc-sector-card" onclick="goTo('s-estoque-coz')">
           <div class="mc-sector-icon green">📦</div>
           <div class="mc-sector-info">
@@ -3471,6 +3479,14 @@
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
+      <button class="mc-sector-card" onclick="fichaAbrir()">
+        <div class="mc-sector-icon" style="background:#fef3c7;">📋</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Ficha Técnica <span class="ficha-badge" style="display:none;background:#dc2626;color:#fff;font-size:11px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:4px;">0</span></div>
+          <div class="mc-sector-desc">Massa, recheio e gramatura &middot; solicita&ccedil;&otilde;es</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-cinza,#64748b);margin-bottom:10px;" onclick="goTo('s-adm-cadastros')">
         <div class="mc-sector-icon" style="background:#e2e8f0;">🗂️</div>
         <div class="mc-sector-info">
@@ -4470,6 +4486,17 @@
       </div>
     </div>
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="ponto-content"></div>
+  </div>
+
+  <!-- FICHA TÉCNICA DOS PRODUTOS -->
+  <div class="screen" id="s-ficha">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Ficha técnica</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title">📋 Ficha Técnica</div><div class="mc-page-sub">Massa, recheio e gramatura</div></div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="ficha-content"></div>
   </div>
 
   <!-- CONTROLE DE QUALIDADE -->
@@ -5876,6 +5903,7 @@ function voltar(){
      pessoa para fora, em vez de devolver à lista. */
   if(atual==='s-pauta'     && typeof _pautaSel!=='undefined' && _pautaSel){ pautaVoltar(); return; }
   if(atual==='s-qual'      && typeof _qualDia!=='undefined' && _qualDia){ qualVoltar(); return; }
+  if(atual==='s-ficha'     && typeof _fichaSel!=='undefined' && _fichaSel){ fichaVoltar(); return; }
   if(atual==='s-ponto'     && typeof _pontoPessoa!=='undefined' && _pontoPessoa){ pontoVoltar(); return; }
   if(atual==='s-ponto-dash' && typeof _pdPessoa!=='undefined' && _pdPessoa){ pdVoltar(); return; }
   if(atual==='s-cfped'     && typeof _cfSemSel!=='undefined' && _cfSemSel){ cfVoltarLista(); return; }
@@ -5979,6 +6007,7 @@ function goTo(id, semHistorico){
   if(id==='s-cfped' && typeof renderCfPed==='function') renderCfPed();
   if(id==='s-pauta' && typeof renderPauta==='function') renderPauta();
   if(id==='s-qual' && typeof renderQual==='function') renderQual();
+  if(id==='s-ficha' && typeof renderFicha==='function') renderFicha();
   if(id==='s-ponto' && typeof renderPonto==='function') renderPonto();
   if(id==='s-ponto-mes' && typeof renderPontoMes==='function') renderPontoMes();
   if(id==='s-ponto-dash' && typeof renderPdash==='function') renderPdash();
@@ -14513,6 +14542,8 @@ function renderAdmMassasRecheios(){
       html+='</div>';
       if(isFB){
         html+='<button class="mc-act-btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="abrirReceitaEditor(\'massasList\',\''+m.firestoreId+'\',\'Massa\')">'+(temFicha?'Ficha':'+ Ficha')+'</button>';
+        const nMultM=((m.multiplos||[]).length);
+        html+='<button class="mc-act-btn-secondary" style="font-size:11px;padding:4px 10px;'+(nMultM?'border-color:#16a34a;color:#15803d;':'')+'" onclick="multAbrir(\'massasList\',\''+m.firestoreId+'\')">⚖️ '+(nMultM?(nMultM+' múlt.'):'Múltiplos')+'</button>';
         html+='<button class="mc-act-btn-secondary" style="border-color:var(--mc-vermelho);color:var(--mc-vermelho);font-size:11px;padding:4px 10px;" onclick="excluirMassaNome(\''+m.firestoreId+'\',\''+escapeJsStr(m.nome)+'\')">×</button>';
       } else {
         html+='<span style="font-size:9px;color:var(--text-muted);">🔒 código</span>';
@@ -14550,6 +14581,9 @@ function renderAdmMassasRecheios(){
       html+='</div>';
       if(isFB){
         html+='<button class="mc-act-btn-secondary" style="font-size:11px;padding:4px 10px;" onclick="abrirReceitaEditor(\'recheiosList\',\''+r.firestoreId+'\',\'Recheio\')">'+(temFicha?'Ficha':'+ Ficha')+'</button>';
+        // os tamanhos de batida que a cozinha consegue fazer
+        const nMult=((r.multiplos||[]).length);
+        html+='<button class="mc-act-btn-secondary" style="font-size:11px;padding:4px 10px;'+(nMult?'border-color:#16a34a;color:#15803d;':'')+'" onclick="multAbrir(\'recheiosList\',\''+r.firestoreId+'\')">⚖️ '+(nMult?(nMult+' múlt.'):'Múltiplos')+'</button>';
         html+='<button class="mc-act-btn-secondary" style="border-color:var(--mc-vermelho);color:var(--mc-vermelho);font-size:11px;padding:4px 10px;" onclick="excluirRecheioNome(\''+r.firestoreId+'\',\''+escapeJsStr(r.nome)+'\')">×</button>';
       } else {
         html+='<span style="font-size:9px;color:var(--text-muted);">🔒 código</span>';
@@ -14560,6 +14594,194 @@ function renderAdmMassasRecheios(){
 
   el.innerHTML=html;
 }
+
+/* ── MÚLTIPLOS DE PRODUÇÃO ───────────────────────────────────────
+   Os tamanhos de batida que a cozinha consegue fazer de cada massa ou
+   recheio — 50, 100, 150, 300 kg. Serve de base para o planejamento
+   arredondar a necessidade para um tamanho que dá para produzir.
+   Guardado no campo "multiplos" da própria ficha. */
+function _multFicha(colecao, id){
+  const lista=(colecao==='massasList')?(massasFirebase||[]):(recheiosFirebase||[]);
+  return lista.find(x=>x.firestoreId===id)||null;
+}
+
+function multAbrir(colecao, id){
+  const f=_multFicha(colecao, id);
+  if(!f){ alert('Ficha não encontrada.'); return; }
+  const mult=(f.multiplos||[]).slice().sort((a,b)=>a-b);
+  const ehMassa=colecao==='massasList';
+
+  const ov=document.createElement('div');
+  ov.id='mult-modal';
+  ov.dataset.colecao=colecao;
+  ov.dataset.id=id;
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:11px;font-weight:800;color:'+(ehMassa?'#92400e':'#1e40af')+';letter-spacing:.5px;">'+(ehMassa?'🍞 MASSA':'🥣 RECHEIO')+'</div>'+
+      '<div style="font-size:18px;font-weight:800;margin-top:2px;">'+(f.nome||'')+'</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.5;">'+
+        'Quais tamanhos de batida dá para fazer. O planejamento vai usar isso para arredondar a necessidade.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      '<div id="mult-lista"></div>'+
+      '<div style="display:flex;gap:7px;margin-top:12px;">'+
+        '<input type="number" id="mult-novo" step="any" min="0" placeholder="ex: 50" style="flex:1;min-width:0;padding:12px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;font-weight:700;text-align:center;font-family:inherit;box-sizing:border-box;">'+
+        '<button onclick="multAdicionar()" class="btn btn-primary" style="flex:0 0 auto;padding:0 18px;">+ Add</button>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">valores em kg · Enter também adiciona</div>'+
+      // atalhos para os tamanhos mais comuns
+      '<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px;">'+
+        '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:6px;">ATALHOS</div>'+
+        '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
+          [50,100,150,200,300,500].map(v=>'<button onclick="multAtalho('+v+')" style="background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:99px;padding:7px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">'+v+' kg</button>').join('')+
+        '</div>'+
+        '<button onclick="multCopiarDe()" style="width:100%;margin-top:9px;background:#fff;border:1px dashed var(--border-md,#cbd5e1);color:var(--mc-azul,#2563eb);border-radius:9px;padding:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">📋 Copiar de outra ficha</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'mult-modal\').remove()">Fechar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="multSalvar()">Salvar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  ov.dataset.valores=JSON.stringify(mult);
+  _multPintar();
+  const inp=document.getElementById('mult-novo');
+  if(inp){
+    inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); multAdicionar(); } });
+    setTimeout(()=>inp.focus(),60);
+  }
+}
+window.multAbrir=multAbrir;
+
+function _multValores(){
+  const ov=document.getElementById('mult-modal');
+  if(!ov) return [];
+  try{ return JSON.parse(ov.dataset.valores||'[]'); }catch(e){ return []; }
+}
+function _multSetValores(v){
+  const ov=document.getElementById('mult-modal'); if(!ov) return;
+  ov.dataset.valores=JSON.stringify(v.slice().sort((a,b)=>a-b));
+  _multPintar();
+}
+
+function _multPintar(){
+  const el=document.getElementById('mult-lista'); if(!el) return;
+  const v=_multValores();
+  if(!v.length){
+    el.innerHTML='<div style="background:var(--bg-page);border-radius:9px;padding:18px;text-align:center;font-size:13px;color:var(--text-secondary);">'+
+      'Nenhum múltiplo ainda.<br><span style="font-size:11px;">Use os atalhos ou digite abaixo.</span></div>';
+    return;
+  }
+  el.innerHTML='<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:7px;">'+
+      v.length+' TAMANHO(S) · do menor ao maior</div>'+
+    v.map((x,i)=>'<div style="display:flex;align-items:center;gap:9px;background:var(--bg-page);border-radius:9px;padding:10px 12px;margin-bottom:6px;">'+
+      '<span style="flex:0 0 auto;font-size:11px;color:var(--text-muted);width:16px;">'+(i+1)+'</span>'+
+      '<span style="flex:1;min-width:0;font-size:16px;font-weight:800;">'+_fmtKg(x)+' <span style="font-size:12px;font-weight:400;color:var(--text-secondary);">kg</span></span>'+
+      '<button onclick="multRemover('+x+')" style="flex:0 0 auto;background:none;border:none;color:#dc2626;font-size:14px;cursor:pointer;padding:4px 6px;font-family:inherit;">🗑</button>'+
+    '</div>').join('');
+}
+
+function multAdicionar(){
+  const inp=document.getElementById('mult-novo'); if(!inp) return;
+  const v=parseFloat(String(inp.value).replace(',','.'))||0;
+  if(v<=0){ inp.focus(); return; }
+  const atuais=_multValores();
+  if(atuais.some(x=>Math.abs(x-v)<0.001)){ alert(_fmtKg(v)+' kg já está na lista.'); inp.value=''; return; }
+  _multSetValores(atuais.concat([v]));
+  inp.value='';
+  inp.focus();
+}
+window.multAdicionar=multAdicionar;
+
+function multAtalho(v){
+  const atuais=_multValores();
+  if(atuais.some(x=>Math.abs(x-v)<0.001)) return;    // já tem, não faz nada
+  _multSetValores(atuais.concat([v]));
+}
+window.multAtalho=multAtalho;
+
+function multRemover(v){
+  _multSetValores(_multValores().filter(x=>Math.abs(x-v)>=0.001));
+}
+window.multRemover=multRemover;
+
+/* Copiar de outra ficha: a maioria dos recheios usa os mesmos tamanhos */
+function multCopiarDe(){
+  const ov=document.getElementById('mult-modal'); if(!ov) return;
+  const colecao=ov.dataset.colecao;
+  const lista=((colecao==='massasList')?(massasFirebase||[]):(recheiosFirebase||[]))
+    .filter(x=>x.firestoreId!==ov.dataset.id && (x.multiplos||[]).length)
+    .sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'));
+  if(!lista.length){ alert('Nenhuma outra ficha tem múltiplos cadastrados ainda.'); return; }
+  const nomes=lista.map((x,i)=>(i+1)+') '+x.nome+' — '+(x.multiplos||[]).slice().sort((a,b)=>a-b).join(', ')+' kg').join('\n');
+  const esc=prompt('Copiar os múltiplos de qual ficha?\n\n'+nomes+'\n\nDigite o número:');
+  if(esc===null) return;
+  const i=parseInt(esc)-1;
+  if(isNaN(i) || i<0 || i>=lista.length){ alert('Número inválido.'); return; }
+  const origem=lista[i];
+  const atuais=_multValores();
+  const novos=(origem.multiplos||[]).filter(v=>!atuais.some(x=>Math.abs(x-v)<0.001));
+  if(!novos.length){ alert('Esses múltiplos já estão na lista.'); return; }
+  _multSetValores(atuais.concat(novos));
+}
+window.multCopiarDe=multCopiarDe;
+
+async function multSalvar(){
+  const ov=document.getElementById('mult-modal'); if(!ov) return;
+  const colecao=ov.dataset.colecao, id=ov.dataset.id;
+  const multiplos=_multValores();
+  try{
+    await updateDoc(doc(db,colecao,id), {multiplos, multiplosEm:agora(), multiplosPor:_demAutor()});
+    ov.remove();
+    const t=document.querySelector('.screen.active')?.id;
+    if(typeof renderAdmMassasRecheios==='function') renderAdmMassasRecheios();
+  }catch(e){ alert('Erro ao salvar: '+e.message); }
+}
+window.multSalvar=multSalvar;
+
+/* Para o planejamento usar depois: a combinação de batidas que cobre a
+   necessidade com a menor sobra. Uma batida de 300 para 160 kg joga
+   140 fora; duas de 100 sobram só 40. */
+function multSugerir(colecao, nome, necessario){
+  const lista=(colecao==='massasList')?(massasFirebase||[]):(recheiosFirebase||[]);
+  const f=lista.find(x=>_normNome(x.nome)===_normNome(nome));
+  const m=(f&&f.multiplos)?f.multiplos.slice().sort((a,b)=>a-b).filter(x=>x>0):[];
+  if(!m.length) return null;
+  const n=Number(necessario)||0;
+  if(n<=0) return {batidas:[], total:0, sobra:0};
+
+  let melhor=null;
+  // busca em profundidade, limitada: tamanhos de batida são poucos
+  const MAX=12;
+  const tentar=(i, usadas, soma)=>{
+    if(soma>=n){
+      const sobra=soma-n;
+      if(!melhor || sobra<melhor.sobra || (sobra===melhor.sobra && usadas.length<melhor.batidas.length)){
+        melhor={batidas:usadas.slice(), total:soma, sobra};
+      }
+      return;
+    }
+    if(usadas.length>=MAX || i<0) return;
+    // com o múltiplo atual, repetindo o quanto precisar
+    for(let k=i;k>=0;k--){
+      const v=m[k];
+      if(usadas.length+Math.ceil((n-soma)/v)>MAX) continue;
+      usadas.push(v);
+      tentar(k, usadas, soma+v);
+      usadas.pop();
+      if(melhor && melhor.sobra===0) return;   // não dá para melhorar
+    }
+  };
+  tentar(m.length-1, [], 0);
+  if(!melhor){
+    const maior=m[m.length-1];
+    const qtd=Math.ceil(n/maior);
+    melhor={batidas:new Array(qtd).fill(maior), total:maior*qtd, sobra:maior*qtd-n};
+  }
+  melhor.batidas.sort((a,b)=>b-a);
+  return melhor;
+}
+window.multSugerir=multSugerir;
 
 async function adicionarMassa(){
   const nome=prompt('Nome da nova massa:');
@@ -25231,6 +25453,468 @@ function _pontoLerDia(linha, prevEntrada, emissao){
     foraDoPeriodo, inativo,
     obs
   };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   FICHA TÉCNICA — o que compõe cada produto
+   Mostra massa, recheios e a gramatura de cada parte. A cozinha pode
+   pedir correção do que estiver errado; nada muda sozinho, vira uma
+   solicitação para o admin avaliar.
+   Coleção: solicitacoesFicha
+   ══════════════════════════════════════════════════════════════════ */
+let solicitacoesFicha=[];
+let _fichaBusca='', _fichaSel='', _fichaSoDivergentes=false;
+
+onSnapshot(collection(db,'solicitacoesFicha'), snap=>{
+  try{
+    solicitacoesFicha=snap.docs.map(d=>({firestoreId:d.id,...d.data()}))
+      .sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+    const t=document.querySelector('.screen.active')?.id;
+    if(t==='s-ficha') renderFicha();
+    _fichaBadge();
+  }catch(e){ console.error('solicitacoesFicha snap',e); }
+});
+
+function fichaAbrir(){ _fichaSel=''; goTo('s-ficha'); }
+window.fichaAbrir=fichaAbrir;
+
+/* Marca de "já conferi". Fica no aparelho de quem está revisando e não
+   muda nada nos dados — é só para não se perder numa lista longa. */
+const FICHA_REVISADOS='ficha_revisados_v1';
+let _fichaRevisados={};
+try{ _fichaRevisados=JSON.parse(localStorage.getItem(FICHA_REVISADOS)||'{}'); }catch(e){ _fichaRevisados={}; }
+
+function fichaRevisado(cod){ return _fichaRevisados[String(cod)]===true; }
+window.fichaRevisado=fichaRevisado;
+
+function fichaToggleRevisado(cod, el){
+  const c=String(cod);
+  if(_fichaRevisados[c]) delete _fichaRevisados[c]; else _fichaRevisados[c]=true;
+  try{ localStorage.setItem(FICHA_REVISADOS, JSON.stringify(_fichaRevisados)); }catch(e){}
+  // pinta só a linha, para a tabela não saltar enquanto a pessoa marca
+  const tr=el&&el.closest?el.closest('tr'):null;
+  if(tr){
+    const on=_fichaRevisados[c]===true;
+    tr.style.opacity=on?'.55':'';
+    tr.querySelectorAll('td').forEach(td=>{ td.style.background=on?'#f0fdf4':''; });
+  }
+  const cont=document.getElementById('ficha-revisados-conta');
+  if(cont) cont.textContent=Object.keys(_fichaRevisados).length;
+}
+window.fichaToggleRevisado=fichaToggleRevisado;
+
+function fichaLimparRevisados(){
+  const n=Object.keys(_fichaRevisados).length;
+  if(!n){ alert('Nada marcado.'); return; }
+  if(!confirm('Desmarcar os '+n+' produto(s) revisados?\n\nÉ só a sua marcação; nenhum dado muda.')) return;
+  _fichaRevisados={};
+  try{ localStorage.setItem(FICHA_REVISADOS,'{}'); }catch(e){}
+  renderFicha();
+}
+window.fichaLimparRevisados=fichaLimparRevisados;
+
+function renderFicha(){
+  const el=document.getElementById('ficha-content'); if(!el) return;
+  if(_fichaSel==='solicitacoes'){ el.innerHTML=_fichaSolicitacoes(); return; }
+  const ps=fichaProdutos();
+  const pend=_fichaPendentes();
+
+  let h='';
+  // as solicitações em aberto
+  if(pend.length){
+    h+='<button onclick="fichaVerSolicitacoes()" style="display:block;width:100%;text-align:left;background:'+(window.adminMode===true?'#fffbeb':'#eff6ff')+';border:2px solid '+(window.adminMode===true?'#d97706':'#2563eb')+';border-radius:12px;padding:12px 14px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<span style="font-size:21px;">'+(window.adminMode===true?'⚠️':'📨')+'</span>'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:14px;font-weight:900;color:'+(window.adminMode===true?'#b45309':'#1d4ed8')+';">'+
+            pend.length+' solicitação(ões) de alteração</span>'+
+          '<span style="display:block;font-size:11px;color:'+(window.adminMode===true?'#78350f':'#1e40af')+';margin-top:2px;">'+
+            (window.adminMode===true?'aguardando a sua avaliação':'enviadas, aguardando o admin')+'</span></span>'+
+        '<span style="color:'+(window.adminMode===true?'#b45309':'#1d4ed8')+';font-size:18px;">›</span>'+
+      '</div></button>';
+  } else if(solicitacoesFicha.length){
+    h+='<button onclick="fichaVerSolicitacoes()" style="width:100%;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:12px;">📨 Ver solicitações anteriores</button>';
+  }
+
+  h+='<div class="card" style="margin-bottom:12px;">'+
+    '<input type="text" id="ficha-busca" value="'+String(_fichaBusca).replace(/"/g,'&quot;')+'" oninput="fichaBuscar(this.value)" placeholder="🔍 Buscar produto, código, massa ou recheio" autocomplete="off" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;">'+
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:9px;cursor:pointer;font-size:12px;color:var(--text-secondary);">'+
+      '<input type="checkbox"'+(_fichaSoDivergentes?' checked':'')+' onchange="fichaToggleDiv()" style="width:17px;height:17px;cursor:pointer;">'+
+      'mostrar só o que tem divergência ou solicitação</label>'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-top:9px;padding-top:9px;border-top:1px solid var(--border);">'+
+      '<span style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">'+
+        '✓ <strong id="ficha-revisados-conta">'+Object.keys(_fichaRevisados).length+'</strong> revisado(s) · marcação só sua, não muda nada</span>'+
+      (Object.keys(_fichaRevisados).length
+        ? '<button onclick="fichaLimparRevisados()" style="flex:0 0 auto;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:7px;padding:6px 11px;font-size:11px;cursor:pointer;font-family:inherit;">limpar</button>'
+        : '')+
+    '</div>'+
+  '</div>';
+
+  if(!ps.length) return void(el.innerHTML=h+_vazio('Nenhum produto encontrado.'));
+
+  h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
+    '<table class="cf-tab" style="border-collapse:collapse;font-size:13px;white-space:nowrap;width:100%;">'+
+    '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
+      '<th style="padding:10px 6px;text-align:center;background:#334155;">✓</th>'+
+      '<th style="padding:10px 12px;text-align:left;position:sticky;left:36px;background:#334155;">PRODUTO</th>'+
+      '<th style="padding:10px;text-align:left;">MASSA</th>'+
+      '<th style="padding:10px;text-align:left;">RECHEIO(S)</th>'+
+      '<th style="padding:10px;text-align:center;">GRAMATURA</th>'+
+      '<th style="padding:10px;text-align:center;"></th>'+
+    '</tr></thead><tbody>'+
+    ps.map((p,i)=>{
+      const rev=fichaRevisado(p.cod);
+      const bg=rev?'#f0fdf4':(p.pendente?'#eff6ff':(p.difere?'#fffbeb':(i%2?'#fafbfc':'#fff')));
+      const semFicha=!p.partes.length;
+      const massa=p.partes.find(x=>x.tipo==='massa');
+      const rech=p.partes.filter(x=>x.tipo==='recheio');
+      const chip=(x)=>'<button onclick="fichaVerReceita(\''+x.tipo+'\',\''+escapeJsStr(x.nome)+'\')" '+
+        'style="background:'+(x.tipo==='massa'?'#fef3c7':'#dbeafe')+';border:none;color:'+(x.tipo==='massa'?'#92400e':'#1e40af')+';border-radius:7px;padding:5px 9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin:1px 3px 1px 0;">'+
+        x.nome+' <span style="opacity:.75;">'+_fmtKg(x.gr)+'g</span></button>';
+      return '<tr style="background:'+bg+';border-top:1px solid #f1f5f9;'+(rev?'opacity:.55;':'')+'">'+
+        '<td style="padding:9px 6px;text-align:center;background:inherit;">'+
+          '<input type="checkbox"'+(rev?' checked':'')+' onchange="fichaToggleRevisado(\''+escapeJsStr(p.cod)+'\',this)" '+
+            'title="marcar como revisado" style="width:19px;height:19px;cursor:pointer;"></td>'+
+        '<td style="padding:9px 12px;position:sticky;left:36px;background:inherit;">'+
+          '<div style="font-weight:700;">'+p.nome+'</div>'+
+          '<div style="font-size:10px;color:var(--text-muted);">cód '+(p.cod||'—')+
+            (p.pendente?' · <span style="color:#2563eb;font-weight:700;">solicitação aberta</span>':'')+
+            (semFicha?' · <span style="color:#b45309;font-weight:700;">sem ficha</span>':'')+'</div></td>'+
+        '<td style="padding:9px 10px;">'+(massa?chip(massa):'<span style="color:var(--text-muted);">—</span>')+'</td>'+
+        '<td style="padding:9px 10px;">'+(rech.length?rech.map(chip).join(''):'<span style="color:var(--text-muted);">—</span>')+'</td>'+
+        '<td style="padding:9px 10px;text-align:center;">'+
+          '<div style="font-size:15px;font-weight:900;'+(p.difere?'color:#d97706;':'')+'">'+_fmtKg(p.total)+' g</div>'+
+          (p.porUnidade>0 && p.difere
+            ? '<div style="font-size:10px;color:#b45309;">cadastro diz '+_fmtKg(p.porUnidade)+' g</div>'
+            : '')+'</td>'+
+        '<td style="padding:9px 10px;text-align:center;">'+
+          (fichaPodePedir()
+            ? '<button onclick="fichaPedirAlteracao(\''+escapeJsStr(p.cod)+'\')" title="Sugerir correção" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;cursor:pointer;font-family:inherit;">✏️</button>'
+            : '')+'</td>'+
+      '</tr>';
+    }).join('')+
+  '</tbody></table></div>'+
+  '<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">'+
+    'Toque na massa ou no recheio para ver a receita. O ✏️ abre uma solicitação de correção — nada muda sem o admin aprovar.</div>';
+  el.innerHTML=h;
+}
+window.renderFicha=renderFicha;
+
+function fichaBuscar(v){ _fichaBusca=v||''; renderFicha(); const i=document.getElementById('ficha-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
+window.fichaBuscar=fichaBuscar;
+function fichaToggleDiv(){ _fichaSoDivergentes=!_fichaSoDivergentes; renderFicha(); }
+window.fichaToggleDiv=fichaToggleDiv;
+function fichaVerSolicitacoes(){ _fichaSel='solicitacoes'; renderFicha(); }
+window.fichaVerSolicitacoes=fichaVerSolicitacoes;
+function fichaVoltar(){ _fichaSel=''; renderFicha(); }
+window.fichaVoltar=fichaVoltar;
+
+/* ── A RECEITA DE UMA MASSA OU RECHEIO ───────────────────────────── */
+function fichaVerReceita(tipo, nome){
+  const r=fichaReceita(tipo, nome);
+  const ings=(r&&r.ingredientes)?r.ingredientes:[];
+  const total=ings.reduce((t,i)=>t+(parseFloat(i.kg!=null?i.kg:i.qtd)||0),0);
+  const ov=document.createElement('div');
+  ov.id='ficha-rec-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:11px;font-weight:800;color:'+(tipo==='massa'?'#92400e':'#1e40af')+';letter-spacing:.5px;">'+(tipo==='massa'?'🍞 MASSA':'🥣 RECHEIO')+'</div>'+
+      '<div style="font-size:18px;font-weight:800;margin-top:2px;">'+nome+'</div>'+
+      (r&&r.codigo?'<div style="font-size:11px;color:var(--text-muted);">cód '+r.codigo+'</div>':'')+'</div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      (ings.length
+        ? '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:7px;">INGREDIENTES ('+ings.length+')</div>'+
+          ings.map(i=>{
+            const kg=parseFloat(i.kg!=null?i.kg:i.qtd)||0;
+            const pct=total?(kg/total*100):0;
+            return '<div style="padding:8px 0;border-bottom:1px solid var(--border);">'+
+              '<div style="display:flex;justify-content:space-between;gap:8px;">'+
+                '<span style="flex:1;min-width:0;font-size:13px;">'+(i.mpNome||i.nome||'')+'</span>'+
+                '<span style="font-size:13px;font-weight:700;white-space:nowrap;">'+_fmtKg(kg)+' '+(i.mpUnidade||'kg').toLowerCase()+'</span></span>'+
+              '</div>'+
+              '<div style="height:4px;background:var(--bg-page);border-radius:99px;margin-top:4px;overflow:hidden;">'+
+                '<div style="height:100%;width:'+pct+'%;background:'+(tipo==='massa'?'#d97706':'#2563eb')+';"></div></div>'+
+            '</div>';
+          }).join('')+
+          '<div style="display:flex;justify-content:space-between;padding-top:10px;font-size:14px;font-weight:800;">'+
+            '<span>Total da receita</span><span>'+_fmtKg(total)+' kg</span></div>'+
+          (r&&r.rendimento?'<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">rendimento: '+r.rendimento+'</div>':'')
+        : '<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">'+
+            'Esta '+(tipo==='massa'?'massa':'receita')+' não tem ingredientes cadastrados.</div>')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);">'+
+      '<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'ficha-rec-modal\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.fichaVerReceita=fichaVerReceita;
+
+/* ── PEDIR CORREÇÃO ──────────────────────────────────────────────
+   Nada é alterado aqui. A pessoa aponta o que está errado e sugere o
+   certo; o admin decide depois. */
+function fichaPedirAlteracao(cod){
+  if(!fichaPodePedir()){ alert('Seu acesso não abre solicitação.'); return; }
+  const p=fichaProdutos().find(x=>String(x.cod)===String(cod))
+        || (produtosConfFirebase||[]).find(x=>String(x.cod)===String(cod));
+  if(!p){ alert('Produto não encontrado.'); return; }
+
+  const partes=[
+    {campo:'grMassa',    campoNome:'tipoMassa',    rot:'Massa',    tipo:'massa',   nome:p.tipoMassa||'',    gr:Number(p.grMassa)||0},
+    {campo:'grRecheio',  campoNome:'tipoRecheio',  rot:'Recheio',  tipo:'recheio', nome:p.tipoRecheio||'',  gr:Number(p.grRecheio)||0},
+    {campo:'grRecheio2', campoNome:'tipoRecheio2', rot:'Recheio 2',tipo:'recheio', nome:p.tipoRecheio2||'', gr:Number(p.grRecheio2)||0}
+  ];
+
+  const ov=document.createElement('div');
+  ov.id='ficha-sol-modal';
+  ov.dataset.cod=String(cod);
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:500px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">✏️ Sugerir correção</div>'+
+      '<div style="font-size:13px;font-weight:700;margin-top:6px;">'+p.nome+'</div>'+
+      '<div style="font-size:11px;color:var(--text-muted);">cód '+(p.cod||'')+'</div>'+
+      '<div style="font-size:11px;color:var(--text-secondary);margin-top:5px;line-height:1.5;">Marque o que está errado e diga o certo. Nada muda agora — o admin avalia.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      partes.map((x,i)=>{
+        if(!x.nome && !x.gr && i>0) return '';   // recheio 2 vazio não aparece
+        return '<div class="card" style="margin-bottom:9px;">'+
+          '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);">'+x.rot.toUpperCase()+'</div>'+
+          '<div style="font-size:14px;font-weight:700;margin-top:2px;">'+(x.nome||'(não definido)')+' · '+_fmtKg(x.gr)+' g</div>'+
+          '<div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;">'+
+            '<button type="button" onclick="_fsAbrirTroca(\''+x.campoNome+'\',\''+x.tipo+'\')" style="flex:1;min-width:120px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">trocar '+(x.tipo==='massa'?'a massa':'o recheio')+'</button>'+
+            '<button type="button" onclick="_fsAbrirGramatura(\''+x.campo+'\',\''+escapeJsStr(x.rot)+'\','+x.gr+')" style="flex:1;min-width:120px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">corrigir a gramatura</button>'+
+          '</div>'+
+          '<div id="fs-'+x.campo+'" style="margin-top:7px;"></div>'+
+          '<div id="fs-'+x.campoNome+'" style="margin-top:7px;"></div>'+
+        '</div>';
+      }).join('')+
+      '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);display:block;margin-top:4px;">Por que está errado?</label>'+
+      '<textarea id="fs-motivo" rows="3" placeholder="ex: o recheio certo é o de frango, não o de carne" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin-top:4px;resize:vertical;"></textarea>'+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'ficha-sol-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="fichaEnviarSolicitacao()">Enviar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  ov.dataset.mudancas='{}';
+}
+window.fichaPedirAlteracao=fichaPedirAlteracao;
+
+/* escolher outra massa ou recheio da lista cadastrada */
+function _fsAbrirTroca(campoNome, tipo){
+  const lista=(tipo==='massa')?(massasFirebase||[]):(recheiosFirebase||[]);
+  const area=document.getElementById('fs-'+campoNome); if(!area) return;
+  if(!lista.length){ area.innerHTML='<div style="font-size:11px;color:#b45309;">Nenhum(a) '+tipo+' cadastrado(a).</div>'; return; }
+  area.innerHTML='<select onchange="_fsMarcar(\''+campoNome+'\',this.value,\'texto\')" style="width:100%;padding:10px;min-height:44px;border:2px solid var(--mc-azul,#2563eb);border-radius:8px;font-size:14px;font-family:inherit;background:#fff;">'+
+    '<option value="">— escolha o correto —</option>'+
+    lista.slice().sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'))
+      .map(x=>'<option value="'+String(x.nome||'').replace(/"/g,'&quot;')+'">'+(x.nome||'')+'</option>').join('')+
+  '</select><div id="fs-ok-'+campoNome+'" style="font-size:11px;color:#16a34a;font-weight:700;margin-top:4px;"></div>';
+}
+window._fsAbrirTroca=_fsAbrirTroca;
+
+function _fsAbrirGramatura(campo, rot, atual){
+  const area=document.getElementById('fs-'+campo); if(!area) return;
+  area.innerHTML='<div style="display:flex;gap:7px;align-items:center;">'+
+    '<input type="number" step="any" min="0" placeholder="gramas" value="" oninput="_fsMarcar(\''+campo+'\',this.value,\'numero\')" style="flex:0 0 110px;padding:10px;border:2px solid var(--mc-azul,#2563eb);border-radius:8px;font-size:15px;font-weight:700;text-align:center;font-family:inherit;">'+
+    '<span style="flex:1;min-width:0;font-size:11px;color:var(--text-secondary);">hoje: '+_fmtKg(atual)+' g</span></div>'+
+    '<div id="fs-ok-'+campo+'" style="font-size:11px;color:#16a34a;font-weight:700;margin-top:4px;"></div>';
+}
+window._fsAbrirGramatura=_fsAbrirGramatura;
+
+function _fsMarcar(campo, valor, tipo){
+  const ov=document.getElementById('ficha-sol-modal'); if(!ov) return;
+  let m={};
+  try{ m=JSON.parse(ov.dataset.mudancas||'{}'); }catch(e){}
+  const v=(tipo==='numero')?(parseFloat(String(valor).replace(',','.'))||0):String(valor||'').trim();
+  if(!v && v!==0) delete m[campo]; else m[campo]=v;
+  if(tipo==='numero' && !v) delete m[campo];
+  ov.dataset.mudancas=JSON.stringify(m);
+  const ok=document.getElementById('fs-ok-'+campo);
+  if(ok) ok.textContent=(m[campo]!==undefined)?('✓ sugerido: '+m[campo]+(tipo==='numero'?' g':'')):'';
+}
+window._fsMarcar=_fsMarcar;
+
+async function fichaEnviarSolicitacao(){
+  const ov=document.getElementById('ficha-sol-modal'); if(!ov) return;
+  const cod=ov.dataset.cod;
+  let m={};
+  try{ m=JSON.parse(ov.dataset.mudancas||'{}'); }catch(e){}
+  if(!Object.keys(m).length){ alert('Marque ao menos uma correção.'); return; }
+  const motivo=((document.getElementById('fs-motivo')||{}).value||'').trim();
+  const p=(produtosConfFirebase||[]).find(x=>String(x.cod)===String(cod));
+  if(!p) return;
+
+  // o estado de agora, para o admin comparar
+  const antes={};
+  Object.keys(m).forEach(k=>{ antes[k]=p[k]!==undefined?p[k]:''; });
+
+  const rot={grMassa:'Gramatura da massa', grRecheio:'Gramatura do recheio', grRecheio2:'Gramatura do recheio 2',
+             tipoMassa:'Massa', tipoRecheio:'Recheio', tipoRecheio2:'Recheio 2'};
+  const resumo=Object.keys(m).map(k=>(rot[k]||k)+': '+(antes[k]||'(vazio)')+' → '+m[k]).join('\n');
+  if(!confirm('Enviar esta solicitação?\n\n'+p.nome+'\n\n'+resumo+'\n\nO admin avalia antes de qualquer alteração.')) return;
+
+  try{
+    await addDoc(collection(db,'solicitacoesFicha'), {
+      cod:String(cod), produto:p.nome||'', firestoreId:p.firestoreId||'',
+      mudancas:m, antes, motivo,
+      status:'pendente',
+      por:_demAutor(), setor:window.setorAtual||'', em:agora(), timestamp:Date.now()
+    });
+    ov.remove();
+    alert('✓ Solicitação enviada.\n\nO admin vai avaliar. Nada foi alterado.');
+  }catch(e){ alert('Erro ao enviar: '+e.message); }
+}
+window.fichaEnviarSolicitacao=fichaEnviarSolicitacao;
+
+/* ── AS SOLICITAÇÕES ─────────────────────────────────────────────── */
+function _fichaSolicitacoes(){
+  const todas=solicitacoesFicha||[];
+  const pend=todas.filter(x=>x.status==='pendente');
+  const resto=todas.filter(x=>x.status!=='pendente');
+  const rot={grMassa:'Gramatura da massa', grRecheio:'Gramatura do recheio', grRecheio2:'Gramatura do recheio 2',
+             tipoMassa:'Massa', tipoRecheio:'Recheio', tipoRecheio2:'Recheio 2'};
+
+  const card=(x)=>{
+    const ehPend=x.status==='pendente';
+    const cor=ehPend?'#2563eb':(x.status==='aprovada'?'#16a34a':'#dc2626');
+    const fundo=ehPend?'#eff6ff':(x.status==='aprovada'?'#f0fdf4':'#fef2f2');
+    return '<div class="card" style="margin-bottom:9px;background:'+fundo+';border-color:'+cor+'44;">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:15px;font-weight:800;">'+(x.produto||'')+'</div>'+
+          '<div style="font-size:11px;color:var(--text-muted);">cód '+(x.cod||'')+' · '+(x.por||'')+' · '+(x.em||'')+'</div></div>'+
+        '<span style="font-size:11px;font-weight:800;color:'+cor+';background:#fff;border-radius:99px;padding:3px 10px;white-space:nowrap;">'+
+          (ehPend?'pendente':(x.status==='aprovada'?'aprovada':'recusada'))+'</span>'+
+      '</div>'+
+      '<div style="margin-top:9px;">'+
+        Object.keys(x.mudancas||{}).map(k=>'<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-top:1px solid var(--border);">'+
+          '<span style="flex:0 0 auto;font-size:11px;color:var(--text-secondary);min-width:110px;">'+(rot[k]||k)+'</span>'+
+          '<span style="color:var(--text-secondary);text-decoration:line-through;">'+((x.antes||{})[k]||'(vazio)')+'</span>'+
+          '<span style="color:var(--text-muted);">→</span>'+
+          '<span style="font-weight:800;">'+x.mudancas[k]+'</span></div>').join('')+
+      '</div>'+
+      (x.motivo?'<div style="font-size:12px;color:var(--text-secondary);margin-top:7px;padding-top:7px;border-top:1px solid var(--border);white-space:pre-wrap;">'+x.motivo+'</div>':'')+
+      (!ehPend && x.avaliadoPor
+        ? '<div style="font-size:10px;color:var(--text-muted);margin-top:6px;">'+(x.status==='aprovada'?'aprovada':'recusada')+' por '+x.avaliadoPor+' em '+(x.avaliadoEm||'')+
+            (x.resposta?(' · '+x.resposta):'')+'</div>'
+        : '')+
+      (ehPend && window.adminMode===true
+        ? '<div style="display:flex;gap:7px;margin-top:10px;">'+
+            '<button onclick="fichaRecusar(\''+escapeJsStr(x.firestoreId)+'\')" style="flex:1;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Recusar</button>'+
+            '<button onclick="fichaAprovar(\''+escapeJsStr(x.firestoreId)+'\')" style="flex:1;background:#16a34a;border:none;color:#fff;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Aprovar e aplicar</button>'+
+          '</div>'
+        : '')+
+    '</div>';
+  };
+
+  return '<button onclick="fichaVoltar()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 10px;font-family:inherit;">&lsaquo; Voltar à ficha</button>'+
+    (pend.length
+      ? '<div class="mc-section-header">Pendentes ('+pend.length+')</div>'+pend.map(card).join('')
+      : '<div class="card" style="text-align:center;padding:22px;background:#f0fdf4;border-color:#bbf7d0;">'+
+          '<div style="font-size:26px;">✓</div>'+
+          '<div style="font-size:14px;font-weight:800;color:#15803d;margin-top:5px;">Nenhuma solicitação pendente</div></div>')+
+    (resto.length
+      ? '<div class="mc-section-header" style="margin-top:18px;">Já avaliadas ('+resto.length+')</div>'+resto.slice(0,20).map(card).join('')
+      : '');
+}
+
+async function fichaAprovar(id){
+  if(window.adminMode!==true){ alert('Só o admin aprova.'); return; }
+  const x=(solicitacoesFicha||[]).find(y=>y.firestoreId===id); if(!x) return;
+  const rot={grMassa:'Gramatura da massa', grRecheio:'Gramatura do recheio', grRecheio2:'Gramatura do recheio 2',
+             tipoMassa:'Massa', tipoRecheio:'Recheio', tipoRecheio2:'Recheio 2'};
+  const resumo=Object.keys(x.mudancas||{}).map(k=>(rot[k]||k)+': '+((x.antes||{})[k]||'(vazio)')+' → '+x.mudancas[k]).join('\n');
+  if(!confirm('Aprovar e aplicar em "'+(x.produto||'')+'"?\n\n'+resumo+'\n\nA ficha do produto será alterada.')) return;
+
+  // o produto pode ter mudado desde o pedido: busca pelo código
+  const p=(produtosConfFirebase||[]).find(y=>String(y.cod)===String(x.cod));
+  if(!p){ alert('Produto não encontrado. Pode ter sido excluído.'); return; }
+
+  const dados={};
+  Object.keys(x.mudancas||{}).forEach(k=>{ dados[k]=x.mudancas[k]; });
+  dados.atualizadoEm=agora();
+  try{
+    await setDoc(doc(db,'produtosConfeitaria',p.firestoreId), dados, {merge:true});
+    await updateDoc(doc(db,'solicitacoesFicha',id), {
+      status:'aprovada', avaliadoPor:_demAutor(), avaliadoEm:agora(),
+      aplicadoEm:JSON.parse(JSON.stringify(dados))
+    });
+    alert('✓ Alteração aplicada na ficha do produto.');
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.fichaAprovar=fichaAprovar;
+
+async function fichaRecusar(id){
+  if(window.adminMode!==true){ alert('Só o admin avalia.'); return; }
+  const x=(solicitacoesFicha||[]).find(y=>y.firestoreId===id); if(!x) return;
+  const resp=prompt('Por que está recusando? (quem pediu vai ver)','');
+  if(resp===null) return;
+  try{
+    await updateDoc(doc(db,'solicitacoesFicha',id), {
+      status:'recusada', resposta:String(resp).trim(),
+      avaliadoPor:_demAutor(), avaliadoEm:agora()
+    });
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.fichaRecusar=fichaRecusar;
+
+function _fichaPendentes(){ return (solicitacoesFicha||[]).filter(x=>x.status==='pendente'); }
+
+function _fichaBadge(){
+  const n=_fichaPendentes().length;
+  document.querySelectorAll('.ficha-badge').forEach(el=>{
+    el.textContent=n;
+    el.style.display=n?'':'none';
+  });
+}
+window._fichaBadge=_fichaBadge;
+
+/* Os produtos da confeitaria com a composição */
+function fichaProdutos(){
+  const q=_normNome(_fichaBusca||'');
+  return (produtosConfFirebase||[])
+    .map(p=>{
+      const partes=[];
+      if(p.tipoMassa) partes.push({tipo:'massa', nome:p.tipoMassa, gr:Number(p.grMassa)||0, campo:'grMassa', campoNome:'tipoMassa'});
+      if(p.tipoRecheio) partes.push({tipo:'recheio', nome:p.tipoRecheio, gr:Number(p.grRecheio)||0, campo:'grRecheio', campoNome:'tipoRecheio'});
+      if(p.tipoRecheio2) partes.push({tipo:'recheio', nome:p.tipoRecheio2, gr:Number(p.grRecheio2)||0, campo:'grRecheio2', campoNome:'tipoRecheio2'});
+      const total=partes.reduce((t,x)=>t+x.gr,0);
+      // a gramatura declarada no cadastro, para comparar
+      const declarado=Number(p.pesoPct)||0;
+      const unid=Number(p.qtdPct)||0;
+      const porUnidade=(declarado&&unid)?(declarado*1000/unid):0;
+      const difere=(porUnidade>0 && total>0) ? Math.abs(porUnidade-total)>1 : false;
+      return {...p, partes, total, porUnidade, difere,
+              pendente:_fichaPendentes().some(s=>String(s.cod)===String(p.cod))};
+    })
+    .filter(p=>{
+      if(_fichaSoDivergentes && !p.difere && !p.pendente) return false;
+      if(!q) return true;
+      return _normNome(p.nome+' '+(p.cod||'')+' '+(p.tipoMassa||'')+' '+(p.tipoRecheio||'')).includes(q);
+    })
+    .sort((a,b)=>{
+      // sem massa nem recheio não dá para revisar: fica no fim da lista
+      const va=a.partes.length?0:1, vb=b.partes.length?0:1;
+      if(va!==vb) return va-vb;
+      return _normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR');
+    });
+}
+window.fichaProdutos=fichaProdutos;
+
+/* A receita de uma massa ou recheio */
+function fichaReceita(tipo, nome){
+  const lista=(tipo==='massa')?(massasFirebase||[]):(recheiosFirebase||[]);
+  const n=_normNome(nome);
+  return lista.find(x=>_normNome(x.nome)===n)||null;
+}
+window.fichaReceita=fichaReceita;
+
+/* Quem pode pedir alteração */
+function fichaPodePedir(){
+  return window.adminMode===true ||
+    ['admin','cozinha','confeitaria','patrick'].indexOf(window.setorAtual)>=0;
 }
 
 /* ══════════════════════════════════════════════════════════════════
