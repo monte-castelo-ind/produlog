@@ -6895,11 +6895,33 @@ window.cfUpd=cfUpd; window.cfUpdEntrega=cfUpdEntrega; window.cfSetRowTipo=cfSetR
 window.toggleCFEmb=toggleCFEmb; window.toggleCFAdmin=toggleCFAdmin; window.setCFAgrupar=setCFAgrupar; window.setCFFiltroTipo=setCFFiltroTipo;
 
 // ===== EMBALAGEM =====
+/* O que falta embalar num dia. Antes cada tela contava do seu jeito:
+   a lista de dias ignorava os lançamentos manuais e contava registros
+   sem produção lançada, então o número não batia ao entrar no dia. */
+function embPendentesDoDia(data){
+  return (registros||[]).filter(r=>
+    r.data===data && !(r.embalagem && r.embalagem.feito)
+  );
+}
+window.embPendentesDoDia=embPendentesDoDia;
+
+function embTotaisDoDia(data){
+  const regs=(registros||[]).filter(r=>r.data===data);
+  const manuais=(typeof embManual!=='undefined'?embManual:[]).filter(r=>r.data===data);
+  const feitos=regs.filter(r=>r.embalagem && r.embalagem.feito).length;
+  return {
+    regs, manuais,
+    total: regs.length+manuais.length,
+    feitos: feitos+manuais.length,       // manual já nasce embalado
+    pendentes: regs.length-feitos
+  };
+}
+window.embTotaisDoDia=embTotaisDoDia;
+
 function statusEmbalagem(data){
-  const regs=registros.filter(r=>r.data===data);
-  if(!regs.length)return'vazio';
-  const feitos=regs.filter(r=>r.embalagem&&r.embalagem.feito).length;
-  return feitos===regs.length?'completo':'pendente';
+  const t=embTotaisDoDia(data);
+  if(!t.total) return 'vazio';
+  return t.pendentes===0 ? 'completo' : 'pendente';
 }
 function renderSelDataEmb(){
   // Show last 30 calendar days
@@ -6925,11 +6947,12 @@ function renderSelDataEmb(){
   if(pend>0)alert=`<div class="banner" style="background:#fff3cd;border:0.5px solid #f5a623;color:#7a4f00;margin-bottom:12px;">⚠️ <strong>${pend} dia(s)</strong> com produtos pendentes de embalagem</div>`;
 
   const listHtml=diasOrdenados.map(({d,data,status,idx})=>{
-    const regs=registros.filter(r=>r.data===data);
-    const feitos=regs.filter(r=>r.embalagem&&r.embalagem.feito).length;
-    const total=regs.length;const isSel=dataSelEmb===data;
+    const tt=embTotaisDoDia(data);
+    const regs=tt.regs;
+    const feitos=tt.feitos;
+    const total=tt.total;const isSel=dataSelEmb===data;
     let badge='',dot='';
-    if(status==='pendente'){const p=total-feitos;badge=`<span class="badge-pendente-emb">⏳ ${p} pendente${p>1?'s':''}</span>`;dot=`<div class="dot-pendente"></div>`;}
+    if(status==='pendente'){const p=tt.pendentes;badge=`<span class="badge-pendente-emb">⏳ ${p} pendente${p>1?'s':''}</span>`;dot=`<div class="dot-pendente"></div>`;}
     else if(status==='completo')badge=`<span class="badge-completo-emb">✓ completo</span>`;
     else badge=`<span class="badge-vazio-emb">sem registros</span>`;
     // badge de amostras pendentes (embalados sem amostra separada) — só a partir da data de início
@@ -7057,10 +7080,11 @@ window.embConfirmarLote=embConfirmarLote;
 function renderEmbalagem(){
   document.getElementById('emb-data-topbar').textContent=dataSelEmb||hoje();
   const el=document.getElementById('emb-content');
-  const regs=registros.filter(r=>r.data===dataSelEmb);
-  const manuais=embManual.filter(r=>r.data===(dataSelEmb||hoje()));
-  const total=regs.length+manuais.length;
-  const feitos=regs.filter(r=>r.embalagem&&r.embalagem.feito).length+manuais.length; // manuais são sempre feitos
+  const _tt=embTotaisDoDia(dataSelEmb||hoje());
+  const regs=_tt.regs;
+  const manuais=_tt.manuais;
+  const total=_tt.total;
+  const feitos=_tt.feitos;
   if(!total){el.innerHTML=_vazio('Nenhum produto neste dia.');return;}
   // atalho do admin: fechar um grupo inteiro de uma vez
   const loteBtn=(window.adminMode===true && regs.some(r=>!(r.embalagem&&r.embalagem.feito)))
