@@ -24153,15 +24153,30 @@ let _pmesAno=new Date().getFullYear();
 const PONTO_MES_NOMES=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                        'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-onSnapshot(collection(db,'pontoMeses'), snap=>{
+/* Cada mês guarda 160 pessoas com 30 dias cada — alguns megabytes por
+   documento. Carregar todos ao abrir o app derruba o celular, então só
+   buscamos quando alguém entra no Controle de Ponto. */
+let _pontoCarregado=false, _pontoCarregando=false;
+
+async function pontoCarregarMeses(){
+  if(_pontoCarregado || _pontoCarregando) return;
+  _pontoCarregando=true;
   try{
+    const snap=await getDocs(collection(db,'pontoMeses'));
     pontoMeses={};
     snap.docs.forEach(d=>{ pontoMeses[d.id]=d.data(); });
-    const t=document.querySelector('.screen.active')?.id;
-    if(t==='s-ponto') renderPonto();
-    if(t==='s-ponto-mes') renderPontoMes();
-  }catch(e){ console.error('pontoMeses snap',e); }
-});
+    _pontoCarregado=true;
+  }catch(e){ console.error('pontoMeses',e); }
+  _pontoCarregando=false;
+  const t=document.querySelector('.screen.active')?.id;
+  if(t==='s-ponto') renderPonto();
+  if(t==='s-ponto-mes') renderPontoMes();
+  if(t==='s-ponto-dash') renderPdash();
+}
+window.pontoCarregarMeses=pontoCarregarMeses;
+
+/* Depois de gravar, recarrega para a tela mostrar o novo */
+async function _pontoRecarregar(){ _pontoCarregado=false; await pontoCarregarMeses(); }
 
 /* ── SALVAR OS ARQUIVOS NO MÊS ───────────────────────────────────── */
 async function _pmesSalvarPonto(pessoas, arquivo){
@@ -24176,6 +24191,7 @@ async function _pmesSalvarPonto(pessoas, arquivo){
     await setDoc(doc(db,'pontoMeses',_pmesSel),
       {ponto:pessoas, pontoArquivo:String(arquivo||''), emissoes:emis,
        pontoEm:agora(), pontoPor:_demAutor(), mes:_pmesSel},{merge:true});
+    await _pontoRecarregar();
     const pend=_pmesSemSetor(_pmesSel).length;
     alert('✓ '+pessoas.length+' pessoa(s) importadas.'+
       (pend?('\n\n⚠️ '+pend+' sem setor — importe a lista de colaboradores ou defina à mão.'):''));
@@ -24194,6 +24210,7 @@ async function _pmesSalvarEquipe(equipe, arquivo){
     await setDoc(doc(db,'pontoMeses',_pmesSel),
       {equipe, equipeArquivo:String(arquivo||''), equipeEm:agora(), equipePor:_demAutor(),
        mes:_pmesSel},{merge:true});
+    await _pontoRecarregar();
     const pend=_pmesSemSetor(_pmesSel).length;
     alert('✓ '+equipe.length+' colaborador(es) na lista.'+
       (antes?('\n\nSubstituiu a lista anterior de '+antes+'.'):'')+
@@ -24587,13 +24604,8 @@ let _pontoDe='', _pontoAte='', _pontoSetor='', _pontoBusca='', _pontoAba='resumo
 
 const PONTO_TOL_ATRASO=5;   // minutos de tolerância antes de contar atraso
 
-onSnapshot(collection(db,'pontoImportacoes'), snap=>{
-  try{
-    pontoDados=snap.docs.map(d=>({firestoreId:d.id,...d.data()}))
-      .sort((a,b)=>(b.ts||0)-(a.ts||0));
-    if(document.querySelector('.screen.active')?.id==='s-ponto') renderPonto();
-  }catch(e){ console.error('pontoImportacoes snap',e); }
-});
+/* A coleção antiga de importações foi substituída pelos meses, e era
+   tão pesada quanto. Não é mais carregada. */
 
 onSnapshot(doc(db,'configuracoes','pontoSetores'), snap=>{
   try{
@@ -24602,7 +24614,11 @@ onSnapshot(doc(db,'configuracoes','pontoSetores'), snap=>{
   }catch(e){ console.error('pontoSetores snap',e); }
 });
 
-function pontoAbrir(){ _pontoPessoa=''; _pontoAba='resumo'; goTo('s-ponto'); }
+function pontoAbrir(){
+  _pontoPessoa=''; _pontoAba='resumo';
+  goTo('s-ponto');
+  pontoCarregarMeses();     // só agora os meses são buscados
+}
 window.pontoAbrir=pontoAbrir;
 
 /* ── LEITURA DO PDF ──────────────────────────────────────────────── */
@@ -25137,6 +25153,12 @@ window.pontoExportar=pontoExportar;
 function renderPonto(){
   const el=document.getElementById('ponto-content'); if(!el) return;
   if(_pontoPessoa){ el.innerHTML=_pontoDetalhe(); return; }
+  if(_pontoCarregando && !Object.keys(pontoMeses).length){
+    el.innerHTML='<div class="card" style="text-align:center;padding:30px;">'+
+      '<div style="font-size:28px;">🕐</div>'+
+      '<div style="font-size:14px;font-weight:700;margin-top:8px;">Carregando os meses…</div></div>';
+    return;
+  }
   const temAlgo=Object.keys(pontoMeses).length>0;
   el.innerHTML=_pontoPendencias()+_pontoCalendario()+
     (!temAlgo ? _vazio('Nenhum mês com dados ainda.','Toque num mês acima para importar os arquivos.') : '')+
@@ -26509,18 +26531,35 @@ window._qtPintarFoto=_qtPintarFoto;
 /* Cada foto fica num registro próprio. Se fossem todas no documento do
    dia, 15 produtos com foto passariam do limite de 1 MB do Firestore e
    o dia inteiro deixaria de salvar. */
+/* As fotos NÃO são carregadas todas de uma vez: cada uma tem ~60 KB em
+   texto, e com algumas centenas o celular fica sem memória e o
+   navegador derruba a página. Busca sob demanda, guardando o que já
+   veio. */
 let qualFotos={};
+let _qualFotoBuscando={};
 
-onSnapshot(collection(db,'qualidadeFotos'), snap=>{
+async function _qualCarregarFoto(id){
+  if(qualFotos[id]!==undefined) return qualFotos[id];
+  if(_qualFotoBuscando[id]) return '';
+  _qualFotoBuscando[id]=true;
   try{
-    qualFotos={};
-    snap.docs.forEach(d=>{ qualFotos[d.id]=(d.data()||{}).foto||''; });
-    if(document.querySelector('.screen.active')?.id==='s-qual') renderQual();
-  }catch(e){ console.error('qualidadeFotos snap',e); }
-});
+    const snap=await getDoc(doc(db,'qualidadeFotos',id));
+    qualFotos[id]=snap.exists()?((snap.data()||{}).foto||''):'';
+  }catch(e){ qualFotos[id]=''; }
+  delete _qualFotoBuscando[id];
+  return qualFotos[id];
+}
 
 function _qualFotoId(dia, tipo, cod){ return _qualChave(dia,tipo)+'__'+String(cod); }
 function qualFoto(dia, tipo, cod){ return qualFotos[_qualFotoId(dia,tipo,cod)]||''; }
+
+/* Carrega as fotos dos produtos que estão na tela e redesenha */
+async function _qualCarregarFotosDaTela(dia, tipo, codigos){
+  const falta=codigos.filter(c=>qualFotos[_qualFotoId(dia,tipo,c)]===undefined);
+  if(!falta.length) return;
+  for(const c of falta){ await _qualCarregarFoto(_qualFotoId(dia,tipo,c)); }
+  if(document.querySelector('.screen.active')?.id==='s-qual') renderQual();
+}
 window.qualFoto=qualFoto;
 
 async function _qualGravarFoto(dia, tipo, cod, dataUrl){
@@ -26857,6 +26896,12 @@ window.qualLimparTeste=qualLimparTeste;
 
 function _qualRenderDia(){
   const prods=qualProdutosDoDia(_qualDia, _qualTipo);
+  // busca as fotos só deste dia, e só as que ainda não vieram
+  const comTeste=prods.filter(p=>{
+    const it=(_qualDoc(_qualDia,_qualTipo).itens||{})[p.cod]||{};
+    return it.teste && it.teste.temFoto;
+  }).map(p=>p.cod);
+  if(comTeste.length) _qualCarregarFotosDaTela(_qualDia, _qualTipo, comTeste);
   const d=_qualDoc(_qualDia, _qualTipo);
   const itens=d.itens||{};
   const p=qualPendentes(_qualDia, _qualTipo);
