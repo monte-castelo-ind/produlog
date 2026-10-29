@@ -1893,15 +1893,12 @@
         <div style="flex:1;"><div class="hb-title">Produtos com Inconformidade</div><div class="hb-desc" id="inconf-badge">Produtos com problema</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
-      <button class="mc-sector-card" onclick="tvEmbAbrir()">
-          <div class="mc-sector-icon" style="background:#1e293b;color:#fff;">📺</div>
-          <div class="mc-sector-info">
-            <div class="mc-sector-title">Painel de TV</div>
-            <div class="mc-sector-desc">Prioridades e amostras na tela da parede</div>
-          </div>
-          <span class="mc-sector-arrow">›</span>
-        </button>
-        <button class="home-btn" onclick="window.prioridadesOrigem='s-emb-sel-data';goTo('s-prioridades')" style="border-left-color:#dc2626;margin-bottom:4px;">
+      <button class="home-btn" onclick="tvEmbAbrir()" style="border-left-color:#334155;margin-bottom:4px;">
+        <div class="hb-icon" style="background:#e2e8f0;">📺</div>
+        <div style="flex:1;"><div class="hb-title">Painel de TV</div><div class="hb-desc">Prioridades e amostras na tela da parede</div></div>
+        <span style="color:var(--text-secondary);font-size:20px;">›</span>
+      </button>
+      <button class="home-btn" onclick="window.prioridadesOrigem='s-emb-sel-data';goTo('s-prioridades')" style="border-left-color:#dc2626;margin-bottom:4px;">
         <div class="hb-icon" style="background:#fee2e2;">🚩</div>
         <div style="flex:1;"><div class="hb-title">Prioridades</div><div class="hb-desc" id="prioridades-emb-badge">Produtos prioritários para embalar</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
@@ -1948,7 +1945,7 @@
         <div style="flex:1;"><div class="hb-title">Registro de Presença</div><div class="hb-desc" id="presenca-emb-status">Registrar equipe do dia</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
-      <button class="btn btn-secondary" style="margin-top:4px;" onclick="goTo('s-presenca-reg-emb')">Ver registros de presença</button>
+      <button class="btn btn-secondary" style="width:100%;margin-top:4px;" onclick="goTo('s-presenca-reg-emb')">Ver registros de presença</button>
 
       <div class="section-divider" style="margin-top:14px;">Estoque & Equipamentos</div>
       <button class="home-btn" onclick="goTo('s-estoque-emb')" style="border-left-color:#8b5cf6;margin-bottom:4px;">
@@ -4665,7 +4662,7 @@
       <div class="mc-section-header" style="margin-top:18px;">🔧 Processos e compras</div>
       <div class="mc-sector-grid">
         <button class="mc-sector-card" onclick="tvEmbAbrir()">
-        <div class="mc-sector-icon" style="background:#1e293b;color:#fff;">📺</div>
+        <div class="mc-sector-icon" style="background:#e2e8f0;">📺</div>
         <div class="mc-sector-info">
           <div class="mc-sector-title">Painel de TV</div>
           <div class="mc-sector-desc">Prioridades e amostras na tela da parede</div>
@@ -9865,7 +9862,10 @@ let setorEmEdicao = '';
 
 window.renderSenhasList = () => {
   let html = '';
-  Object.keys(NOMES).filter(setor => setor==='admin').forEach(setor => {
+  /* Antes só o admin aparecia aqui e ninguém mais conseguia ver ou
+     trocar a senha dos setores. Volta a listar todos; o acesso a esta
+     tela já exige ser admin. */
+  Object.keys(NOMES).forEach(setor => {
     const nome = NOMES[setor];
     const senhaAtual = (typeof PINS!=='undefined' && PINS[setor]!=null) ? PINS[setor] : '—';
     const inputId = 'senha-val-'+setor;
@@ -36796,10 +36796,14 @@ function tvEmbAbrir(){
 }
 window.tvEmbAbrir=tvEmbAbrir;
 
-/* As amostras que saem hoje ou amanhã */
+/* As amostras que ainda precisam ser produzidas e saem logo.
+   Usa o mesmo critério da tela de Pedidos Amostra: só status
+   "pendente". Antes eu filtrava por conta própria e trazia amostras
+   velhas que já tinham saído da fila. */
 function tvEmbAmostras(){
-  return (amostras||[]).filter(a=>{
-    if(a.status==='recusada' || a.status==='entregue') return false;
+  const lista=(typeof amPendentes==='function') ? amPendentes()
+            : (amostras||[]).filter(a=>a.status==='pendente');
+  return lista.filter(a=>{
     const d=(typeof amDiasAte==='function')?amDiasAte(a.entrega):null;
     return d!==null && d<=1;      // atrasada, hoje ou amanhã
   }).sort((a,b)=>estDataNum(a.entrega)-estDataNum(b.entrega));
