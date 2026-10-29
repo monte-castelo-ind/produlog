@@ -5662,7 +5662,10 @@ let PINS = { admin:null,
   simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030',
   estoque:'8080', patrick:'9090' };
 const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo' };
-const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒' };
+/* Todo setor que existe em DESTINOS precisa estar aqui: é desta lista
+   que a tela de Gerenciar Senhas tira os setores. Faltavam patrick e
+   estoque, e por isso a senha deles não aparecia para ninguém. */
+const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒', patrick:'Patrick 🧭', estoque:'Estoque 🏭' };
 const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home' };
 
 let pinAtual = '';
@@ -9865,8 +9868,11 @@ window.renderSenhasList = () => {
   /* Antes só o admin aparecia aqui e ninguém mais conseguia ver ou
      trocar a senha dos setores. Volta a listar todos; o acesso a esta
      tela já exige ser admin. */
-  Object.keys(NOMES).forEach(setor => {
-    const nome = NOMES[setor];
+  // qualquer setor que exista em DESTINOS entra na lista, mesmo que
+  // alguém esqueça de cadastrar o nome
+  const todos=[...new Set([...Object.keys(NOMES), ...Object.keys(typeof DESTINOS!=='undefined'?DESTINOS:{})])];
+  todos.forEach(setor => {
+    const nome = NOMES[setor] || setor;
     const senhaAtual = (typeof PINS!=='undefined' && PINS[setor]!=null) ? PINS[setor] : '—';
     const inputId = 'senha-val-'+setor;
     html += `
