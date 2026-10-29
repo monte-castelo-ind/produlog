@@ -787,6 +787,35 @@
     .mc-brand-logo{ cursor:pointer; transition:opacity .12s; }
     .mc-brand-logo:hover{ opacity:.75; }
     .mc-brand-logo:active{ opacity:.55; }
+
+    /* Aviso de prioridade: fica piscando no alto da tela até alguém
+       resolver. É o único alerta do app que acompanha a pessoa em
+       qualquer tela do setor. */
+    .prio-flash{
+      position:fixed; left:0; right:0; z-index:4000;
+      top:env(safe-area-inset-top,0px);
+      background:#dc2626; color:#fff; border:none; width:100%;
+      padding:11px 14px; font-family:inherit; font-size:14px; font-weight:800;
+      display:flex; align-items:center; gap:10px; cursor:pointer;
+      box-shadow:0 2px 10px rgba(220,38,38,.4);
+      animation: prioPisca 1.1s ease-in-out infinite;
+    }
+    @keyframes prioPisca{
+      0%,100%{ background:#dc2626; }
+      50%    { background:#991b1b; }
+    }
+    .prio-flash .pf-n{
+      background:#fff; color:#dc2626; border-radius:99px;
+      min-width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+      font-size:14px; font-weight:900; flex:0 0 auto;
+    }
+    .prio-flash .pf-txt{ flex:1; min-width:0; text-align:left; line-height:1.3; }
+    .prio-flash .pf-sub{ display:block; font-size:11px; font-weight:400; opacity:.9; }
+    /* a tela desce para não ficar embaixo do aviso */
+    body.com-prio .screen > .mc-header{ margin-top:48px; }
+    @media (prefers-reduced-motion: reduce){
+      .prio-flash{ animation:none; background:#dc2626; }
+    }
 </style>
 </head>
 <body>
@@ -1864,7 +1893,15 @@
         <div style="flex:1;"><div class="hb-title">Produtos com Inconformidade</div><div class="hb-desc" id="inconf-badge">Produtos com problema</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
-      <button class="home-btn" onclick="window.prioridadesOrigem='s-emb-sel-data';goTo('s-prioridades')" style="border-left-color:#dc2626;margin-bottom:4px;">
+      <button class="mc-sector-card" onclick="tvEmbAbrir()">
+          <div class="mc-sector-icon" style="background:#1e293b;color:#fff;">📺</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Painel de TV</div>
+            <div class="mc-sector-desc">Prioridades e amostras na tela da parede</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="home-btn" onclick="window.prioridadesOrigem='s-emb-sel-data';goTo('s-prioridades')" style="border-left-color:#dc2626;margin-bottom:4px;">
         <div class="hb-icon" style="background:#fee2e2;">🚩</div>
         <div style="flex:1;"><div class="hb-title">Prioridades</div><div class="hb-desc" id="prioridades-emb-badge">Produtos prioritários para embalar</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
@@ -4488,6 +4525,11 @@
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;" id="ponto-content"></div>
   </div>
 
+  <!-- PAINEL DE TV — EMBALAGEM -->
+  <div class="screen" id="s-tv-emb" style="background:#0f172a;">
+    <div style="flex:1;overflow:hidden;" id="tvemb-content"></div>
+  </div>
+
   <!-- FICHA TÉCNICA DOS PRODUTOS -->
   <div class="screen" id="s-ficha">
     <div class="mc-header">
@@ -4622,7 +4664,15 @@
 
       <div class="mc-section-header" style="margin-top:18px;">🔧 Processos e compras</div>
       <div class="mc-sector-grid">
-        <button class="mc-sector-card" onclick="window.prioridadesOrigem='s-patrick-home';goTo('s-prioridades')">
+        <button class="mc-sector-card" onclick="tvEmbAbrir()">
+        <div class="mc-sector-icon" style="background:#1e293b;color:#fff;">📺</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Painel de TV</div>
+          <div class="mc-sector-desc">Prioridades e amostras na tela da parede</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <button class="mc-sector-card" onclick="window.prioridadesOrigem='s-patrick-home';goTo('s-prioridades')">
           <div class="mc-sector-icon" style="background:#fee2e2;">🔥</div>
           <div class="mc-sector-info">
             <div class="mc-sector-title">Prioridades</div>
@@ -5875,6 +5925,7 @@ function _navRaiz(){
 /* O logo leva para o início de quem está usando: o admin para o painel
    dele, cada setor para a sua própria tela inicial. */
 function irParaInicio(){
+  if(typeof fichaTrancar==='function') fichaTrancar();
   const destino=_navRaiz();
   const atual=_navTelaAtual();
   if(atual===destino){
@@ -6007,6 +6058,7 @@ function goTo(id, semHistorico){
   if(id==='s-cfped' && typeof renderCfPed==='function') renderCfPed();
   if(id==='s-pauta' && typeof renderPauta==='function') renderPauta();
   if(id==='s-qual' && typeof renderQual==='function') renderQual();
+  if(typeof prioAtualizarAviso==='function') prioAtualizarAviso();
   if(id==='s-ficha' && typeof renderFicha==='function') renderFicha();
   if(id==='s-ponto' && typeof renderPonto==='function') renderPonto();
   if(id==='s-ponto-mes' && typeof renderPontoMes==='function') renderPontoMes();
@@ -12671,7 +12723,8 @@ onSnapshot(collection(db,'prioridades'), snap=>{
     const ativa=document.querySelector('.screen.active');
     if(ativa&&ativa.id==='s-prioridades'&&typeof renderPrioridades==='function'){renderPrioridades();}
   }catch(e){ console.error('prioridades snap:',e); }
-});
+    if(typeof prioAtualizarAviso==='function') prioAtualizarAviso();
+  });
 
 // ===== MASSAS E RECHEIOS (Firebase) =====
 let massasFirebase=[]; // Firestore 'massasList'
@@ -25504,8 +25557,6 @@ onSnapshot(collection(db,'solicitacoesFicha'), snap=>{
   }catch(e){ console.error('solicitacoesFicha snap',e); }
 });
 
-function fichaAbrir(){ _fichaSel=''; goTo('s-ficha'); }
-window.fichaAbrir=fichaAbrir;
 
 /* Marca de "já conferi". Fica no aparelho de quem está revisando e não
    muda nada nos dados — é só para não se perder numa lista longa. */
@@ -25629,8 +25680,10 @@ function renderFicha(){
     h+='<button onclick="fichaVerSolicitacoes()" style="width:100%;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:12px;">📨 Ver solicitações anteriores</button>';
   }
 
-  h+='<div style="display:flex;gap:7px;margin-bottom:12px;">'+
-    '<button onclick="fichaVerMultiplos()" style="flex:1;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">⚖️ Múltiplos de produção</button>'+
+  h+='<div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap;">'+
+    '<button onclick="fichaVerMultiplos()" style="flex:1;min-width:150px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">⚖️ Múltiplos de produção</button>'+
+    // quem chegou até aqui já passou pela senha
+    '<button onclick="fichaIrAlteracoes()" style="flex:1;min-width:150px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🧪 Alterações de Receita</button>'+
   '</div>';
 
   h+='<div class="card" style="margin-bottom:12px;">'+
@@ -25972,6 +26025,70 @@ async function fichaRecusar(id){
   }catch(e){ alert('Erro: '+e.message); }
 }
 window.fichaRecusar=fichaRecusar;
+
+/* ── SENHA DA FICHA TÉCNICA ──────────────────────────────────────
+   A ficha dá acesso a todas as receitas e ao pedido de alteração, por
+   isso tem senha própria — mesmo para quem já entrou no setor. Vale
+   até sair do setor. */
+const FICHA_SENHA='8596';
+let _fichaLiberada=false;
+
+function fichaAbrir(){
+  if(window.adminMode===true || _fichaLiberada){
+    _fichaSel=''; goTo('s-ficha'); return;
+  }
+  _fichaPedirSenha();
+}
+window.fichaAbrir=fichaAbrir;
+
+function _fichaPedirSenha(){
+  const ov=document.createElement('div');
+  ov.id='ficha-senha';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:360px;width:100%;padding:22px;">'+
+    '<div style="font-size:30px;text-align:center;">🔒</div>'+
+    '<div style="font-size:17px;font-weight:800;text-align:center;margin-top:7px;">Ficha Técnica</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);text-align:center;margin-top:5px;line-height:1.5;">Esta aba tem todas as receitas e permite pedir alteração. Informe a senha.</div>'+
+    '<input type="tel" id="ficha-senha-campo" inputmode="numeric" maxlength="8" placeholder="• • • •" autocomplete="off" '+
+      'style="width:100%;padding:15px;border:2px solid var(--border-md,#cbd5e1);border-radius:11px;font-size:26px;font-weight:800;text-align:center;letter-spacing:.3em;font-family:inherit;box-sizing:border-box;margin-top:16px;">'+
+    '<div id="ficha-senha-erro" style="font-size:12px;color:#dc2626;font-weight:700;text-align:center;margin-top:7px;min-height:16px;"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:10px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'ficha-senha\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="fichaConferirSenha()">Entrar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  const i=document.getElementById('ficha-senha-campo');
+  if(i){
+    i.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); fichaConferirSenha(); } });
+    setTimeout(()=>i.focus(),80);
+  }
+}
+
+/* A tela de alterações de receita, sem pedir o PIN do setor: quem
+   chegou na ficha já informou a senha dela. */
+function fichaIrAlteracoes(){
+  goTo('s-alt-home');
+}
+window.fichaIrAlteracoes=fichaIrAlteracoes;
+
+function fichaConferirSenha(){
+  const v=((document.getElementById('ficha-senha-campo')||{}).value||'').trim();
+  if(v===FICHA_SENHA){
+    _fichaLiberada=true;
+    document.getElementById('ficha-senha')?.remove();
+    _fichaSel=''; goTo('s-ficha');
+    return;
+  }
+  const e=document.getElementById('ficha-senha-erro');
+  if(e) e.textContent='Senha incorreta.';
+  const i=document.getElementById('ficha-senha-campo');
+  if(i){ i.value=''; i.focus(); }
+}
+window.fichaConferirSenha=fichaConferirSenha;
+
+/* ao trocar de setor, a senha é pedida de novo */
+function fichaTrancar(){ _fichaLiberada=false; }
+window.fichaTrancar=fichaTrancar;
 
 function _fichaPendentes(){ return (solicitacoesFicha||[]).filter(x=>x.status==='pendente'); }
 
@@ -36649,6 +36766,205 @@ async function excluirDevolucao(firestoreId){
 }
 
 // ===== PRIORIDADES =====
+/* ══════════════════════════════════════════════════════════════════
+   AVISO DE PRIORIDADE
+   Prioridade parada é pedido urgente que ninguém viu. O aviso pisca no
+   alto da tela em qualquer página do setor, até alguém resolver.
+   Aparece para a embalagem (quem resolve) e para o Patrick (quem
+   acompanha).
+   ══════════════════════════════════════════════════════════════════ */
+const PRIO_SETORES=['embalagem','patrick'];
+
+/* ══════════════════════════════════════════════════════════════════
+   PAINEL DE TV — EMBALAGEM
+   Fica numa tela na parede: metade com as prioridades esperando, a
+   outra com as amostras de hoje e amanhã. Letras grandes, para ler
+   de longe.
+   ══════════════════════════════════════════════════════════════════ */
+let _tvEmbTimer=null;
+
+function tvEmbAbrir(){
+  goTo('s-tv-emb');
+  renderTvEmb();
+  if(_tvEmbTimer) clearInterval(_tvEmbTimer);
+  _tvEmbTimer=setInterval(()=>{
+    if(document.querySelector('.screen.active')?.id==='s-tv-emb') renderTvEmb();
+    else { clearInterval(_tvEmbTimer); _tvEmbTimer=null; }
+  }, 20000);
+  // tela cheia é o normal num painel de parede
+  try{ if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); }catch(e){}
+}
+window.tvEmbAbrir=tvEmbAbrir;
+
+/* As amostras que saem hoje ou amanhã */
+function tvEmbAmostras(){
+  return (amostras||[]).filter(a=>{
+    if(a.status==='recusada' || a.status==='entregue') return false;
+    const d=(typeof amDiasAte==='function')?amDiasAte(a.entrega):null;
+    return d!==null && d<=1;      // atrasada, hoje ou amanhã
+  }).sort((a,b)=>estDataNum(a.entrega)-estDataNum(b.entrega));
+}
+
+function renderTvEmb(){
+  const el=document.getElementById('tvemb-content'); if(!el) return;
+  const prio=prioPendentes().slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
+  const am=tvEmbAmostras();
+  const agora_=new Date();
+  const hora=String(agora_.getHours()).padStart(2,'0')+':'+String(agora_.getMinutes()).padStart(2,'0');
+
+  el.innerHTML=
+    '<div style="height:100%;display:flex;flex-direction:column;color:#f1f5f9;font-family:inherit;">'+
+      // cabeçalho
+      '<div style="display:flex;align-items:center;gap:16px;padding:14px 26px;background:#1e293b;border-bottom:2px solid #334155;">'+
+        '<span style="font-size:26px;">📦</span>'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:24px;font-weight:900;letter-spacing:-.01em;">EMBALAGEM</span>'+
+          '<span style="display:block;font-size:13px;color:#94a3b8;">'+hoje()+'</span></span>'+
+        '<span style="font-size:34px;font-weight:900;color:#94a3b8;">'+hora+'</span>'+
+        '<button onclick="tvEmbSair()" style="background:transparent;border:1px solid #475569;color:#94a3b8;border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;font-family:inherit;">sair</button>'+
+      '</div>'+
+
+      '<div style="flex:1;display:grid;grid-template-columns:1.25fr .75fr;gap:0;overflow:hidden;">'+
+        _tvEmbPrioridades(prio)+
+        _tvEmbAmostras(am)+
+      '</div>'+
+    '</div>';
+}
+window.renderTvEmb=renderTvEmb;
+
+function _tvEmbPrioridades(prio){
+  const n=prio.length;
+  let h='<div style="padding:18px 22px;overflow:hidden;display:flex;flex-direction:column;'+(n?'background:#450a0a;':'')+'">'+
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">'+
+      '<span style="font-size:22px;">'+(n?'🔥':'✓')+'</span>'+
+      '<span style="flex:1;min-width:0;font-size:19px;font-weight:900;letter-spacing:.04em;color:'+(n?'#fca5a5':'#86efac')+';">PRIORIDADES</span>'+
+      (n?'<span style="background:#dc2626;color:#fff;border-radius:99px;min-width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;">'+n+'</span>':'')+
+    '</div>';
+
+  if(!n){
+    return h+'<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#64748b;">'+
+      '<div style="font-size:58px;">✓</div>'+
+      '<div style="font-size:22px;font-weight:700;margin-top:10px;color:#86efac;">Nenhuma prioridade</div>'+
+      '<div style="font-size:14px;margin-top:4px;">tudo em dia</div></div></div>';
+  }
+
+  // cabem umas 6 com letra grande; o resto vira contagem
+  const mostrar=prio.slice(0,6);
+  h+='<div style="flex:1;overflow:hidden;">'+
+    mostrar.map((p,i)=>{
+      const min=p.timestamp?Math.floor((Date.now()-p.timestamp)/60000):0;
+      const espera=min<60?(min+' min'):(Math.floor(min/60)+'h'+String(min%60).padStart(2,'0'));
+      const velho=min>=60;
+      return '<div style="display:flex;align-items:center;gap:14px;background:'+(velho?'#7f1d1d':'#1e293b')+';border-radius:12px;padding:13px 16px;margin-bottom:9px;'+(velho?'border:2px solid #dc2626;':'')+'">'+
+        '<span style="flex:0 0 auto;font-size:15px;font-weight:900;color:#fca5a5;width:24px;">'+(i+1)+'</span>'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:22px;font-weight:800;line-height:1.2;">'+(p.produto||'')+'</span>'+
+          '<span style="display:block;font-size:13px;color:#94a3b8;margin-top:2px;">'+
+            (p.solicitanteSetor||'')+' · esperando há '+espera+'</span></span>'+
+        '<span style="flex:0 0 auto;text-align:right;">'+
+          '<span style="display:block;font-size:26px;font-weight:900;color:#fca5a5;">'+(p.qtd||'')+'</span>'+
+          '<span style="display:block;font-size:12px;color:#94a3b8;">'+(p.unidade||'pct')+'</span></span>'+
+      '</div>';
+    }).join('')+
+    (n>mostrar.length
+      ? '<div style="text-align:center;font-size:16px;font-weight:700;color:#fca5a5;margin-top:4px;">+ '+(n-mostrar.length)+' aguardando</div>'
+      : '')+
+  '</div></div>';
+  return h;
+}
+
+function _tvEmbAmostras(am){
+  let h='<div style="padding:18px 22px;background:#1e293b;border-left:2px solid #334155;overflow:hidden;display:flex;flex-direction:column;">'+
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">'+
+      '<span style="font-size:22px;">🧪</span>'+
+      '<span style="flex:1;min-width:0;font-size:19px;font-weight:900;letter-spacing:.04em;color:#93c5fd;">AMOSTRAS</span>'+
+      (am.length?'<span style="background:#2563eb;color:#fff;border-radius:99px;min-width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:900;">'+am.length+'</span>':'')+
+    '</div>';
+
+  if(!am.length){
+    return h+'<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#64748b;">'+
+      '<div style="font-size:44px;">🧪</div>'+
+      '<div style="font-size:17px;font-weight:700;margin-top:8px;">Nenhuma para hoje</div>'+
+      '<div style="font-size:13px;margin-top:3px;">nem para amanhã</div></div></div>';
+  }
+
+  h+='<div style="flex:1;overflow:hidden;">'+
+    am.slice(0,5).map(a=>{
+      const d=(typeof amDiasAte==='function')?amDiasAte(a.entrega):null;
+      const atrasada=d!==null && d<0;
+      const hoje0=d===0;
+      const cor=atrasada?'#fca5a5':(hoje0?'#fcd34d':'#93c5fd');
+      const quando=atrasada?('atrasada '+Math.abs(d)+'d'):(hoje0?'HOJE':'amanhã');
+      return '<div style="background:'+(atrasada?'#7f1d1d':'#0f172a')+';border-radius:12px;padding:12px 14px;margin-bottom:9px;'+(atrasada?'border:2px solid #dc2626;':'')+'">'+
+        '<div style="display:flex;align-items:center;gap:9px;">'+
+          '<span style="flex:1;min-width:0;font-size:18px;font-weight:800;line-height:1.2;">'+(a.cliente||'')+'</span>'+
+          '<span style="flex:0 0 auto;font-size:13px;font-weight:900;color:'+cor+';background:#1e293b;border-radius:99px;padding:4px 11px;white-space:nowrap;">'+quando+'</span>'+
+        '</div>'+
+        '<div style="font-size:13px;color:#94a3b8;margin-top:4px;">'+
+          ((a.itens||[]).length)+' produto(s) · '+(a.totalUn||0)+' un</div>'+
+        (a.obs?'<div style="font-size:13px;color:#fcd34d;margin-top:4px;line-height:1.35;">📝 '+String(a.obs).slice(0,70)+'</div>':'')+
+      '</div>';
+    }).join('')+
+    (am.length>5?'<div style="text-align:center;font-size:14px;color:#93c5fd;">+ '+(am.length-5)+'</div>':'')+
+  '</div></div>';
+  return h;
+}
+
+function tvEmbSair(){
+  if(_tvEmbTimer){ clearInterval(_tvEmbTimer); _tvEmbTimer=null; }
+  try{ if(document.exitFullscreen && document.fullscreenElement) document.exitFullscreen(); }catch(e){}
+  voltar();
+}
+window.tvEmbSair=tvEmbSair;
+
+function prioPendentes(){
+  return (prioridades||[]).filter(p=>!p.embalado);
+}
+window.prioPendentes=prioPendentes;
+
+function _prioDeveMostrar(){
+  const setor=window.setorAtual||'';
+  if(PRIO_SETORES.indexOf(setor)<0) return false;
+  const tela=document.querySelector('.screen.active')?.id;
+  // na própria tela de prioridades o aviso só atrapalha
+  if(tela==='s-prioridades' || tela==='s-tv-emb') return false;
+  return prioPendentes().length>0;
+}
+
+function prioAtualizarAviso(){
+  const antigo=document.getElementById('prio-flash');
+  if(!_prioDeveMostrar()){
+    if(antigo) antigo.remove();
+    document.body.classList.remove('com-prio');
+    return;
+  }
+  const pend=prioPendentes();
+  const n=pend.length;
+  // o mais antigo primeiro: é o que está esperando há mais tempo
+  const antigos=pend.slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
+  const primeiro=antigos[0];
+  const txt=n===1
+    ? '1 produto com prioridade esperando'
+    : n+' produtos com prioridade esperando';
+  const sub=primeiro
+    ? (primeiro.produto||'')+(n>1?(' e mais '+(n-1)):'')
+    : '';
+
+  let el=antigo;
+  if(!el){
+    el=document.createElement('button');
+    el.id='prio-flash';
+    el.className='prio-flash';
+    el.onclick=()=>{ goTo('s-prioridades'); if(typeof renderPrioridades==='function') renderPrioridades(); };
+    document.body.appendChild(el);
+  }
+  el.innerHTML='<span class="pf-n">'+n+'</span>'+
+    '<span class="pf-txt">'+txt+'<span class="pf-sub">'+sub+'</span></span>'+
+    '<span style="flex:0 0 auto;font-size:18px;">›</span>';
+  document.body.classList.add('com-prio');
+}
+window.prioAtualizarAviso=prioAtualizarAviso;
+
 function renderPrioridades(){
   const el=document.getElementById('prioridades-content');
   if(!el)return;
