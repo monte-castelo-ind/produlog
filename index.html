@@ -26574,35 +26574,103 @@ function _qualRenderCalendario(){
    A foto é reduzida e comprimida antes de guardar, porque vai junto do
    registro no banco (limite de 1 MB por documento). 800px e qualidade
    média dão cerca de 80 KB, o bastante para documentar o problema. */
-const QUAL_FOTO_LADO=800;
+const QUAL_FOTO_LADO=640;
 const QUAL_FOTO_MAX=220*1024;   // acima disso, comprime mais
 
-function _qualComprimir(file){
-  return new Promise((resolve, reject)=>{
-    if(!file || !/^image\//.test(file.type||'')){ reject(new Error('Escolha uma imagem.')); return; }
+/* Reduz a foto para caber no banco.
+
+   A versão anterior chamava toDataURL num laço, re-codificando a
+   imagem inteira até cinco vezes — num tablet com foto de 12 MP isso
+   trava a tela por vários segundos. Agora:
+   - createImageBitmap faz a decodificação fora da thread da interface
+     quando o navegador tem;
+   - a redução é progressiva (pela metade), que é mais rápida e dá um
+     resultado melhor que um salto único;
+   - a codificação usa toBlob, que é assíncrono, e a qualidade é
+     estimada pelo tamanho em vez de tentativa e erro. */
+function _qualDecodificar(file){
+  if(window.createImageBitmap){
+    return createImageBitmap(file).catch(()=>_qualImgPorUrl(file));
+  }
+  return _qualImgPorUrl(file);
+}
+
+function _qualImgPorUrl(file){
+  return new Promise((resolve,reject)=>{
     const url=URL.createObjectURL(file);
     const img=new Image();
-    img.onload=()=>{
-      try{
-        let {width:w, height:h}=img;
-        const maior=Math.max(w,h);
-        if(maior>QUAL_FOTO_LADO){ const f=QUAL_FOTO_LADO/maior; w=Math.round(w*f); h=Math.round(h*f); }
-        const c=document.createElement('canvas');
-        c.width=w; c.height=h;
-        const ctx=c.getContext('2d');
-        ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);   // fundo branco para PNG transparente
-        ctx.drawImage(img, 0, 0, w, h);
-        // baixa a qualidade até caber
-        let q=0.72, out=c.toDataURL('image/jpeg', q);
-        while(out.length>QUAL_FOTO_MAX && q>0.3){ q-=0.1; out=c.toDataURL('image/jpeg', q); }
-        URL.revokeObjectURL(url);
-        if(out.length>QUAL_FOTO_MAX*1.5){ reject(new Error('A imagem ficou grande demais. Tente outra foto.')); return; }
-        resolve(out);
-      }catch(e){ URL.revokeObjectURL(url); reject(e); }
-    };
+    img.onload=()=>{ img._url=url; resolve(img); };
     img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Não consegui ler a imagem.')); };
     img.src=url;
   });
+}
+
+function _qualParaDataUrl(canvas, q){
+  return new Promise(resolve=>{
+    if(canvas.toBlob){
+      canvas.toBlob(b=>{
+        if(!b){ resolve(canvas.toDataURL('image/jpeg', q)); return; }
+        const fr=new FileReader();
+        fr.onload=()=>resolve(fr.result);
+        fr.onerror=()=>resolve(canvas.toDataURL('image/jpeg', q));
+        fr.readAsDataURL(b);
+      }, 'image/jpeg', q);
+    } else {
+      resolve(canvas.toDataURL('image/jpeg', q));
+    }
+  });
+}
+
+async function _qualComprimir(file){
+  if(!file || !/^image\//.test(file.type||'')) throw new Error('Escolha uma imagem.');
+  const src=await _qualDecodificar(file);
+  try{
+    let w=src.width, h=src.height;
+    const maior=Math.max(w,h);
+    const alvo=QUAL_FOTO_LADO;
+
+    let canvas=document.createElement('canvas');
+    let ctx=canvas.getContext('2d');
+
+    if(maior<=alvo){
+      canvas.width=w; canvas.height=h;
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+      ctx.drawImage(src,0,0,w,h);
+    } else {
+      /* reduz pela metade até chegar perto, depois ajusta: evita o
+         serrilhado do salto direto e é mais leve para o aparelho */
+      let cw=w, ch=h;
+      canvas.width=cw; canvas.height=ch;
+      ctx.drawImage(src,0,0,cw,ch);
+      while(Math.max(cw,ch)/2 > alvo){
+        const nw=Math.max(1,Math.round(cw/2)), nh=Math.max(1,Math.round(ch/2));
+        const tmp=document.createElement('canvas');
+        tmp.width=nw; tmp.height=nh;
+        tmp.getContext('2d').drawImage(canvas,0,0,nw,nh);
+        canvas=tmp; ctx=canvas.getContext('2d');
+        cw=nw; ch=nh;
+        await new Promise(r=>setTimeout(r,0));   // deixa a tela respirar
+      }
+      const f=alvo/Math.max(cw,ch);
+      const fw=Math.max(1,Math.round(cw*f)), fh=Math.max(1,Math.round(ch*f));
+      const fim=document.createElement('canvas');
+      fim.width=fw; fim.height=fh;
+      const fctx=fim.getContext('2d');
+      fctx.fillStyle='#fff'; fctx.fillRect(0,0,fw,fh);
+      fctx.drawImage(canvas,0,0,fw,fh);
+      canvas=fim;
+    }
+
+    let out=await _qualParaDataUrl(canvas, 0.7);
+    // no máximo duas tentativas a mais, em vez de cinco
+    if(out.length>QUAL_FOTO_MAX) out=await _qualParaDataUrl(canvas, 0.5);
+    if(out.length>QUAL_FOTO_MAX) out=await _qualParaDataUrl(canvas, 0.35);
+    if(out.length>QUAL_FOTO_MAX*1.5) throw new Error('A imagem ficou grande demais. Tente outra foto.');
+    return out;
+  } finally {
+    if(src && src.close) src.close();                 // ImageBitmap
+    if(src && src._url) URL.revokeObjectURL(src._url); // Image
+  }
 }
 
 async function qualEscolherFoto(inp){
@@ -26611,10 +26679,14 @@ async function qualEscolherFoto(inp){
   if(!f) return;
   const ov=document.getElementById('qual-teste'); if(!ov) return;
   const area=document.getElementById('qt-foto-area');
-  if(area) area.innerHTML='<div style="padding:16px;text-align:center;color:var(--text-secondary);font-size:13px;">Preparando a foto...</div>';
+  if(area) area.innerHTML='<div style="padding:20px;text-align:center;">'+
+    '<div style="font-size:26px;">📷</div>'+
+    '<div style="font-size:13px;font-weight:700;margin-top:6px;">Preparando a foto…</div>'+
+    '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">pode levar alguns segundos</div></div>';
+  await new Promise(r=>setTimeout(r,30));   // deixa o aviso aparecer antes de travar o processamento
   try{
     const dataUrl=await _qualComprimir(f);
-    ov.dataset.foto=dataUrl;
+    _qtFotoAtual=dataUrl;
     _qtPintarFoto();
   }catch(e){
     alert(e.message||'Não consegui usar essa imagem.');
@@ -26623,18 +26695,25 @@ async function qualEscolherFoto(inp){
 }
 window.qualEscolherFoto=qualEscolherFoto;
 
+function _qtLimparFoto(){ _qtFotoAtual=''; }
+window._qtLimparFoto=_qtLimparFoto;
+
 function qualTirarFoto(){
   const ov=document.getElementById('qual-teste'); if(!ov) return;
   if(!confirm('Tirar a foto deste teste?')) return;
-  ov.dataset.foto='';
+  _qtFotoAtual='';
   _qtPintarFoto();
 }
 window.qualTirarFoto=qualTirarFoto;
 
+/* A foto do teste em aberto. Antes ficava num atributo HTML, e 200 KB
+   de texto no DOM deixam a tela lenta a cada redesenho. */
+let _qtFotoAtual='';
+
 function _qtPintarFoto(){
   const ov=document.getElementById('qual-teste'); if(!ov) return;
   const area=document.getElementById('qt-foto-area'); if(!area) return;
-  const f=ov.dataset.foto||'';
+  const f=_qtFotoAtual||'';
   area.innerHTML = f
     ? '<div style="position:relative;">'+
         '<img src="'+f+'" alt="foto do produto" style="width:100%;max-height:260px;object-fit:contain;background:#f1f5f9;border-radius:10px;display:block;">'+
@@ -26891,7 +26970,7 @@ function qualAbrirTeste(cod){
   ov.dataset.cod=cod;
   ov.dataset.aval=t.avaliacao||'';
   ov.dataset.probs=JSON.stringify(probs);
-  ov.dataset.foto=qualFoto(_qualDia,_qualTipo,cod)||'';
+  _qtFotoAtual=qualFoto(_qualDia,_qualTipo,cod)||'';
   ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
     '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
@@ -26987,7 +27066,7 @@ async function qualSalvarTeste(){
   if(aval!=='ok' && !probs.length && !obs){
     if(!confirm('Você marcou que o produto não ficou no padrão, mas não disse o que houve.\n\nSalvar assim mesmo?')) return;
   }
-  const foto=ov.dataset.foto||'';
+  const foto=_qtFotoAtual||'';
   const peso=parseFloat(((document.getElementById('qt-peso')||{}).value||'').replace(',','.'))||0;
   const dsv=qualDesvioPeso(cod, peso);
   const fotoAntes=qualFoto(_qualDia,_qualTipo,cod);
@@ -27010,7 +27089,7 @@ async function qualLimparTeste(cod){
     (av?('\n\nEstá como: '+av.nome+(t.por?(' · '+t.por):'')):'')+
     (qualFoto(_qualDia,_qualTipo,cod)?'\n\nA foto também será apagada.':'')+
     '\n\nO produto volta para a lista de pendentes.')) return;
-  document.getElementById('qual-teste')?.remove();
+  document.getElementById('qual-teste')?.remove(); _qtLimparFoto();
   await _qualGravarFoto(_qualDia,_qualTipo,cod,'');
   // null limpa o teste sem tocar nos outros produtos
   await _qualGravarItem(cod, {teste:null});
