@@ -19115,11 +19115,35 @@ function eligoCodMov(tipo, operacao){
 }
 window.eligoCodMov=eligoCodMov;
 
+/* O código como está no cadastro, com os zeros à esquerda.
+
+   Pelo caminho (planilha colada, comparação, gravação) um código
+   "0123" vira "123" com facilidade — basta passar por um campo
+   numérico uma vez. O ELIGO recusa o lançamento quando isso acontece.
+   Então, na hora de enviar, buscamos o código oficial no cadastro. */
+function eligoCodOficial(cod){
+  const c=String(cod==null?'':cod).trim();
+  if(!c) return '';
+  const norm=(typeof _ajRefNormCod==='function') ? _ajRefNormCod : (x=>String(x||'').replace(/^0+/,'')||'0');
+  const alvo=norm(c);
+  const listas=[
+    (typeof PRODUTOS!=='undefined'?PRODUTOS:[]),
+    (typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[]),
+    (typeof produtosConfFirebase!=='undefined'?produtosConfFirebase:[])
+  ];
+  for(const lista of listas){
+    const achou=(lista||[]).find(p=>norm(p.cod)===alvo);
+    if(achou && String(achou.cod||'').trim()) return String(achou.cod).trim();
+  }
+  return c;   // não está no cadastro: manda como veio
+}
+window.eligoCodOficial=eligoCodOficial;
+
 async function eligoLancar(produto, quantidade, tipo, dataBR, observacoes, operacao){
   const senha=eligoSenha();
   if(senha===null) return {ok:false, cancelado:true};
   const envio={
-    ref:'1', produto:String(produto||''), quantidade:Math.abs(Number(quantidade)||0),
+    ref:'1', produto:eligoCodOficial(produto), quantidade:Math.abs(Number(quantidade)||0),
     tipo, data_movimento:eligoData(dataBR), observacoes:String(observacoes||'').slice(0,250)
   };
   const cod=eligoCodMov(tipo, operacao);
@@ -19446,15 +19470,49 @@ window.laMarcarAte=laMarcarAte;
 
 /* ============ TELA 2: SOLICITAR (escritório) ============ */
 function _laProdutosUnicos(){
+  /* A lista sai dos registros de produção, mas o CÓDIGO vem do
+     cadastro de produtos. O registro guarda o código como foi digitado
+     na época e um "03" pode ter virado "3" pelo caminho; o cadastro é
+     a fonte oficial, e é lá que o ELIGO espera encontrar. */
   const m={};
   (registros||[]).forEach(r=>{
     const nome=(r.produto||'').trim(); if(!nome) return;
     const k=_normNome(nome);
     if(!m[k]) m[k]={cod:r.cod||'',nome:nome};
-    else if(!m[k].cod && r.cod) m[k].cod=r.cod; // usa o código quando aparecer em algum registro
+    else if(!m[k].cod && r.cod) m[k].cod=r.cod;
   });
-  return Object.values(m).sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
+  return Object.values(m)
+    .map(p=>({...p, cod:_laCodDoCadastro(p.cod, p.nome)}))
+    .sort((a,b)=>String(a.nome).localeCompare(String(b.nome)));
 }
+
+/* O código oficial: procura no cadastro pelo código e, se não achar,
+   pelo nome do produto. */
+function _laCodDoCadastro(cod, nome){
+  const listas=[
+    (typeof PRODUTOS!=='undefined'?PRODUTOS:[]),
+    (typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[]),
+    (typeof produtosConfFirebase!=='undefined'?produtosConfFirebase:[])
+  ];
+  const norm=(typeof _ajRefNormCod==='function') ? _ajRefNormCod : (x=>String(x||'').replace(/^0+/,'')||'0');
+  const alvo=String(cod==null?'':cod).trim();
+  if(alvo){
+    for(const l of listas){
+      const achou=(l||[]).find(p=>norm(p.cod)===norm(alvo));
+      if(achou && String(achou.cod||'').trim()) return String(achou.cod).trim();
+    }
+  }
+  // sem código no registro: tenta pelo nome
+  const n=_normNome(nome||'');
+  if(n){
+    for(const l of listas){
+      const achou=(l||[]).find(p=>_normNome(p.nome)===n);
+      if(achou && String(achou.cod||'').trim()) return String(achou.cod).trim();
+    }
+  }
+  return alvo;
+}
+window._laCodDoCadastro=_laCodDoCadastro;
 let _laBuscaProd='', _laProdSel='', _laFiltroSt='todas', _laFiltroPer='7';
 
 // digitar não redesenha a tela toda: só a lista de sugestões.
