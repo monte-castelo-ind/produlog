@@ -20865,20 +20865,28 @@ function laPendentesDoRefaz(){
   (laAjustes||[]).forEach(a=>{
     if(a.origemRefaz) jaTem[a.origemRefaz]=true;
   });
+  /* Traz todos os pendentes, positivos e negativos. Antes só os
+     positivos vinham, e aí o número daqui nunca batia com o do
+     refazimento — ficavam itens parados sem ninguém entender por quê.
+     Saldo positivo: entrou mais do que saiu, falta dar saída.
+     Saldo negativo: saiu mais do que entrou, falta dar entrada. */
   return _ajRefPendentes
     .filter(p=>{
       const saldo=Number(p.saldo)||0;
-      // saldo POSITIVO = entrou mais do que saiu = FALTA DAR SAÍDA (é o que importamos).
-      // Saldo negativo é falta de entrada, que não é o par que o app controla.
-      if(saldo<=0) return false;
+      if(saldo===0) return false;                                    // sem pendência
       const chave=String(p.cod)+'|'+String(p.data);
       if(_ajRefResolvidos && _ajRefResolvidos[chave]) return false;   // já marcado como resolvido lá
       if(jaTem[chave]) return false;
       return true;
     })
-    .map(p=>({cod:String(p.cod), nome:p.nome||'', data:p.data, qtd:Number(p.saldo)||0,
+    .map(p=>{
+      const saldo=Number(p.saldo)||0;
+      return {cod:String(p.cod), nome:p.nome||'', data:p.data,
+              qtd:Math.abs(saldo), saldo,
+              sentido: saldo>0 ? 'saida' : 'entrada',
               entrada:Number(p.entrada)||0, saida:Number(p.saida)||0,
-              chave:String(p.cod)+'|'+String(p.data)}));
+              chave:String(p.cod)+'|'+String(p.data)};
+    });
 }
 
 
@@ -20913,7 +20921,7 @@ function laiRender(){
   const lista=laPendentesDoRefaz();
   if(!lista.length){
     box.innerHTML='<div style="padding:22px;text-align:center;color:var(--text-secondary);font-size:13px;">'+
-      'Nada a trazer.<br><br>Ou o refazimento não tem pendentes de saída, ou todos já foram importados.</div>';
+      'Nada a trazer.<br><br>Ou o refazimento não tem pendentes, ou todos já foram importados.</div>';
     document.getElementById('lai-rodape').innerHTML='<button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'lai-modal\').remove()">Fechar</button>';
     return;
   }
@@ -20932,8 +20940,8 @@ function laiRender(){
           '<span style="flex:0 0 auto;font-size:11px;font-weight:700;color:var(--text-secondary);width:40px;">'+p.cod+'</span>'+
           '<span style="flex:1;min-width:0;"><span style="font-size:13px;font-weight:600;display:block;">'+p.nome+'</span>'+
             '<span style="font-size:10px;color:var(--text-muted);">entrou '+p.entrada+' · saiu '+p.saida+'</span></span>'+
-          '<span style="flex:0 0 auto;text-align:right;"><span style="font-size:15px;font-weight:900;color:#d97706;display:block;">'+p.qtd+'</span>'+
-            '<span style="font-size:9px;color:var(--text-muted);">falta sair</span></span>'+
+          '<span style="flex:0 0 auto;text-align:right;"><span style="font-size:15px;font-weight:900;color:'+(p.sentido==='entrada'?'#2563eb':'#d97706')+';display:block;">'+p.qtd+'</span>'+
+            '<span style="font-size:9px;color:var(--text-muted);">'+(p.sentido==='entrada'?'falta entrar':'falta sair')+'</span></span>'+
         '</div>';
       }).join('');
   }).join('');
@@ -20956,7 +20964,12 @@ async function laiImportar(){
   const lista=laPendentesDoRefaz().filter(p=>_laiSel[p.chave]);
   if(!lista.length) return;
   const total=lista.reduce((t,p)=>t+p.qtd,0);
-  if(!confirm('Trazer '+lista.length+' ajuste(s) do refazimento?\n\nTotal: '+total+' pct a estornar.\n\nO app não lança nada agora — a entrada já foi feita. Ele passa a controlar a saída.')) return;
+  const saidas=lista.filter(p=>p.sentido!=='entrada');
+  const entradas=lista.filter(p=>p.sentido==='entrada');
+  if(!confirm('Trazer '+lista.length+' ajuste(s) do refazimento?\n\n'+
+    (saidas.length?(saidas.length+' falta dar saída · '+saidas.reduce((t,p)=>t+p.qtd,0)+' pct\n'):'')+
+    (entradas.length?(entradas.length+' falta dar entrada · '+entradas.reduce((t,p)=>t+p.qtd,0)+' pct\n'):'')+
+    '\nTotal: '+total+' pct.\n\nO app não lança nada agora — ele passa a controlar o acerto.')) return;
 
   let ok=0, erros=[], semProducao=0;
   for(const p of lista){
@@ -20977,7 +20990,10 @@ async function laiImportar(){
           status:'aberto', criadoEm:agora(), criadoPor:_demAutor(), timestamp:Date.now(),
           entradaManual:true, eligoEntradaId:'', eligoEntradaErro:'',
           origemRefaz:p.chave, dataAjusteErp:p.data||'',
-          obsManual:'importado do refazimento'+(p.data?(' · ajuste lançado em '+p.data):'')
+          // guarda de que lado estava a diferença, para não se perder
+          refazSentido:p.sentido||'saida', refazSaldo:p.saldo,
+          obsManual:'importado do refazimento'+(p.data?(' · ajuste lançado em '+p.data):'')+
+            (p.sentido==='entrada'?' · saldo negativo: faltava dar ENTRADA no ERP':'')
         });
         if(!parte.data) semProducao++;
       }
