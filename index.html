@@ -11497,6 +11497,11 @@ function renderContainerItem(){
       <button class="btn btn-secondary" onclick="iniciarContainerSaida()" ${!lotesAtivos.length?'disabled style="opacity:0.5;"':''}>− Saída</button>
     </div>`;
 
+  // o admin corrige o total quando a contagem física não bate
+  if(window.adminMode===true && lotesAtivos.length){
+    html+=`<button class="btn btn-secondary" style="width:100%;margin-bottom:14px;border-color:var(--mc-dourado,#d97706);color:#b45309;" onclick="ctAjustarItem()">⚖️ Corrigir o estoque</button>`;
+  }
+
   if(lotesAtivos.length>0){
     html+=`<div class="section-divider">Lotes em estoque</div>`;
     lotesAtivos.forEach(function(l){
@@ -11507,6 +11512,7 @@ function renderContainerItem(){
           <span class="reg-produto">Lote ${l.data}</span>
           <div style="display:flex;align-items:center;gap:6px;">
             <span style="font-size:15px;font-weight:700;color:#059669;">${(l.saldo||0).toFixed(2)} kg</span>
+            ${window.adminMode===true?`<button data-fid="${l.firestoreId}" onclick="ctAjustarLote(this.dataset.fid)" title="Corrigir o saldo deste lote" style="background:none;border:1px solid #fcd34d;color:#b45309;font-size:11px;padding:3px 7px;border-radius:6px;cursor:pointer;font-family:inherit;">⚖️</button>`:''}
             <button class="btn-del-admin" data-fid="${l.firestoreId}" onclick="excluirLoteContainer(this.dataset.fid)" style="background:none;border:1px solid #ef9a9a;color:#c62828;font-size:11px;padding:3px 7px;border-radius:6px;cursor:pointer;font-family:inherit;">🗑</button>
           </div>
         </div>
@@ -11649,6 +11655,122 @@ function selecionarLoteSaida(fid){
   containerLoteSaida=fid;
   renderContainerSaida();
 }
+
+/* ── AJUSTAR O SALDO DO CONTÊINER ────────────────────────────────
+   O estoque interno já tinha isso; o contêiner não. Como o saldo aqui
+   vem dos lotes, o ajuste é feito num lote específico — assim a
+   rastreabilidade por lote e a validade continuam valendo.
+   Nada é apagado: a diferença vira um movimento de ajuste. */
+async function ctAjustarLote(fid){
+  if(window.adminMode!==true){ alert('Só o admin ajusta o saldo.'); return; }
+  const lote=(containerLotes||[]).find(l=>l.firestoreId===fid);
+  if(!lote){ alert('Lote não encontrado.'); return; }
+  const atual=Number(lote.saldo)||0;
+
+  const v=prompt('Corrigir o saldo deste lote?\n\n'+
+    (lote.item||'')+'\nLote de '+(lote.data||'')+
+    (lote.validade?('\nvalidade '+lote.validade):'')+
+    '\n\nSaldo atual: '+_fmtKg(atual)+' kg\n\nDigite o saldo CORRETO em kg:',
+    String(Math.round(atual*1000)/1000));
+  if(v===null) return;
+  const alvo=parseFloat(String(v).replace(',','.'));
+  if(isNaN(alvo) || alvo<0){ alert('Valor inválido.'); return; }
+  const delta=alvo-atual;
+  if(Math.abs(delta)<0.0005){ alert('O saldo já é esse.'); return; }
+
+  const motivo=prompt('Por que está corrigindo?\n\n'+
+    (delta>0?('Vai ACRESCENTAR '+_fmtKg(delta)+' kg'):('Vai TIRAR '+_fmtKg(Math.abs(delta))+' kg')),
+    '');
+  if(motivo===null) return;
+  const m=String(motivo).trim();
+  if(!m){ alert('Informe o motivo — fica no histórico.'); return; }
+
+  try{
+    await updateDoc(doc(db,'containerLotes',fid), {saldo:alvo});
+    // o movimento explica a diferença no histórico
+    await addDoc(collection(db,'containerMovs'), {
+      loteId:fid, item:lote.item||'',
+      tipo: delta>0 ? 'entrada' : 'saida',
+      ajuste:true,
+      qtd:Math.abs(delta),
+      saldoAntes:atual, saldoDepois:alvo,
+      obs:'Ajuste de saldo: '+m,
+      setor:'admin', por:_demAutor(),
+      data:hoje(), hora:agora(), timestamp:Date.now()
+    });
+    alert('✓ Saldo corrigido para '+_fmtKg(alvo)+' kg.');
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.ctAjustarLote=ctAjustarLote;
+
+/* Quando o item tem vários lotes e a contagem física não bate com o
+   total, o admin informa o total e o app distribui a diferença. */
+async function ctAjustarItem(){
+  if(window.adminMode!==true){ alert('Só o admin ajusta o saldo.'); return; }
+  const item=containerItemAtivo;
+  const lotes=(containerLotes||[]).filter(l=>l.item===item && (Number(l.saldo)||0)>0)
+    .sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
+  if(!lotes.length){ alert('Nenhum lote com saldo para ajustar.\n\nUse "+ Entrada" para lançar.'); return; }
+  const atual=lotes.reduce((t,l)=>t+(Number(l.saldo)||0),0);
+
+  const v=prompt('Corrigir o estoque de "'+item+'"?\n\n'+
+    'Total hoje: '+_fmtKg(atual)+' kg em '+lotes.length+' lote(s)\n\n'+
+    'Digite o total CORRETO em kg:',
+    String(Math.round(atual*1000)/1000));
+  if(v===null) return;
+  const alvo=parseFloat(String(v).replace(',','.'));
+  if(isNaN(alvo) || alvo<0){ alert('Valor inválido.'); return; }
+  let delta=alvo-atual;
+  if(Math.abs(delta)<0.0005){ alert('O total já é esse.'); return; }
+
+  const motivo=prompt('Por que está corrigindo?\n\n'+
+    (delta>0?('Vai ACRESCENTAR '+_fmtKg(delta)+' kg'):('Vai TIRAR '+_fmtKg(Math.abs(delta))+' kg')),'');
+  if(motivo===null) return;
+  const m=String(motivo).trim();
+  if(!m){ alert('Informe o motivo — fica no histórico.'); return; }
+
+  /* Sobra entra no lote mais novo (é o que provavelmente foi contado a
+     menos); falta sai do mais antigo primeiro, seguindo a mesma ordem
+     do consumo. */
+  const plano=[];
+  if(delta>0){
+    const alvoLote=lotes[lotes.length-1];
+    plano.push({lote:alvoLote, novo:(Number(alvoLote.saldo)||0)+delta, dif:delta});
+  } else {
+    let falta=Math.abs(delta);
+    for(const l of lotes){
+      if(falta<=0.0005) break;
+      const saldo=Number(l.saldo)||0;
+      const tira=Math.min(saldo, falta);
+      if(tira<=0) continue;
+      plano.push({lote:l, novo:saldo-tira, dif:-tira});
+      falta-=tira;
+    }
+    if(falta>0.0005){ alert('Não dá para tirar '+_fmtKg(Math.abs(delta))+' kg: os lotes somam '+_fmtKg(atual)+' kg.'); return; }
+  }
+
+  if(!confirm('Confirmar a correção?\n\n'+
+    plano.map(x=>'Lote '+(x.lote.data||'')+': '+_fmtKg(Number(x.lote.saldo)||0)+' → '+_fmtKg(x.novo)+' kg').join('\n')+
+    '\n\nTotal: '+_fmtKg(atual)+' → '+_fmtKg(alvo)+' kg')) return;
+
+  try{
+    for(const x of plano){
+      await updateDoc(doc(db,'containerLotes',x.lote.firestoreId), {saldo:x.novo});
+      await addDoc(collection(db,'containerMovs'), {
+        loteId:x.lote.firestoreId, item:item,
+        tipo: x.dif>0 ? 'entrada' : 'saida',
+        ajuste:true,
+        qtd:Math.abs(x.dif),
+        saldoAntes:Number(x.lote.saldo)||0, saldoDepois:x.novo,
+        obs:'Ajuste de saldo: '+m,
+        setor:'admin', por:_demAutor(),
+        data:hoje(), hora:agora(), timestamp:Date.now()
+      });
+    }
+    alert('✓ Estoque de "'+item+'" corrigido para '+_fmtKg(alvo)+' kg.');
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.ctAjustarItem=ctAjustarItem;
 
 async function salvarContainerSaida(){
   if(typeof mcExigirInternet==='function' && !mcExigirInternet('saída do contêiner')) return;
@@ -32599,6 +32721,91 @@ function estRenderInterno(){
 window.estRenderInterno=estRenderInterno;
 
 // contagem: informa o valor real e o app registra a diferença
+/* ── CONTAGEM DO CONTÊINER ───────────────────────────────────────
+   O estoque de dentro já tinha contagem; o contêiner não. Como aqui o
+   saldo vem dos lotes, a diferença é distribuída entre eles: sobra no
+   mais novo, falta saindo do mais antigo — a mesma ordem em que o
+   estoque é consumido, para a validade não se perder. */
+function estAbrirContagemCont(cod){
+  if(!estEhAdmin()){ alert('Só o admin corrige o contêiner.'); return; }
+  const p=estProd(cod); if(!p) return;
+  const lotes=(estLotes||[]).filter(l=>String(l.codigo)===String(cod) && (Number(l.saldo)||0)>0)
+    .sort((a,b)=>(a.ts||0)-(b.ts||0));
+  const atual=estSaldoContainer(cod);
+  if(!lotes.length){
+    alert('Não há lotes com saldo no contêiner para "'+p.nome+'".\n\nUse a entrada do contêiner para lançar.');
+    return;
+  }
+  _estUnid='pct';
+  _estModal('🔢 Contagem do contêiner — '+p.nome,
+    '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;line-height:1.5;">'+
+      'O app tem <strong>'+atual+'</strong> pacotes no contêiner ('+estCaixas(atual,p.pctCaixa)+' cx), em '+lotes.length+' lote(s). '+
+      'Informe o que você contou de verdade.</div>'+
+    _estCampoQtd(cod,'Quantidade contada')+
+    '<label style="font-size:12px;font-weight:600;color:var(--text-secondary);">Observação (opcional)</label>'+
+    '<textarea id="est-m-obs" rows="2" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;margin-top:4px;"></textarea>',
+    'estSalvarContagemCont(\''+escapeJsStr(cod)+'\')');
+}
+window.estAbrirContagemCont=estAbrirContagemCont;
+
+async function estSalvarContagemCont(cod){
+  const campo=(document.getElementById('est-q-val')||{}).value;
+  if(campo===''||campo===undefined){ alert('Informe a quantidade contada.'); return; }
+  const p=estProd(cod); if(!p) return;
+  const contado=_estLerQtd(cod);
+  if(contado===null || contado<0){ alert('Quantidade inválida.'); return; }
+  const atual=estSaldoContainer(cod);
+  const delta=contado-atual;
+  if(delta===0){ alert('A contagem bate com o app. Nada a corrigir.'); _estFecharModal(); return; }
+
+  const lotes=(estLotes||[]).filter(l=>String(l.codigo)===String(cod) && (Number(l.saldo)||0)>0)
+    .sort((a,b)=>(a.ts||0)-(b.ts||0));
+  if(!lotes.length){ alert('Sem lotes para ajustar.'); return; }
+
+  // monta o plano antes de gravar
+  const plano=[];
+  if(delta>0){
+    const alvo=lotes[lotes.length-1];
+    plano.push({lote:alvo, novo:(Number(alvo.saldo)||0)+delta, dif:delta});
+  } else {
+    let falta=Math.abs(delta);
+    for(const l of lotes){
+      if(falta<=0) break;
+      const saldo=Number(l.saldo)||0;
+      const tira=Math.min(saldo, falta);
+      if(tira<=0) continue;
+      plano.push({lote:l, novo:saldo-tira, dif:-tira});
+      falta-=tira;
+    }
+    if(falta>0){
+      alert('Não dá para tirar '+Math.abs(delta)+' pct: os lotes somam '+atual+'.');
+      return;
+    }
+  }
+
+  const obs=((document.getElementById('est-m-obs')||{}).value||'').trim();
+  if(!confirm('Corrigir o contêiner de "'+p.nome+'"?\n\n'+
+    'App: '+atual+' pct · contado: '+contado+' pct\n'+
+    (delta>0?('Sobrando '+delta):('Faltando '+Math.abs(delta)))+' pct\n\n'+
+    plano.map(x=>'Lote '+(x.lote.data||'')+': '+(Number(x.lote.saldo)||0)+' → '+x.novo).join('\n'))) return;
+
+  _estFecharModal();
+  try{
+    for(const x of plano){
+      await updateDoc(doc(db,'estoqueCtrlLotes',x.lote.firestoreId), {saldo:x.novo});
+    }
+    // um movimento explica a diferença no histórico
+    await estGravarMov({
+      local:'container', codigo:cod, nome:p.nome,
+      pacotes:delta, tipo:'contagem',
+      motivo:'Contagem do contêiner',
+      obs:(obs?(obs+' · '):'')+'app tinha '+atual+', contado '+contado
+    });
+    alert('✓ Contêiner de "'+p.nome+'" corrigido para '+contado+' pct.');
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.estSalvarContagemCont=estSalvarContagemCont;
+
 function estAbrirContagem(cod){
   const p=estProd(cod); if(!p) return;
   const atual=estSaldoInterno(cod);
@@ -32744,6 +32951,10 @@ function estRenderContainer(){
             '</div>'
           : '')+
         '<button onclick="event.stopPropagation();estAbrirMigrar(\''+escapeJsStr(g.codigo)+'\')" class="btn btn-secondary" style="width:100%;margin-top:9px;">🚚 Trazer para a empresa</button>'+
+        // o admin corrige quando a contagem física não bate
+        (estEhAdmin()
+          ? '<button onclick="event.stopPropagation();estAbrirContagemCont(\''+escapeJsStr(g.codigo)+'\')" style="width:100%;margin-top:7px;background:#fff;border:1px solid var(--mc-dourado,#d97706);color:#b45309;border-radius:9px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">🔢 Corrigir pela contagem</button>'
+          : '')+
       '</div>';
     }).join('');
   }
