@@ -20913,7 +20913,7 @@ window._laiVerFora=_laiVerFora;
 function laRefazFiltrados(){
   if(typeof _ajRefPendentes==='undefined' || !_ajRefPendentes.length) return {resolvidos:[], jaImportados:[], semSaldo:[]};
   const jaTem={};
-  (laAjustes||[]).forEach(a=>{ if(a.origemRefaz) jaTem[a.origemRefaz]=true; });
+  (laAjustes||[]).forEach(a=>{ if(a.origemRefaz && a.status!=='fechado') jaTem[a.origemRefaz]=true; });
   const r={resolvidos:[], jaImportados:[], semSaldo:[]};
   _ajRefPendentes.forEach(p=>{
     const saldo=Number(p.saldo)||0;
@@ -20929,10 +20929,13 @@ window.laRefazFiltrados=laRefazFiltrados;
 
 function laPendentesDoRefaz(){
   if(typeof _ajRefPendentes==='undefined' || !_ajRefPendentes.length) return [];
-  // já importados: não oferecemos de novo
+  /* Bloqueia só o que ainda está EM ABERTO aqui. Um ajuste já
+     estornado encerrou o ciclo dele; se o refazimento aponta o mesmo
+     produto e dia de novo, é pendência nova e precisa vir. Antes
+     qualquer importação antiga, mesmo fechada, barrava para sempre. */
   const jaTem={};
   (laAjustes||[]).forEach(a=>{
-    if(a.origemRefaz) jaTem[a.origemRefaz]=true;
+    if(a.origemRefaz && a.status!=='fechado') jaTem[a.origemRefaz]=true;
   });
   /* Traz todos os pendentes, positivos e negativos. Antes só os
      positivos vinham, e aí o número daqui nunca batia com o do
