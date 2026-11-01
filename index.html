@@ -25832,7 +25832,8 @@ let _fichaBusca='', _fichaSel='', _fichaSoDivergentes=false, _fichaMultTipo='rec
 
 onSnapshot(collection(db,'solicitacoesFicha'), snap=>{
   try{
-    solicitacoesFicha=snap.docs.map(d=>({firestoreId:d.id,...d.data()}))
+    // o id do documento vem por último: nenhum campo gravado o sobrescreve
+    solicitacoesFicha=snap.docs.map(d=>({...d.data(), firestoreId:d.id}))
       .sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
     const t=document.querySelector('.screen.active')?.id;
     if(t==='s-ficha') renderFicha();
@@ -26206,7 +26207,10 @@ async function fichaEnviarSolicitacao(){
 
   try{
     await addDoc(collection(db,'solicitacoesFicha'), {
-      cod:String(cod), produto:p.nome||'', firestoreId:p.firestoreId||'',
+      /* O id do produto NÃO pode se chamar firestoreId: na leitura, o
+         spread de data() sobrescreveria o id da própria solicitação e
+         o update iria para um documento que não existe. */
+      cod:String(cod), produto:p.nome||'', produtoId:p.firestoreId||'',
       mudancas:m, antes, motivo,
       status:'pendente',
       por:_demAutor(), setor:window.setorAtual||'', em:agora(), timestamp:Date.now()
@@ -26277,8 +26281,10 @@ async function fichaAprovar(id){
   const resumo=Object.keys(x.mudancas||{}).map(k=>(rot[k]||k)+': '+((x.antes||{})[k]||'(vazio)')+' → '+x.mudancas[k]).join('\n');
   if(!confirm('Aprovar e aplicar em "'+(x.produto||'')+'"?\n\n'+resumo+'\n\nA ficha do produto será alterada.')) return;
 
-  // o produto pode ter mudado desde o pedido: busca pelo código
-  const p=(produtosConfFirebase||[]).find(y=>String(y.cod)===String(x.cod));
+  // o produto pode ter mudado desde o pedido: busca pelo código e,
+  // se não achar, pelo id gravado na solicitação
+  const p=(produtosConfFirebase||[]).find(y=>String(y.cod)===String(x.cod))
+       || (produtosConfFirebase||[]).find(y=>y.firestoreId===x.produtoId);
   if(!p){ alert('Produto não encontrado. Pode ter sido excluído.'); return; }
 
   const dados={};
