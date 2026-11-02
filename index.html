@@ -10955,15 +10955,19 @@ function _plRecalcularDia(dia){
     let info='';
     if(prod){
       if(prod.tipoMassa&&prod.grMassa>0){
-        const kg=_plKg(prod.grMassa,un); tM[prod.tipoMassa]=(tM[prod.tipoMassa]||0)+kg;
+        // agrupa pelo nome do cadastro: grafias diferentes somam juntas
+      const nM=(typeof _recNomeOficial==='function')?_recNomeOficial(prod.tipoMassa,'massa'):prod.tipoMassa;
+      const kg=_plKg(prod.grMassa,un); tM[nM]=(tM[nM]||0)+kg;
         info+='⚖️ '+prod.tipoMassa+': '+kg.toFixed(3)+' kg';
       }
       if(prod.tipoRecheio&&prod.grRecheio>0){
-        const kg=_plKg(prod.grRecheio,un); tR1[prod.tipoRecheio]=(tR1[prod.tipoRecheio]||0)+kg;
+        const nR=(typeof _recNomeOficial==='function')?_recNomeOficial(prod.tipoRecheio,'recheio'):prod.tipoRecheio;
+      const kg=_plKg(prod.grRecheio,un); tR1[nR]=(tR1[nR]||0)+kg;
         info+=(info?' · ':'')+'🍖 '+prod.tipoRecheio+': '+kg.toFixed(3)+' kg';
       }
       if(prod.tipoRecheio2&&prod.grRecheio2>0){
-        const kg=_plKg(prod.grRecheio2,un); tR2[prod.tipoRecheio2]=(tR2[prod.tipoRecheio2]||0)+kg;
+        const nR2=(typeof _recNomeOficial==='function')?_recNomeOficial(prod.tipoRecheio2,'recheio'):prod.tipoRecheio2;
+      const kg=_plKg(prod.grRecheio2,un); tR2[nR2]=(tR2[nR2]||0)+kg;
         info+=(info?' · ':'')+'➕ '+prod.tipoRecheio2+': '+kg.toFixed(3)+' kg';
       }
     }
@@ -10989,9 +10993,9 @@ function _plRecalcularGeral(){
     (planoAtual.itens[dia]||[]).forEach(item=>{
       const prod=(PRODUTOS||[]).find(p=>p.nome===item.nome); if(!prod) return;
       const un=(item.qtdPacotes||0)*(prod.qtdPct||1);
-      if(prod.tipoMassa&&prod.grMassa>0) gM[prod.tipoMassa]=(gM[prod.tipoMassa]||0)+_plKg(prod.grMassa,un);
-      if(prod.tipoRecheio&&prod.grRecheio>0) gR1[prod.tipoRecheio]=(gR1[prod.tipoRecheio]||0)+_plKg(prod.grRecheio,un);
-      if(prod.tipoRecheio2&&prod.grRecheio2>0) gR2[prod.tipoRecheio2]=(gR2[prod.tipoRecheio2]||0)+_plKg(prod.grRecheio2,un);
+      if(prod.tipoMassa&&prod.grMassa>0) gM[_recNomeOficial(prod.tipoMassa,"massa")]=(gM[_recNomeOficial(prod.tipoMassa,"massa")]||0)+_plKg(prod.grMassa,un);
+      if(prod.tipoRecheio&&prod.grRecheio>0) gR1[_recNomeOficial(prod.tipoRecheio,"recheio")]=(gR1[_recNomeOficial(prod.tipoRecheio,"recheio")]||0)+_plKg(prod.grRecheio,un);
+      if(prod.tipoRecheio2&&prod.grRecheio2>0) gR2[_recNomeOficial(prod.tipoRecheio2,"recheio")]=(gR2[_recNomeOficial(prod.tipoRecheio2,"recheio")]||0)+_plKg(prod.grRecheio2,un);
     });
   });
   const linha=(ico,k,v,cor)=>'<div class="resumo-row"><span class="resumo-nome">'+ico+' '+k+'</span><span style="font-weight:700;color:'+cor+';">'+v.toFixed(3)+' kg</span></div>';
@@ -25964,6 +25968,24 @@ function renderFicha(){
     h+='<button onclick="fichaVerSolicitacoes()" style="width:100%;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:12px;">📨 Ver solicitações anteriores</button>';
   }
 
+  // grafias diferentes da mesma receita: o plano somava separado
+  const div=(typeof recDivergentes==='function')?recDivergentes():[];
+  if(div.length){
+    const nomes=[...new Set(div.map(x=>x.oficial))];
+    h+='<div class="card" style="margin-bottom:12px;background:#fffbeb;border:2px solid #d97706;">'+
+      '<div style="font-size:14px;font-weight:900;color:#b45309;">⚠️ '+div.length+' nome(s) escritos diferente do cadastro</div>'+
+      '<div style="font-size:11px;color:#78350f;margin-top:3px;line-height:1.5;">'+
+        'A mesma massa ou recheio aparece com grafias diferentes nas fichas. '+
+        'São a mesma receita, mas vale padronizar para a ficha ficar legível.</div>'+
+      '<div style="font-size:11px;color:#78350f;margin-top:6px;">'+
+        div.slice(0,4).map(x=>'"'+x.atual+'" → "'+x.oficial+'"').join('<br>')+
+        (div.length>4?('<br>… e mais '+(div.length-4)):'')+'</div>'+
+      (window.adminMode===true
+        ? '<button onclick="recPadronizar()" class="btn btn-primary" style="width:100%;margin-top:10px;">Padronizar tudo</button>'
+        : '')+
+    '</div>';
+  }
+
   h+='<div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap;">'+
     '<button onclick="fichaVerMultiplos()" style="flex:1;min-width:150px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:11px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">⚖️ Múltiplos de produção</button>'+
     // quem chegou até aqui já passou pela senha
@@ -26391,6 +26413,74 @@ function _fichaBadge(){
 window._fichaBadge=_fichaBadge;
 
 /* Os produtos da confeitaria com a composição */
+/* ── NOME OFICIAL DA MASSA OU RECHEIO ────────────────────────────
+   A ficha do produto guarda o nome como texto. "Recheio de Frango" e
+   "RECHEIO DE FRANGO" são a mesma receita, mas o plano agrupava por
+   texto exato e somava em dois totais separados — o que leva a comprar
+   e produzir errado. Aqui devolvemos sempre o nome como está no
+   cadastro de massas e recheios. */
+function _recNomeOficial(nome, tipo){
+  const n=String(nome||'').trim();
+  if(!n) return '';
+  const alvo=_normNome(n);
+  const listas = tipo==='massa'
+    ? [(typeof massasFirebase!=='undefined'?massasFirebase:[])]
+    : tipo==='recheio'
+      ? [(typeof recheiosFirebase!=='undefined'?recheiosFirebase:[])]
+      : [(typeof massasFirebase!=='undefined'?massasFirebase:[]),
+         (typeof recheiosFirebase!=='undefined'?recheiosFirebase:[])];
+  for(const l of listas){
+    const achou=(l||[]).find(x=>_normNome(x.nome)===alvo);
+    if(achou && String(achou.nome||'').trim()) return String(achou.nome).trim();
+  }
+  return n;   // não está no cadastro: devolve como veio
+}
+window._recNomeOficial=_recNomeOficial;
+
+/* Produtos cuja ficha escreve o nome diferente do cadastro */
+function recDivergentes(){
+  const out=[];
+  (produtosConfFirebase||[]).forEach(p=>{
+    [['tipoMassa','massa'],['tipoRecheio','recheio'],['tipoRecheio2','recheio']].forEach(([campo,tipo])=>{
+      const atual=String(p[campo]||'').trim();
+      if(!atual) return;
+      const oficial=_recNomeOficial(atual, tipo);
+      if(oficial && oficial!==atual){
+        out.push({cod:p.cod, produto:p.nome, campo, tipo, atual, oficial, firestoreId:p.firestoreId});
+      }
+    });
+  });
+  return out;
+}
+window.recDivergentes=recDivergentes;
+
+/* Acerta todos de uma vez */
+async function recPadronizar(){
+  if(window.adminMode!==true){ alert('Só o admin padroniza.'); return; }
+  const l=recDivergentes();
+  if(!l.length){ alert('Nenhuma divergência: todos os nomes batem com o cadastro.'); return; }
+  const porProduto={};
+  l.forEach(x=>{ (porProduto[x.firestoreId]=porProduto[x.firestoreId]||[]).push(x); });
+
+  const amostra=l.slice(0,8).map(x=>'• '+x.produto+': "'+x.atual+'" → "'+x.oficial+'"').join('\n');
+  if(!confirm('Padronizar '+l.length+' nome(s) em '+Object.keys(porProduto).length+' produto(s)?\n\n'+
+    amostra+(l.length>8?('\n… e mais '+(l.length-8)):'')+
+    '\n\nIsso só acerta a grafia. A massa e o recheio continuam os mesmos.')) return;
+
+  let ok=0, erros=0;
+  for(const fid of Object.keys(porProduto)){
+    const campos={};
+    porProduto[fid].forEach(x=>{ campos[x.campo]=x.oficial; });
+    campos.atualizadoEm=agora();
+    try{
+      await setDoc(doc(db,'produtosConfeitaria',fid), campos, {merge:true});
+      ok++;
+    }catch(e){ erros++; console.error('padronizar '+fid+':', e); }
+  }
+  alert('✓ '+ok+' produto(s) padronizados.'+(erros?('\n\n'+erros+' com erro.'):''));
+}
+window.recPadronizar=recPadronizar;
+
 function fichaProdutos(){
   const q=_normNome(_fichaBusca||'');
   return (produtosConfFirebase||[])
