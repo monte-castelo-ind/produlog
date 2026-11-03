@@ -25955,9 +25955,15 @@ function renderCozRecheios(){
       comoResolver=dg.diasComItens.length
         ? ('Há produção planejada em: '+dg.diasComItens.join(', ')+'.')
         : 'O plano está sem itens em todos os dias.';
+    } else if(dg.comRecheio>0){
+      // há produtos com recheio que a cozinha faz, mas nada chegou: o
+      // problema está no cálculo, não no cadastro
+      motivo=dg.comRecheio+' produto(s) com recheio em '+dg.diaNome+', mas o cálculo não trouxe nenhum.';
+      comoResolver='O cálculo achou '+dg.calcRecheios+' recheio(s) na semana'+
+        (dg.calcDias.length?(', previstos em: '+dg.calcDias.join(', ')):'')+'.';
     } else if(dg.ocultos.length){
-      motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+', mas os recheios estão marcados como "a cozinha não faz".';
-      comoResolver='São recheios comprados prontos. Para a cozinha acompanhar, desmarque isso no cadastro do produto: '+
+      motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+', e os recheios estão marcados como "a cozinha não faz".';
+      comoResolver='São recheios comprados prontos. Para a cozinha acompanhar, desmarque no cadastro: '+
         dg.ocultos.slice(0,3).join(' · ')+(dg.ocultos.length>3?('… e mais '+(dg.ocultos.length-3)):'')+'.';
     } else if(dg.semFicha.length){
       motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+', mas '+dg.semFicha.length+' não estão no cadastro.';
@@ -25985,6 +25991,16 @@ function renderCozRecheios(){
             dg.diasComItens.map(x=>'<span style="font-size:11px;background:var(--bg-page);border-radius:99px;padding:4px 11px;color:var(--text-secondary);">'+x+'</span>').join('')+
           '</div>'
         : '')+
+      // os números, para não restar dúvida de onde parou
+      '<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:11px;font-size:11px;color:var(--text-muted);line-height:1.8;text-align:left;">'+
+        '<div>plano da semana <strong>'+(dg.planoUsado||'—')+'</strong>'+(dg.semanaBate?'':' (procurava '+dg.semanaProcurada+')')+'</div>'+
+        '<div>'+dg.itensDoDia+' produto(s) em '+dg.diaNome+'</div>'+
+        '<div>'+dg.comRecheio+' com recheio que a cozinha faz'+
+          (dg.ocultos.length?(' · '+dg.ocultos.length+' comprado(s) pronto(s)'):'')+
+          (dg.semRecheio.length?(' · '+dg.semRecheio.length+' só de massa'):'')+
+          (dg.semFicha.length?(' · '+dg.semFicha.length+' sem ficha'):'')+'</div>'+
+        '<div>cálculo devolveu <strong>'+dg.calcRecheios+'</strong> recheio(s) na semana, <strong>'+dg.calcNoDia+'</strong> neste dia</div>'+
+      '</div>'+
     '</div>';
     return;
   }
