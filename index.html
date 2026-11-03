@@ -1661,7 +1661,15 @@
 
       <div class="mc-section-header">Ações</div>
       <div class="mc-sector-grid">
-        <button class="mc-sector-card" style="border-left:3px solid var(--mc-azul);grid-column:1/-1;" onclick="goTo('s-acomp-coz');renderAcompCoz()">
+        <button class="mc-sector-card" onclick="cozRecheiosAbrir()">
+        <div class="mc-sector-icon" style="background:#dbeafe;">🥣</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Recheios do dia</div>
+          <div class="mc-sector-desc">O que fazer e para quais produtos</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <button class="mc-sector-card" style="border-left:3px solid var(--mc-azul);grid-column:1/-1;" onclick="goTo('s-acomp-coz');renderAcompCoz()">
           <div class="mc-sector-icon blue">📋</div>
           <div class="mc-sector-info">
             <div class="mc-sector-title">Acompanhamento do Plano</div>
@@ -4527,6 +4535,17 @@
     <div style="flex:1;overflow:hidden;" id="tvemb-content"></div>
   </div>
 
+  <!-- COZINHA: O QUE PRODUZIR DE RECHEIO -->
+  <div class="screen" id="s-coz-recheios">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Cozinha</div></div></div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info"><div class="mc-page-title">🥣 Recheios do dia</div><div class="mc-page-sub" id="crec-sub">o que precisa ser feito</div></div>
+    </div>
+    <div style="flex:1;padding:16px;background:var(--bg-page);overflow-y:auto;" id="crec-content"></div>
+  </div>
+
   <!-- FICHA TÉCNICA DOS PRODUTOS -->
   <div class="screen" id="s-ficha">
     <div class="mc-header">
@@ -6068,6 +6087,7 @@ function goTo(id, semHistorico){
   if(id==='s-qual' && typeof renderQual==='function') renderQual();
   if(typeof prioAtualizarAviso==='function') prioAtualizarAviso();
   if(id==='s-ficha' && typeof renderFicha==='function') renderFicha();
+  if(id==='s-coz-recheios' && typeof renderCozRecheios==='function') renderCozRecheios();
   if(id==='s-ponto' && typeof renderPonto==='function') renderPonto();
   if(id==='s-ponto-mes' && typeof renderPontoMes==='function') renderPontoMes();
   if(id==='s-ponto-dash' && typeof renderPdash==='function') renderPdash();
@@ -25822,6 +25842,492 @@ function _pontoLerDia(linha, prevEntrada, emissao){
     foraDoPeriodo, inativo,
     obs
   };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   COZINHA — RECHEIOS DO DIA
+   O que precisa ser feito hoje, para quais produtos vai cada parte, e
+   o quanto já foi feito. A meta vem do plano da semana; a produção,
+   dos lançamentos de recheio. O que passa da meta vira saldo.
+   Coleção: cozRecheioCheck (marcações por produto)
+   ══════════════════════════════════════════════════════════════════ */
+let cozRecheioCheck={};
+let _crecDia='', _crecAberto='';
+
+onSnapshot(collection(db,'cozRecheioCheck'), snap=>{
+  try{
+    cozRecheioCheck={};
+    snap.docs.forEach(d=>{ cozRecheioCheck[d.id]=d.data(); });
+    if(document.querySelector('.screen.active')?.id==='s-coz-recheios') renderCozRecheios();
+  }catch(e){ console.error('cozRecheioCheck snap',e); }
+});
+
+function cozRecheiosAbrir(){
+  _crecDia=_crecDia||hoje();
+  _crecAberto='';
+  goTo('s-coz-recheios');
+  renderCozRecheios();
+}
+window.cozRecheiosAbrir=cozRecheiosAbrir;
+
+/* ── A TELA ──────────────────────────────────────────────────────── */
+/* Por que a tela está vazia. Sem isso, "nada para hoje" tanto pode ser
+   folga quanto plano não cadastrado, e a cozinha não sabe o que fazer. */
+function crecDiagnostico(dataBR){
+  const diaNome=_crecDiaSemana(dataBR);
+  const semAlvo=(typeof _acCozSemanaSel!=='undefined' && _acCozSemanaSel)
+    ? _acCozSemanaSel
+    : (typeof semanaAtual==='function'?semanaAtual():'');
+  const todos=(typeof planos!=='undefined'?planos:[]);
+  const daConf=todos.filter(p=>!p.setor||p.setor==='conf');
+  const plano=daConf.find(p=>p.semana===semAlvo)
+    || daConf.sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0];
+  const itensDia=plano?_crecItensDoDia(plano.itens, diaNome):[];
+  // dos itens do dia, quantos têm recheio na ficha
+  let comRecheio=0, semFicha=[], semRecheio=[], ocultos=[];
+  itensDia.forEach(it=>{
+    const nome=it.nome||it.produtoNome||''; if(!nome) return;
+    const prod=(PRODUTOS||[]).find(p=>p.nome===nome);
+    if(!prod){ semFicha.push(nome); return; }
+    const temR1=prod.tipoRecheio&&prod.grRecheio>0;
+    const temR2=prod.tipoRecheio2&&prod.grRecheio2>0;
+    if(!temR1 && !temR2){ semRecheio.push(nome); return; }
+    // marcados como "a cozinha não faz": salsicha, requeijão comprado…
+    const visivel=(temR1&&!prod.ocultarRecheioCoz)||(temR2&&!prod.ocultarRecheio2Coz);
+    if(!visivel){
+      ocultos.push(nome+' ('+(prod.tipoRecheio||prod.tipoRecheio2)+')');
+      return;
+    }
+    comRecheio++;
+  });
+  // o que _acCalcularCoz entregou
+  const calc=(typeof _acCalcularCoz==='function') ? _acCalcularCoz() : null;
+  const calcInfo={total:0, noDia:0, dias:[]};
+  if(calc && calc.recheios){
+    calcInfo.total=calc.recheios.length;
+    const ds=new Set();
+    calc.recheios.forEach(rc=>{
+      Object.keys(rc.plano||{}).forEach(k=>{ if((rc.plano[k]||0)>0.0001) ds.add(k); });
+      if(_crecMetaDoDia(rc.plano, diaNome)>0.0001) calcInfo.noDia++;
+    });
+    calcInfo.dias=[...ds];
+  }
+
+  return {
+    diaNome, semanaProcurada:semAlvo,
+    planosExistentes:daConf.length,
+    planoUsado:plano?(plano.semana||'(sem semana)'):null,
+    semanaBate: plano ? (plano.semana===semAlvo) : false,
+    diasComItens: plano?Object.keys(plano.itens||{}).filter(d=>((plano.itens||{})[d]||[]).length):[],
+    itensDoDia:itensDia.length,
+    comRecheio, semFicha, semRecheio, ocultos,
+    // o que o cálculo da cozinha devolveu, para comparar
+    calcRecheios: calcInfo.total,
+    calcNoDia: calcInfo.noDia,
+    calcDias: calcInfo.dias
+  };
+}
+window.crecDiagnostico=crecDiagnostico;
+
+function renderCozRecheios(){
+  const el=document.getElementById('crec-content'); if(!el) return;
+  const d=crecDados(_crecDia);
+  const sub=document.getElementById('crec-sub');
+  if(sub) sub.textContent=d.diaNome+' · '+d.dia;
+
+  let h=_crecSeletorDia();
+
+  if(!d.recheios.length){
+    const dg=crecDiagnostico(_crecDia);
+    // diz o motivo, para ninguém ficar olhando uma tela vazia sem saber
+    let motivo='', comoResolver='';
+    if(!dg.planosExistentes){
+      motivo='Não há nenhum plano de produção da confeitaria cadastrado.';
+      comoResolver='O plano é montado em Planejamento e salvo com "Salvar Plano".';
+    } else if(!dg.planoUsado){
+      motivo='Não achei o plano da semana '+dg.semanaProcurada+'.';
+      comoResolver='Monte o plano desta semana no Planejamento.';
+    } else if(!dg.semanaBate){
+      motivo='O plano mais recente é da semana '+dg.planoUsado+', não da semana atual ('+dg.semanaProcurada+').';
+      comoResolver='Monte e salve o plano desta semana no Planejamento.';
+    } else if(!dg.itensDoDia){
+      motivo='O plano da semana '+dg.planoUsado+' não tem nada em '+dg.diaNome+'.';
+      comoResolver=dg.diasComItens.length
+        ? ('Há produção planejada em: '+dg.diasComItens.join(', ')+'.')
+        : 'O plano está sem itens em todos os dias.';
+    } else if(dg.ocultos.length){
+      motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+', mas os recheios estão marcados como "a cozinha não faz".';
+      comoResolver='São recheios comprados prontos. Para a cozinha acompanhar, desmarque isso no cadastro do produto: '+
+        dg.ocultos.slice(0,3).join(' · ')+(dg.ocultos.length>3?('… e mais '+(dg.ocultos.length-3)):'')+'.';
+    } else if(dg.semFicha.length){
+      motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+', mas '+dg.semFicha.length+' não estão no cadastro.';
+      comoResolver='Sem ficha, o app não sabe o recheio: '+dg.semFicha.slice(0,3).join(', ')+'.';
+    } else if(dg.semRecheio.length){
+      motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+', nenhum leva recheio.';
+      comoResolver='São produtos só de massa: '+dg.semRecheio.slice(0,3).join(', ')+
+        (dg.semRecheio.length>3?('… e mais '+(dg.semRecheio.length-3)):'')+'.';
+    } else if(dg.calcRecheios && !dg.calcNoDia){
+      motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+'. O cálculo achou '+dg.calcRecheios+' recheio(s), mas nenhum neste dia.';
+      comoResolver=dg.calcDias.length
+        ? ('Os recheios estão previstos em: '+dg.calcDias.join(', ')+'.')
+        : 'Os recheios não têm dia definido no plano.';
+    } else {
+      motivo=dg.itensDoDia+' produto(s) em '+dg.diaNome+', mas nenhum recheio chegou ao cálculo.';
+      comoResolver='Confira a Ficha Técnica: pode faltar a gramatura do recheio.';
+    }
+    el.innerHTML=h+'<div class="card" style="text-align:center;padding:26px 20px;">'+
+      '<div style="font-size:38px;">🥣</div>'+
+      '<div style="font-size:15px;font-weight:800;margin-top:9px;">Nada previsto para '+dg.diaNome.toLowerCase()+'</div>'+
+      '<div style="font-size:13px;color:var(--text-secondary);margin-top:8px;line-height:1.55;">'+motivo+'</div>'+
+      (comoResolver?'<div style="font-size:12px;color:var(--text-muted);margin-top:6px;line-height:1.55;">'+comoResolver+'</div>':'')+
+      (dg.diasComItens.length
+        ? '<div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;margin-top:12px;">'+
+            dg.diasComItens.map(x=>'<span style="font-size:11px;background:var(--bg-page);border-radius:99px;padding:4px 11px;color:var(--text-secondary);">'+x+'</span>').join('')+
+          '</div>'
+        : '')+
+    '</div>';
+    return;
+  }
+
+  // o resumo: quanto falta no total
+  const falta=d.recheios.reduce((t,r)=>t+r.falta,0);
+  const meta=d.recheios.reduce((t,r)=>t+r.meta,0);
+  const feito=d.recheios.reduce((t,r)=>t+r.feito,0);
+  const prontos=d.recheios.filter(r=>r.completo).length;
+  const pctGeral=meta>0?Math.min(100, feito/meta*100):0;
+
+  h+='<div class="card" style="margin-bottom:14px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">'+
+      '<span style="font-size:15px;font-weight:800;">'+prontos+' de '+d.recheios.length+' prontos</span>'+
+      '<span style="font-size:13px;color:var(--text-secondary);">'+_fmtKg(feito)+' de '+_fmtKg(meta)+' kg</span>'+
+    '</div>'+
+    '<div style="height:12px;background:var(--bg-page);border-radius:99px;margin-top:9px;overflow:hidden;">'+
+      '<div style="height:100%;width:'+pctGeral+'%;background:'+(pctGeral>=100?'#16a34a':'var(--mc-azul,#2563eb)')+';transition:width .3s;"></div></div>'+
+    (falta>0.01
+      ? '<div style="font-size:13px;font-weight:700;color:#b45309;margin-top:8px;">Faltam '+_fmtKg(falta)+' kg</div>'
+      : '<div style="font-size:13px;font-weight:700;color:#15803d;margin-top:8px;">✓ Tudo feito</div>')+
+  '</div>';
+
+  h+=d.recheios.map(r=>_crecCard(r)).join('');
+  el.innerHTML=h;
+}
+window.renderCozRecheios=renderCozRecheios;
+
+function _crecSeletorDia(){
+  // os dias da semana, para olhar o de amanhã também
+  const hoje0=hoje();
+  const dias=[];
+  const p=String(hoje0).split('/');
+  const base=new Date(+p[2], +p[1]-1, +p[0]);
+  for(let i=-1;i<=2;i++){
+    const dt=new Date(base); dt.setDate(base.getDate()+i);
+    const br=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear();
+    dias.push({br, nome: i===0?'hoje':(i===1?'amanhã':(i===-1?'ontem':_crecDiaSemana(br).slice(0,3)))});
+  }
+  return '<div style="display:flex;gap:6px;margin-bottom:12px;">'+
+    dias.map(x=>'<button onclick="crecSetDia(\''+x.br+'\')" style="flex:1;background:'+(_crecDia===x.br?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_crecDia===x.br?'#fff':'var(--text-secondary)')+';border:1px solid '+(_crecDia===x.br?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:10px;padding:10px 4px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">'+
+      x.nome+'<br><span style="font-size:10px;font-weight:400;opacity:.8;">'+x.br.slice(0,5)+'</span></button>').join('')+
+  '</div>';
+}
+function crecSetDia(d){ _crecDia=d; _crecAberto=''; renderCozRecheios(); }
+window.crecSetDia=crecSetDia;
+
+function _crecCard(r){
+  const aberto=_crecAberto===_normNome(r.nome);
+  const cor=r.completo?'#16a34a':(r.pct>0?'#d97706':'#dc2626');
+  const fundo=r.completo?'#f0fdf4':'#fff';
+
+  let h='<div class="card" style="margin-bottom:10px;background:'+fundo+';border-left:4px solid '+cor+';padding:0;overflow:hidden;">'+
+    '<button onclick="crecToggle(\''+escapeJsStr(r.nome)+'\')" style="display:block;width:100%;text-align:left;background:transparent;border:none;padding:14px 16px;cursor:pointer;font-family:inherit;color:inherit;">'+
+      '<div style="display:flex;align-items:flex-start;gap:10px;">'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:17px;font-weight:800;line-height:1.2;">'+
+            (r.completo?'✓ ':'')+r.nome+'</span>'+
+          '<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px;">'+
+            r.produtos.length+' produto(s) · '+r.prontos+' marcado(s)</span></span>'+
+        '<span style="flex:0 0 auto;text-align:right;">'+
+          '<span style="display:block;font-size:24px;font-weight:900;color:'+cor+';line-height:1;">'+_fmtKg(r.meta)+'</span>'+
+          '<span style="display:block;font-size:10px;color:var(--text-muted);">kg a fazer</span></span>'+
+      '</div>'+
+
+      // a barra de progresso
+      '<div style="height:10px;background:var(--bg-page);border-radius:99px;margin-top:10px;overflow:hidden;">'+
+        '<div style="height:100%;width:'+r.pct+'%;background:'+cor+';transition:width .3s;"></div></div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:5px;">'+
+        '<span style="color:var(--text-secondary);">feito <strong>'+_fmtKg(r.feito)+' kg</strong></span>'+
+        (r.falta>0.0001
+          ? '<span style="color:#b45309;font-weight:700;">faltam '+_fmtKg(r.falta)+' kg</span>'
+          : (r.sobra>0.0001
+            ? '<span style="color:#15803d;font-weight:700;">+'+_fmtKg(r.sobra)+' kg de saldo</span>'
+            : '<span style="color:#15803d;font-weight:700;">✓ na medida</span>'))+
+      '</div>'+
+      (aberto?'':'<div style="font-size:11px;color:var(--mc-azul,#2563eb);font-weight:700;margin-top:8px;">ver os produtos ›</div>')+
+    '</button>';
+
+  if(aberto) h+=_crecDetalhe(r);
+  return h+'</div>';
+}
+
+function crecToggle(nome){
+  const n=_normNome(nome);
+  _crecAberto=(_crecAberto===n)?'':n;
+  renderCozRecheios();
+}
+window.crecToggle=crecToggle;
+
+/* ── O DETALHE: para onde vai cada quilo ─────────────────────────── */
+function _crecDetalhe(r){
+  const chave=_crecChave(_crecDia);
+  const marcas=(cozRecheioCheck[chave]||{}).itens||{};
+
+  let h='<div style="padding:0 16px 14px;">'+
+    '<div style="border-top:1px solid var(--border);padding-top:12px;">'+
+      '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:8px;">PARA QUAIS PRODUTOS</div>'+
+      r.produtos.map(x=>{
+        const id=_crecIdItem(r.nome, x.produto);
+        const m=marcas[id];
+        const pronto=!!m;
+        return '<button onclick="crecMarcarProduto(\''+escapeJsStr(r.nome)+'\',\''+escapeJsStr(x.produto)+'\')" '+
+          'style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:'+(pronto?'#f0fdf4':'var(--bg-page)')+';border:1px solid '+(pronto?'#bbf7d0':'var(--border)')+';border-radius:10px;padding:11px 13px;margin-bottom:6px;cursor:pointer;font-family:inherit;color:inherit;">'+
+          '<span style="flex:0 0 auto;width:24px;height:24px;border-radius:7px;border:2px solid '+(pronto?'#16a34a':'var(--border-md,#cbd5e1)')+';background:'+(pronto?'#16a34a':'#fff')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;">'+(pronto?'✓':'')+'</span>'+
+          '<span style="flex:1;min-width:0;">'+
+            '<span style="display:block;font-size:14px;font-weight:700;'+(pronto?'color:#15803d;':'')+'">'+x.produto+'</span>'+
+            '<span style="display:block;font-size:11px;color:var(--text-muted);">'+x.pacotes+' pct'+
+              (m&&m.por?(' · '+m.por+' às '+String(m.em||'').slice(-5)):'')+'</span></span>'+
+          '<span style="flex:0 0 auto;font-size:17px;font-weight:900;color:'+(pronto?'#16a34a':'var(--text-primary)')+';">'+_fmtKg(x.kg)+'<span style="font-size:11px;font-weight:400;"> kg</span></span>'+
+        '</button>';
+      }).join('')+
+
+      // a batida sugerida
+      (r.multiplos && r.multiplos.batidas.length
+        ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;margin-top:4px;">'+
+            '<div style="font-size:11px;font-weight:800;color:#1d4ed8;">⚖️ PARA FAZER OS '+_fmtKg(r.falta)+' KG QUE FALTAM</div>'+
+            '<div style="font-size:15px;font-weight:800;color:#1e40af;margin-top:3px;">'+
+              r.multiplos.batidas.map(b=>_fmtKg(b)+' kg').join(' + ')+
+              ' = '+_fmtKg(r.multiplos.total)+' kg</div>'+
+            (r.multiplos.sobra>0.0001
+              ? '<div style="font-size:11px;color:#1e40af;margin-top:2px;">sobram '+_fmtKg(r.multiplos.sobra)+' kg para o resto da semana</div>'
+              : '<div style="font-size:11px;color:#15803d;margin-top:2px;">bate certinho</div>')+
+          '</div>'
+        : '')+
+
+      '<div style="display:flex;gap:8px;margin-top:11px;">'+
+        '<button onclick="crecLancar(\''+escapeJsStr(r.nome)+'\')" class="btn btn-primary" style="flex:1;">+ Lancei produção</button>'+
+        (r.produtos.length>1
+          ? '<button onclick="crecMarcarTudo(\''+escapeJsStr(r.nome)+'\')" class="btn btn-secondary" style="flex:0 0 auto;padding:0 16px;">✓ todos</button>'
+          : '')+
+      '</div>'+
+
+      (r.sobra>0.0001
+        ? '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:11px 13px;margin-top:9px;">'+
+            '<div style="font-size:12px;font-weight:800;color:#15803d;">+'+_fmtKg(r.sobra)+' kg a mais do que a meta de hoje</div>'+
+            '<div style="font-size:11px;color:#166534;margin-top:2px;line-height:1.5;">'+
+              'Fica de saldo para os próximos dias. Confira no estoque de recheios antes de fazer de novo.</div></div>'
+        : '')+
+    '</div></div>';
+  return h;
+}
+
+/* Marcar que o recheio daquele produto já foi feito */
+async function crecMarcarProduto(recheio, produto){
+  const chave=_crecChave(_crecDia);
+  const id=_crecIdItem(recheio, produto);
+  const atual=(cozRecheioCheck[chave]||{}).itens||{};
+  const marcado=!!atual[id];
+
+  // mostra na hora, grava depois
+  const novo={...atual};
+  if(marcado) delete novo[id];
+  else novo[id]={por:_demAutor(), em:agora(), recheio, produto};
+  cozRecheioCheck[chave]={...(cozRecheioCheck[chave]||{}), itens:novo, dia:_crecDia};
+  renderCozRecheios();
+
+  try{
+    if(marcado){
+      await setDoc(doc(db,'cozRecheioCheck',chave), {itens:novo, dia:_crecDia, atualizadoEm:agora()});
+    } else {
+      await setDoc(doc(db,'cozRecheioCheck',chave),
+        {itens:{[id]:novo[id]}, dia:_crecDia, atualizadoEm:agora()}, {merge:true});
+    }
+  }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+window.crecMarcarProduto=crecMarcarProduto;
+
+async function crecMarcarTudo(recheio){
+  const d=crecDados(_crecDia);
+  const r=d.recheios.find(x=>_normNome(x.nome)===_normNome(recheio)); if(!r) return;
+  const chave=_crecChave(_crecDia);
+  const atual=(cozRecheioCheck[chave]||{}).itens||{};
+  const faltam=r.produtos.filter(x=>!atual[_crecIdItem(recheio,x.produto)]);
+  if(!faltam.length){ alert('Todos já estão marcados.'); return; }
+
+  const novo={...atual};
+  faltam.forEach(x=>{ novo[_crecIdItem(recheio,x.produto)]={por:_demAutor(), em:agora(), recheio, produto:x.produto}; });
+  cozRecheioCheck[chave]={...(cozRecheioCheck[chave]||{}), itens:novo, dia:_crecDia};
+  renderCozRecheios();
+  try{
+    await setDoc(doc(db,'cozRecheioCheck',chave), {itens:novo, dia:_crecDia, atualizadoEm:agora()}, {merge:true});
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.crecMarcarTudo=crecMarcarTudo;
+
+/* Lançar a produção do recheio: vai para o mesmo lugar de sempre */
+function crecLancar(recheio){
+  const d=crecDados(_crecDia);
+  const r=d.recheios.find(x=>_normNome(x.nome)===_normNome(recheio)); if(!r) return;
+  const sug=r.multiplos && r.multiplos.batidas.length ? r.multiplos.total : (r.falta>0?r.falta:0);
+
+  const ov=document.createElement('div');
+  ov.id='crec-lanc';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:400px;width:100%;padding:20px;">'+
+    '<div style="font-size:11px;font-weight:800;color:#1e40af;letter-spacing:.5px;">🥣 LANÇAR PRODUÇÃO</div>'+
+    '<div style="font-size:18px;font-weight:800;margin-top:3px;">'+r.nome+'</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">'+
+      'meta de hoje '+_fmtKg(r.meta)+' kg · já feito '+_fmtKg(r.feito)+' kg</div>'+
+    '<div style="position:relative;margin-top:16px;">'+
+      '<input type="number" id="crec-kg" step="any" min="0" value="'+(sug>0?String(Math.round(sug*100)/100):'')+'" placeholder="0" '+
+        'style="width:100%;padding:16px 50px 16px 16px;border:2px solid var(--border-md,#cbd5e1);border-radius:11px;font-size:22px;font-weight:800;font-family:inherit;box-sizing:border-box;">'+
+      '<span style="position:absolute;right:18px;top:50%;transform:translateY(-50%);font-size:15px;color:var(--text-muted);pointer-events:none;">kg</span>'+
+    '</div>'+
+    (r.multiplos && r.multiplos.batidas.length
+      ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">sugestão: '+r.multiplos.batidas.map(b=>_fmtKg(b)).join(' + ')+' kg</div>'
+      : '')+
+    '<div style="display:flex;gap:8px;margin-top:16px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'crec-lanc\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="crecSalvarLanc(\''+escapeJsStr(r.nome)+'\')">Lançar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  const i=document.getElementById('crec-kg');
+  if(i){ setTimeout(()=>{ i.focus(); i.select(); },70);
+    i.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); crecSalvarLanc(r.nome); } }); }
+}
+window.crecLancar=crecLancar;
+
+async function crecSalvarLanc(recheio){
+  const v=parseFloat(String((document.getElementById('crec-kg')||{}).value||'').replace(',','.'))||0;
+  if(v<=0){ alert('Informe os quilos.'); return; }
+  document.getElementById('crec-lanc')?.remove();
+  try{
+    await addDoc(collection(db,'recheios'), {
+      recheio:_recNomeOficial(recheio,'recheio'),
+      qtdKg:v, obs:'', hora:agora(), data:_crecDia, timestamp:Date.now()
+    });
+  }catch(e){ alert('Erro ao lançar: '+e.message); }
+}
+window.crecSalvarLanc=crecSalvarLanc;
+
+function _crecChave(dia){ return String(dia).replace(/\//g,'-'); }
+
+/* O dia da semana que corresponde à data */
+function _crecDiaSemana(dataBR){
+  const p=String(dataBR).split('/');
+  if(p.length!==3) return '';
+  const d=new Date(+p[2], +p[1]-1, +p[0]);
+  return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()];
+}
+
+/* Monta o que a cozinha precisa fazer neste dia */
+function crecDados(dataBR){
+  const calc=(typeof _acCalcularCoz==='function') ? _acCalcularCoz() : null;
+  const diaNome=_crecDiaSemana(dataBR);
+  if(!calc || !calc.recheios || !diaNome) return {dia:dataBR, diaNome, recheios:[], semPlano:true};
+
+  const chave=_crecChave(dataBR);
+  const marcas=(cozRecheioCheck[chave]||{}).itens||{};
+
+  const recheios=calc.recheios.map(rc=>{
+    /* A chave do dia vem de dois lugares diferentes e "Terça" pode
+       estar com acentuação composta num e simples noutro — a
+       comparação direta falha sem erro nenhum. */
+    const meta=Number(_crecMetaDoDia(rc.plano, diaNome))||0;
+    if(meta<=0.0001) return null;
+    const tipoNorm=_normNome(rc.nome);
+    const feito=(typeof _acCozProducaoRecheioDia==='function')
+      ? _acCozProducaoRecheioDia(tipoNorm, dataBR) : 0;
+
+    // de quais produtos vem a necessidade, e quanto de cada um
+    const produtos=_crecProdutosDoRecheio(rc.nome, diaNome, calc);
+    const prontos=produtos.filter(x=>marcas[_crecIdItem(rc.nome, x.produto)]);
+    const kgProntos=prontos.reduce((t,x)=>t+x.kg,0);
+
+    const falta=Math.max(0, meta-feito);
+    const sobra=Math.max(0, feito-meta);
+    return {
+      nome:rc.nome, meta, feito, falta, sobra,
+      pct: meta>0 ? Math.min(100, feito/meta*100) : 0,
+      completo: feito>=meta-0.0001,
+      produtos, prontos:prontos.length, kgProntos,
+      multiplos: _crecMultiplos(rc.nome, falta)
+    };
+  }).filter(Boolean);
+
+  // o que falta primeiro; depois os concluídos
+  recheios.sort((a,b)=>{
+    if(a.completo!==b.completo) return a.completo?1:-1;
+    return b.falta-a.falta;
+  });
+  return {dia:dataBR, diaNome, recheios, semPlano:false};
+}
+window.crecDados=crecDados;
+
+/* Quais produtos puxam esse recheio neste dia, e quanto cada um leva */
+/* Pega o valor do dia aceitando diferenças de acento e caixa */
+function _crecMetaDoDia(plano, diaNome){
+  if(!plano) return 0;
+  if(plano[diaNome]!==undefined) return plano[diaNome];
+  const alvo=_normNome(diaNome);
+  for(const k of Object.keys(plano)){
+    if(_normNome(k)===alvo) return plano[k];
+  }
+  return 0;
+}
+
+function _crecProdutosDoRecheio(recheio, diaNome, calc){
+  const alvo=_normNome(recheio);
+  const out=[];
+  const semAlvo=(typeof _acCozSemanaSel!=='undefined' && _acCozSemanaSel) ? _acCozSemanaSel : (typeof semanaAtual==='function'?semanaAtual():'');
+  const plano=(typeof planos!=='undefined'?planos:[]).find(p=>p.semana===semAlvo && (!p.setor||p.setor==='conf'))
+    || (typeof planos!=='undefined'?planos:[]).filter(p=>!p.setor||p.setor==='conf')
+        .sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0];
+  if(!plano) return out;
+  const itensDia=_crecItensDoDia(plano.itens, diaNome);
+  itensDia.forEach(it=>{
+    const nome=it.nome||it.produtoNome||''; if(!nome) return;
+    const prod=(PRODUTOS||[]).find(p=>p.nome===nome); if(!prod) return;
+    const un=(parseInt(it.qtdPacotes||it.qtd)||0)*(prod.qtdPct||1);
+    if(un<=0) return;
+    let kg=0;
+    if(prod.tipoRecheio && prod.grRecheio>0 && _normNome(_recNomeOficial(prod.tipoRecheio,'recheio'))===_normNome(_recNomeOficial(recheio,'recheio')))
+      kg+=prod.grRecheio*un/1000;
+    if(prod.tipoRecheio2 && prod.grRecheio2>0 && _normNome(_recNomeOficial(prod.tipoRecheio2,'recheio'))===_normNome(_recNomeOficial(recheio,'recheio')))
+      kg+=prod.grRecheio2*un/1000;
+    if(kg<=0) return;
+    const existe=out.find(x=>x.produto===nome);
+    if(existe) existe.kg+=kg;
+    else out.push({produto:nome, kg, pacotes:parseInt(it.qtdPacotes||it.qtd)||0});
+  });
+  return out.sort((a,b)=>b.kg-a.kg);
+}
+
+function _crecItensDoDia(itens, diaNome){
+  if(!itens) return [];
+  if(Array.isArray(itens[diaNome])) return itens[diaNome];
+  const alvo=_normNome(diaNome);
+  for(const k of Object.keys(itens)){
+    if(_normNome(k)===alvo && Array.isArray(itens[k])) return itens[k];
+  }
+  return [];
+}
+
+function _crecIdItem(recheio, produto){
+  return _normNome(recheio)+'||'+_normNome(produto);
+}
+
+/* A batida que cobre o que falta */
+function _crecMultiplos(recheio, falta){
+  if(falta<=0.0001 || typeof multSugerir!=='function') return null;
+  return multSugerir('recheiosList', recheio, falta);
 }
 
 /* ══════════════════════════════════════════════════════════════════
