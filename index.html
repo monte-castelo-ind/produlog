@@ -25908,7 +25908,10 @@ function crecDiagnostico(dataBR){
     const ds=new Set();
     calc.recheios.forEach(rc=>{
       Object.keys(rc.plano||{}).forEach(k=>{ if((rc.plano[k]||0)>0.0001) ds.add(k); });
-      if(_crecMetaDoDia(rc.plano, diaNome)>0.0001) calcInfo.noDia++;
+      const v=rc.plano?(rc.plano[diaNome]!==undefined?rc.plano[diaNome]
+        :(Object.keys(rc.plano).find(k=>_normNome(k)===_normNome(diaNome))
+          ? rc.plano[Object.keys(rc.plano).find(k=>_normNome(k)===_normNome(diaNome))] : 0)):0;
+      if((v||0)>0.0001) calcInfo.noDia++;
     });
     calcInfo.dias=[...ds];
   }
@@ -26243,42 +26246,64 @@ function _crecDiaSemana(dataBR){
   return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()];
 }
 
-/* Monta o que a cozinha precisa fazer neste dia */
-function crecDados(dataBR){
-  const calc=(typeof _acCalcularCoz==='function') ? _acCalcularCoz() : null;
-  const diaNome=_crecDiaSemana(dataBR);
-  if(!calc || !calc.recheios || !diaNome) return {dia:dataBR, diaNome, recheios:[], semPlano:true};
+/* Monta o que a cozinha precisa fazer neste dia.
 
+   Calcula direto do plano em vez de pedir ao acompanhamento: aquela
+   função move o recheio para outro dia quando a confeitaria antecipa o
+   produto, e isso fazia a terça aparecer vazia mesmo com sete produtos
+   com recheio no plano. Aqui o dia é o dia do plano, simples. */
+function crecDados(dataBR){
+  const diaNome=_crecDiaSemana(dataBR);
+  if(!diaNome) return {dia:dataBR, diaNome:'', recheios:[], semPlano:true};
+
+  const plano=_crecPlanoDaSemana();
+  if(!plano) return {dia:dataBR, diaNome, recheios:[], semPlano:true};
+
+  const itensDia=_crecItensDoDia(plano.itens, diaNome);
   const chave=_crecChave(dataBR);
   const marcas=(cozRecheioCheck[chave]||{}).itens||{};
 
-  const recheios=calc.recheios.map(rc=>{
-    /* A chave do dia vem de dois lugares diferentes e "Terça" pode
-       estar com acentuação composta num e simples noutro — a
-       comparação direta falha sem erro nenhum. */
-    const meta=Number(_crecMetaDoDia(rc.plano, diaNome))||0;
-    if(meta<=0.0001) return null;
-    const tipoNorm=_normNome(rc.nome);
+  // junta por recheio: quanto cada produto puxa
+  const porRecheio={};
+  itensDia.forEach(it=>{
+    const nome=it.nome||it.produtoNome||''; if(!nome) return;
+    const prod=(PRODUTOS||[]).find(p=>p.nome===nome); if(!prod) return;
+    const pacotes=parseInt(it.qtdPacotes||it.qtd)||0;
+    const un=pacotes*(prod.qtdPct||1);
+    if(un<=0) return;
+
+    [[prod.tipoRecheio, prod.grRecheio, prod.ocultarRecheioCoz],
+     [prod.tipoRecheio2, prod.grRecheio2, prod.ocultarRecheio2Coz]].forEach(([tipo, gr, oculto])=>{
+      if(!tipo || !(gr>0) || oculto) return;    // comprado pronto não entra
+      const oficial=(typeof _recNomeOficial==='function') ? _recNomeOficial(tipo,'recheio') : tipo;
+      const k=_normNome(oficial);
+      if(!porRecheio[k]) porRecheio[k]={nome:oficial, meta:0, produtos:[]};
+      const kg=gr*un/1000;
+      porRecheio[k].meta+=kg;
+      const ja=porRecheio[k].produtos.find(x=>x.produto===nome);
+      if(ja){ ja.kg+=kg; }
+      else porRecheio[k].produtos.push({produto:nome, kg, pacotes});
+    });
+  });
+
+  const recheios=Object.values(porRecheio).map(r=>{
+    const tipoNorm=_normNome(r.nome);
     const feito=(typeof _acCozProducaoRecheioDia==='function')
       ? _acCozProducaoRecheioDia(tipoNorm, dataBR) : 0;
-
-    // de quais produtos vem a necessidade, e quanto de cada um
-    const produtos=_crecProdutosDoRecheio(rc.nome, diaNome, calc);
-    const prontos=produtos.filter(x=>marcas[_crecIdItem(rc.nome, x.produto)]);
-    const kgProntos=prontos.reduce((t,x)=>t+x.kg,0);
-
-    const falta=Math.max(0, meta-feito);
-    const sobra=Math.max(0, feito-meta);
+    const prontos=r.produtos.filter(x=>marcas[_crecIdItem(r.nome, x.produto)]);
     return {
-      nome:rc.nome, meta, feito, falta, sobra,
-      pct: meta>0 ? Math.min(100, feito/meta*100) : 0,
-      completo: feito>=meta-0.0001,
-      produtos, prontos:prontos.length, kgProntos,
-      multiplos: _crecMultiplos(rc.nome, falta)
+      nome:r.nome, meta:r.meta, feito,
+      falta:Math.max(0, r.meta-feito),
+      sobra:Math.max(0, feito-r.meta),
+      pct: r.meta>0 ? Math.min(100, feito/r.meta*100) : 0,
+      completo: feito>=r.meta-0.0001,
+      produtos:r.produtos.sort((a,b)=>b.kg-a.kg),
+      prontos:prontos.length,
+      kgProntos:prontos.reduce((t,x)=>t+x.kg,0),
+      multiplos:_crecMultiplos(r.nome, Math.max(0, r.meta-feito))
     };
-  }).filter(Boolean);
+  });
 
-  // o que falta primeiro; depois os concluídos
   recheios.sort((a,b)=>{
     if(a.completo!==b.completo) return a.completo?1:-1;
     return b.falta-a.falta;
@@ -26287,43 +26312,15 @@ function crecDados(dataBR){
 }
 window.crecDados=crecDados;
 
-/* Quais produtos puxam esse recheio neste dia, e quanto cada um leva */
-/* Pega o valor do dia aceitando diferenças de acento e caixa */
-function _crecMetaDoDia(plano, diaNome){
-  if(!plano) return 0;
-  if(plano[diaNome]!==undefined) return plano[diaNome];
-  const alvo=_normNome(diaNome);
-  for(const k of Object.keys(plano)){
-    if(_normNome(k)===alvo) return plano[k];
-  }
-  return 0;
-}
-
-function _crecProdutosDoRecheio(recheio, diaNome, calc){
-  const alvo=_normNome(recheio);
-  const out=[];
-  const semAlvo=(typeof _acCozSemanaSel!=='undefined' && _acCozSemanaSel) ? _acCozSemanaSel : (typeof semanaAtual==='function'?semanaAtual():'');
-  const plano=(typeof planos!=='undefined'?planos:[]).find(p=>p.semana===semAlvo && (!p.setor||p.setor==='conf'))
-    || (typeof planos!=='undefined'?planos:[]).filter(p=>!p.setor||p.setor==='conf')
-        .sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0];
-  if(!plano) return out;
-  const itensDia=_crecItensDoDia(plano.itens, diaNome);
-  itensDia.forEach(it=>{
-    const nome=it.nome||it.produtoNome||''; if(!nome) return;
-    const prod=(PRODUTOS||[]).find(p=>p.nome===nome); if(!prod) return;
-    const un=(parseInt(it.qtdPacotes||it.qtd)||0)*(prod.qtdPct||1);
-    if(un<=0) return;
-    let kg=0;
-    if(prod.tipoRecheio && prod.grRecheio>0 && _normNome(_recNomeOficial(prod.tipoRecheio,'recheio'))===_normNome(_recNomeOficial(recheio,'recheio')))
-      kg+=prod.grRecheio*un/1000;
-    if(prod.tipoRecheio2 && prod.grRecheio2>0 && _normNome(_recNomeOficial(prod.tipoRecheio2,'recheio'))===_normNome(_recNomeOficial(recheio,'recheio')))
-      kg+=prod.grRecheio2*un/1000;
-    if(kg<=0) return;
-    const existe=out.find(x=>x.produto===nome);
-    if(existe) existe.kg+=kg;
-    else out.push({produto:nome, kg, pacotes:parseInt(it.qtdPacotes||it.qtd)||0});
-  });
-  return out.sort((a,b)=>b.kg-a.kg);
+/* O plano da confeitaria da semana que cobre esta data */
+function _crecPlanoDaSemana(){
+  const todos=(typeof planos!=='undefined'?planos:[]).filter(p=>!p.setor||p.setor==='conf');
+  if(!todos.length) return null;
+  const sem=(typeof _acCozSemanaSel!=='undefined' && _acCozSemanaSel)
+    ? _acCozSemanaSel
+    : (typeof semanaAtual==='function'?semanaAtual():'');
+  return todos.find(p=>p.semana===sem)
+      || todos.slice().sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0];
 }
 
 function _crecItensDoDia(itens, diaNome){
