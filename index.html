@@ -5748,7 +5748,8 @@ onSnapshot(collection(db,'recheios'), snap=>{
     atualizarTela();
     if(document.querySelector('.screen.active')?.id==='s-rc-painel' && typeof renderRecheioPainel==='function') renderRecheioPainel();
   }catch(e){ console.error('recheios snap:',e); }
-}, err=>{ console.error('recheios err:',err); });
+}, err=>{ console.error('recheios err:',err);     if(document.querySelector('.screen.active')?.id==='s-coz-recheios' && typeof renderCozRecheios==='function') renderCozRecheios();
+  });
 
 // ===== MODO TV VIA LINK (?tv=1) — para deixar rodando numa TV Android =====
 function _entrarModoTvLink(){
@@ -25905,10 +25906,112 @@ let _crecDia='';
 onSnapshot(collection(db,'cozRecheioCheck'), snap=>{
   try{
     cozRecheioCheck={};
-    snap.docs.forEach(d=>{ cozRecheioCheck[d.id]=d.data(); });
+    snap.docs.forEach(d=>{ cozRecheioCheck[d.id]=d.data();     if(document.querySelector('.screen.active')?.id==='s-acomp' && typeof renderAcomp==='function') renderAcomp();
+  });
     if(document.querySelector('.screen.active')?.id==='s-coz-recheios') renderCozRecheios();
   }catch(e){ console.error('cozRecheioCheck snap',e); }
 });
+
+/* ── PRÉ-PREPARO ─────────────────────────────────────────────────
+   Alguns produtos exigem uma etapa antes do recheio em si. Isso é por
+   PRODUTO, não por recheio: dois produtos podem usar o mesmo recheio e
+   só um precisar de pré-preparo.
+   Guardado em: configuracoes/cozPrePreparo
+   ══════════════════════════════════════════════════════════════════ */
+let cozPrePreparo={};   // {NOME NORMALIZADO DO PRODUTO: true}
+
+onSnapshot(doc(db,'configuracoes','cozPrePreparo'), snap=>{
+  try{
+    cozPrePreparo=(snap.data()||{}).produtos||{};
+    const t=document.querySelector('.screen.active')?.id;
+    if(t==='s-coz-recheios') renderCozRecheios();
+    if(t==='s-acomp') { if(typeof renderAcomp==='function') renderAcomp(); }
+  }catch(e){ console.error('cozPrePreparo snap',e); }
+});
+
+function crecTemPrePreparo(produto){
+  return cozPrePreparo[_normNome(produto)]===true;
+}
+window.crecTemPrePreparo=crecTemPrePreparo;
+
+/* A etapa em que o produto está: '', 'pre' ou 'pronto' */
+function crecEtapa(recheio, produto, marcas){
+  const m=marcas[_crecIdItem(recheio, produto)];
+  if(!m) return '';
+  return m.etapa || 'pronto';   // marcações antigas valem como pronto
+}
+
+/* Quem decide quais produtos têm pré-preparo */
+function crecAbrirPrePreparo(){
+  const prods=(PRODUTOS||[]).slice()
+    .filter(p=>(p.tipoRecheio&&p.grRecheio>0)||(p.tipoRecheio2&&p.grRecheio2>0))
+    .sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR'));
+  const marcados=prods.filter(p=>crecTemPrePreparo(p.nome)).length;
+
+  const ov=document.createElement('div');
+  ov.id='crec-pre-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🔀 Produtos com pré-preparo</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">'+
+        'Marque os produtos que precisam de uma etapa antes do recheio. '+
+        'Eles vão pedir dois checks na tela da cozinha.</div>'+
+      '<input type="text" id="crec-pre-busca" placeholder="🔍 Buscar produto" autocomplete="off" oninput="_crecPreFiltrar(this.value)" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin-top:11px;">'+
+      '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;"><span id="crec-pre-conta">'+marcados+'</span> marcado(s) de '+prods.length+'</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;" id="crec-pre-lista">'+
+      prods.map(p=>_crecPreLinha(p)).join('')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'crec-pre-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="crecSalvarPrePreparo()">Salvar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.crecAbrirPrePreparo=crecAbrirPrePreparo;
+
+function _crecPreLinha(p){
+  const on=crecTemPrePreparo(p.nome);
+  const rec=[p.tipoRecheio, p.tipoRecheio2].filter(Boolean).join(' + ');
+  return '<label class="crec-pre-item" data-nome="'+String(p.nome).replace(/"/g,'&quot;')+'" '+
+    'style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+(on?'#eff6ff':'var(--bg-page)')+';border:1px solid '+(on?'#bfdbfe':'var(--border)')+';border-radius:9px;margin-bottom:5px;cursor:pointer;">'+
+    '<input type="checkbox" class="crec-pre-check"'+(on?' checked':'')+' onchange="_crecPreContar()" style="width:19px;height:19px;cursor:pointer;flex:0 0 auto;">'+
+    '<span style="flex:1;min-width:0;">'+
+      '<span style="display:block;font-size:14px;font-weight:600;">'+p.nome+'</span>'+
+      (rec?'<span style="display:block;font-size:11px;color:var(--text-muted);">'+rec+'</span>':'')+
+    '</span></label>';
+}
+
+function _crecPreFiltrar(v){
+  const q=_normNome(v||'');
+  document.querySelectorAll('.crec-pre-item').forEach(el=>{
+    el.style.display = (!q || _normNome(el.dataset.nome).includes(q)) ? '' : 'none';
+  });
+}
+window._crecPreFiltrar=_crecPreFiltrar;
+
+function _crecPreContar(){
+  const n=[...document.querySelectorAll('.crec-pre-check')].filter(c=>c.checked).length;
+  const el=document.getElementById('crec-pre-conta');
+  if(el) el.textContent=n;
+}
+window._crecPreContar=_crecPreContar;
+
+async function crecSalvarPrePreparo(){
+  const mapa={};
+  document.querySelectorAll('.crec-pre-item').forEach(el=>{
+    const c=el.querySelector('.crec-pre-check');
+    if(c && c.checked) mapa[_normNome(el.dataset.nome)]=true;
+  });
+  cozPrePreparo=mapa;
+  document.getElementById('crec-pre-modal')?.remove();
+  renderCozRecheios();
+  try{
+    await setDoc(doc(db,'configuracoes','cozPrePreparo'),
+      {produtos:mapa, atualizadoEm:agora(), autor:_demAutor()});
+  }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+window.crecSalvarPrePreparo=crecSalvarPrePreparo;
 
 function cozRecheiosAbrir(){
   _crecDia=_crecDia||hoje();
@@ -25985,7 +26088,10 @@ function renderCozRecheios(){
   const sub=document.getElementById('crec-sub');
   if(sub) sub.textContent=d.diaNome+' · '+d.dia;
 
-  let h=_crecSeletorDia();
+  let h='<div style="display:flex;gap:7px;margin-bottom:10px;">'+
+    '<button onclick="crecAbrirPrePreparo()" style="flex:1;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🔀 Produtos com pré-preparo</button>'+
+  '</div>';
+  h+=_crecSeletorDia();
 
   if(!d.recheios.length){
     const dg=crecDiagnostico(_crecDia);
@@ -26163,12 +26269,23 @@ function _crecTabela(recheios){
           '<td style="padding:10px 12px;vertical-align:top;">'+
             '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
               r.produtos.map(x=>{
-                const pronto=!!marcas[_crecIdItem(r.nome, x.produto)];
+                const etapa=crecEtapa(r.nome, x.produto, marcas);
+                const temPre=crecTemPrePreparo(x.produto);
+                const pronto=etapa==='pronto';
+                const noPre=etapa==='pre';
+                // sem pré-preparo: um toque e pronto. Com: pré → pronto.
+                const fundo=pronto?'#dcfce7':(noPre?'#fef3c7':'#fff');
+                const borda=pronto?'#16a34a':(noPre?'#d97706':'var(--border-md,#d1d5db)');
+                const corTxt=pronto?'#15803d':(noPre?'#b45309':'var(--text-primary)');
                 return '<button onclick="crecMarcarProduto(\''+escapeJsStr(r.nome)+'\',\''+escapeJsStr(x.produto)+'\')" '+
-                  'style="display:flex;align-items:center;gap:6px;background:'+(pronto?'#dcfce7':'#fff')+';border:1px solid '+(pronto?'#16a34a':'var(--border-md,#d1d5db)')+';border-radius:8px;padding:6px 10px;cursor:pointer;font-family:inherit;text-align:left;">'+
-                  '<span style="flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:2px solid '+(pronto?'#16a34a':'var(--border-md,#cbd5e1)')+';background:'+(pronto?'#16a34a':'#fff')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;">'+(pronto?'✓':'')+'</span>'+
-                  '<span style="font-size:12px;'+(pronto?'color:#15803d;text-decoration:line-through;':'color:var(--text-primary);')+'">'+x.produto+'</span>'+
-                  '<span style="font-size:13px;font-weight:800;color:'+(pronto?'#16a34a':'var(--text-primary)')+';white-space:nowrap;">'+_fmtKg(x.kg)+'kg</span>'+
+                  'style="display:flex;align-items:center;gap:6px;background:'+fundo+';border:1px solid '+borda+';border-radius:8px;padding:6px 10px;cursor:pointer;font-family:inherit;text-align:left;">'+
+                  // o selo da etapa
+                  '<span style="flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:2px solid '+borda+';background:'+(pronto?'#16a34a':(noPre?'#d97706':'#fff'))+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;">'+
+                    (pronto?'✓':(noPre?'½':''))+'</span>'+
+                  '<span style="font-size:12px;color:'+corTxt+';'+(pronto?'text-decoration:line-through;':'')+'">'+x.produto+
+                    (temPre&&!pronto?'<span style="display:block;font-size:9px;color:#b45309;font-weight:700;">'+(noPre?'pré feito · falta finalizar':'tem pré-preparo')+'</span>':'')+
+                  '</span>'+
+                  '<span style="font-size:13px;font-weight:800;color:'+corTxt+';white-space:nowrap;">'+_fmtKg(x.kg)+'kg</span>'+
                 '</button>';
               }).join('')+
             '</div>'+
@@ -26187,12 +26304,24 @@ async function crecMarcarProduto(recheio, produto){
   const chave=_crecChave(_crecDia);
   const id=_crecIdItem(recheio, produto);
   const atual=(cozRecheioCheck[chave]||{}).itens||{};
-  const marcado=!!atual[id];
+  const etapa=crecEtapa(recheio, produto, atual);
+  const temPre=crecTemPrePreparo(produto);
 
-  // mostra na hora, grava depois
+  /* Sem pré-preparo: vazio → pronto → vazio.
+     Com pré-preparo: vazio → pré → pronto → vazio. */
+  let proxima='';
+  if(!etapa) proxima = temPre ? 'pre' : 'pronto';
+  else if(etapa==='pre') proxima='pronto';
+  else proxima='';
+
   const novo={...atual};
-  if(marcado) delete novo[id];
-  else novo[id]={por:_demAutor(), em:agora(), recheio, produto};
+  if(!proxima) delete novo[id];
+  else novo[id]={
+    por:_demAutor(), em:agora(), recheio, produto, etapa:proxima,
+    // guarda quem fez o pré, para não se perder ao finalizar
+    pre: proxima==='pronto' ? ((atual[id]||{}).pre || (etapa==='pre'?{por:(atual[id]||{}).por, em:(atual[id]||{}).em}:null)) : null
+  };
+  const marcado=!!atual[id];
   cozRecheioCheck[chave]={...(cozRecheioCheck[chave]||{}), itens:novo, dia:_crecDia};
   renderCozRecheios();
 
@@ -26212,11 +26341,11 @@ async function crecMarcarTudo(recheio){
   const r=d.recheios.find(x=>_normNome(x.nome)===_normNome(recheio)); if(!r) return;
   const chave=_crecChave(_crecDia);
   const atual=(cozRecheioCheck[chave]||{}).itens||{};
-  const faltam=r.produtos.filter(x=>!atual[_crecIdItem(recheio,x.produto)]);
+  const faltam=r.produtos.filter(x=>crecEtapa(recheio,x.produto,atual)!=='pronto');
   if(!faltam.length){ alert('Todos já estão marcados.'); return; }
 
   const novo={...atual};
-  faltam.forEach(x=>{ novo[_crecIdItem(recheio,x.produto)]={por:_demAutor(), em:agora(), recheio, produto:x.produto}; });
+  faltam.forEach(x=>{ novo[_crecIdItem(recheio,x.produto)]={por:_demAutor(), em:agora(), recheio, produto:x.produto, etapa:'pronto'}; });
   cozRecheioCheck[chave]={...(cozRecheioCheck[chave]||{}), itens:novo, dia:_crecDia};
   renderCozRecheios();
   try{
@@ -26262,12 +26391,30 @@ async function crecSalvarLanc(recheio){
   const v=parseFloat(String((document.getElementById('crec-kg')||{}).value||'').replace(',','.'))||0;
   if(v<=0){ alert('Informe os quilos.'); return; }
   document.getElementById('crec-lanc')?.remove();
+
+  /* Mostra na hora, sem esperar o banco responder: a cozinha lança e
+     vê o progresso subir. O snapshot chega depois e substitui. */
+  const reg={
+    recheio:_recNomeOficial(recheio,'recheio'),
+    qtdKg:v, obs:'', hora:agora(), data:_crecDia, timestamp:Date.now(),
+    _local:true
+  };
+  if(typeof regRecheios!=='undefined') regRecheios.unshift(reg);
+  renderCozRecheios();
+
   try{
     await addDoc(collection(db,'recheios'), {
-      recheio:_recNomeOficial(recheio,'recheio'),
-      qtdKg:v, obs:'', hora:agora(), data:_crecDia, timestamp:Date.now()
+      recheio:reg.recheio, qtdKg:v, obs:'', hora:reg.hora, data:reg.data, timestamp:reg.timestamp
     });
-  }catch(e){ alert('Erro ao lançar: '+e.message); }
+  }catch(e){
+    // deu errado: tira o que foi mostrado e avisa
+    if(typeof regRecheios!=='undefined'){
+      const i=regRecheios.indexOf(reg);
+      if(i>=0) regRecheios.splice(i,1);
+    }
+    renderCozRecheios();
+    alert('Não consegui lançar: '+e.message);
+  }
 }
 window.crecSalvarLanc=crecSalvarLanc;
 
@@ -26405,7 +26552,8 @@ function crecDados(dataBR){
     const saldo=Math.max(0, Number(saldoAnt[tipoNorm])||0);
     const necessario=r.meta;                      // o que os produtos pedem
     const aFazer=Math.max(0, necessario-saldo);   // descontando o que sobrou
-    const prontos=r.produtos.filter(x=>marcas[_crecIdItem(r.nome, x.produto)]);
+    // só conta quem está finalizado; o que está no pré ainda não vale
+    const prontos=r.produtos.filter(x=>crecEtapa(r.nome, x.produto, marcas)==='pronto');
     return {
       nome:r.nome,
       necessario, saldoAnterior:saldo,
@@ -37175,6 +37323,57 @@ let _acAba='acomp'; // 'acomp' ou 'perdas'
 function setAcAba(a){ _acAba=a; renderAcomp(); }
 window.setAcAba=setAcAba;
 
+/* ── SELO DE RECHEIO PRONTO ──────────────────────────────────────
+   Mostra na tela da confeitaria que a cozinha já separou o recheio do
+   produto. Com pré-preparo, só aparece quando as duas etapas forem
+   concluídas — meio-caminho não serve para quem vai produzir. */
+function acSeloRecheio(produto, diaPlano, semana){
+  if(typeof cozRecheioCheck==='undefined') return '';
+  const data=_acDataDoDia(semana, diaPlano);
+  if(!data) return '';
+  const chave=String(data).replace(/\//g,'-');
+  const marcas=(cozRecheioCheck[chave]||{}).itens||{};
+
+  // os recheios que este produto usa
+  const prod=(PRODUTOS||[]).find(p=>p.nome===produto);
+  if(!prod) return '';
+  const recheios=[];
+  if(prod.tipoRecheio && prod.grRecheio>0 && !prod.ocultarRecheioCoz) recheios.push(prod.tipoRecheio);
+  if(prod.tipoRecheio2 && prod.grRecheio2>0 && !prod.ocultarRecheio2Coz) recheios.push(prod.tipoRecheio2);
+  if(!recheios.length) return '';
+
+  let prontos=0, noPre=0;
+  recheios.forEach(r=>{
+    const oficial=(typeof _recNomeOficial==='function')?_recNomeOficial(r,'recheio'):r;
+    const m=marcas[_normNome(oficial)+'||'+_normNome(produto)];
+    if(!m) return;
+    if((m.etapa||'pronto')==='pronto') prontos++; else noPre++;
+  });
+
+  if(prontos>=recheios.length){
+    return '<span title="a cozinha já separou o recheio" style="display:inline-block;background:#dcfce7;color:#15803d;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:800;margin-left:6px;vertical-align:middle;">🥣 recheio pronto</span>';
+  }
+  if(noPre>0){
+    return '<span title="pré-preparo feito, falta finalizar" style="display:inline-block;background:#fef3c7;color:#b45309;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:800;margin-left:6px;vertical-align:middle;">½ pré-preparo</span>';
+  }
+  if(prontos>0){
+    return '<span style="display:inline-block;background:#fef3c7;color:#b45309;border-radius:99px;padding:2px 8px;font-size:10px;font-weight:800;margin-left:6px;vertical-align:middle;">🥣 '+prontos+'/'+recheios.length+'</span>';
+  }
+  return '';
+}
+window.acSeloRecheio=acSeloRecheio;
+
+/* A data do dia da semana dentro daquela semana */
+function _acDataDoDia(semana, diaNome){
+  const DIAS=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const i=DIAS.findIndex(d=>_normNome(d)===_normNome(diaNome));
+  if(i<0) return '';
+  const mon=(typeof _acMondayOfWeek==='function')?_acMondayOfWeek(semana):null;
+  if(!mon) return '';
+  const d=new Date(mon); d.setDate(mon.getDate()+i);
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+
 function renderAcomp(){
   if(_acDragAtivo) return; // não redesenha enquanto o dedo está arrastando
   const el=document.getElementById('acomp-content'); if(!el) return;
@@ -37370,7 +37569,9 @@ function renderAcomp(){
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
         (podeArrastar?acPrioAlca():'')+
         acPrioBadge(ordIdx+1)+
-        '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;">'+si.emoji+' '+it.produto+'</div>'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;">'+si.emoji+' '+it.produto+
+          // a cozinha já separou o recheio deste produto?
+          (typeof acSeloRecheio==='function' ? acSeloRecheio(it.produto, it.diaPlano, semana) : '')+'</div>'+
         '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+label+'</div></div>'+
         '<div style="text-align:right;white-space:nowrap;"><div style="font-size:12px;color:var(--text-secondary);">Plano: <strong>'+it.qtdPlan.toLocaleString('pt-BR')+'</strong></div>'+
         '<div style="font-size:13px;font-weight:700;color:'+si.cor+';">Feito: '+it.mostrado.toLocaleString('pt-BR')+' ('+pct+'%)</div>'+
