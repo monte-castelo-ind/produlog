@@ -26012,6 +26012,7 @@ function renderCozRecheios(){
   const meta=d.recheios.reduce((t,r)=>t+r.meta,0);
   const feito=d.recheios.reduce((t,r)=>t+r.feito,0);
   const prontos=d.recheios.filter(r=>r.completo).length;
+  const saldoUsado=d.recheios.reduce((t,r)=>t+(r.saldoAnterior||0),0);
   const pctGeral=meta>0?Math.min(100, feito/meta*100):0;
 
   h+='<div class="card" style="margin-bottom:14px;">'+
@@ -26024,6 +26025,9 @@ function renderCozRecheios(){
     (falta>0.01
       ? '<div style="font-size:13px;font-weight:700;color:#b45309;margin-top:8px;">Faltam '+_fmtKg(falta)+' kg</div>'
       : '<div style="font-size:13px;font-weight:700;color:#15803d;margin-top:8px;">✓ Tudo feito</div>')+
+    (saldoUsado>0.01
+      ? '<div style="font-size:11px;color:#15803d;margin-top:3px;">'+_fmtKg(saldoUsado)+' kg abatidos do saldo de dias anteriores</div>'
+      : '')+
   '</div>';
 
   h+=_crecTabela(d.recheios);
@@ -26067,7 +26071,7 @@ function _crecTabela(recheios){
       '</tr></thead><tbody>'+
       recheios.map((r,i)=>{
         const cor=r.completo?'#16a34a':(r.pct>0?'#d97706':'#dc2626');
-        const bg=r.completo?'#f0fdf4':(i%2?'#fafbfc':'#fff');
+        const bg=(r.completo||r.cobertoPeloSaldo)?'#f0fdf4':(i%2?'#fafbfc':'#fff');
         return '<tr style="background:'+bg+';border-top:1px solid #e5e7eb;">'+
 
           // o recheio e a barra
@@ -26080,11 +26084,17 @@ function _crecTabela(recheios){
               r.prontos+'/'+r.produtos.length+' produtos marcados</div>'+
           '</td>'+
 
-          // quanto fazer
+          // quanto fazer, já descontando o que sobrou de ontem
           '<td style="padding:10px 8px;text-align:center;vertical-align:top;white-space:nowrap;">'+
-            '<div style="font-size:21px;font-weight:900;color:'+cor+';line-height:1;">'+_fmtKg(r.meta)+'</div>'+
-            '<div style="font-size:9px;color:var(--text-muted);">kg</div>'+
-            (r.multiplos && r.multiplos.batidas.length
+            (r.cobertoPeloSaldo
+              ? '<div style="font-size:15px;font-weight:900;color:#16a34a;line-height:1.2;">não<br>precisa</div>'
+              : '<div style="font-size:21px;font-weight:900;color:'+cor+';line-height:1;">'+_fmtKg(r.meta)+'</div>'+
+                '<div style="font-size:9px;color:var(--text-muted);">kg</div>')+
+            (r.saldoAnterior>0.0001
+              ? '<div style="font-size:10px;color:#15803d;font-weight:700;margin-top:4px;line-height:1.3;">'+
+                  'precisa '+_fmtKg(r.necessario)+'<br>− '+_fmtKg(r.saldoAnterior)+' de saldo</div>'
+              : '')+
+            (!r.cobertoPeloSaldo && r.multiplos && r.multiplos.batidas.length
               ? '<div style="font-size:10px;color:#1d4ed8;font-weight:700;margin-top:4px;white-space:nowrap;">'+
                   r.multiplos.batidas.map(b=>_fmtKg(b)).join('+')+'</div>'
               : '')+
@@ -26223,6 +26233,80 @@ function _crecDiaSemana(dataBR){
   return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()];
 }
 
+/* ── SALDO DOS DIAS ANTERIORES ───────────────────────────────────
+   O que sobrou ontem serve hoje. Percorre a semana até o dia anterior
+   somando a meta e o que foi produzido: a diferença é o saldo que
+   entra abatendo. */
+const CREC_DIAS=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+
+function _crecSegundaDaSemana(dataBR){
+  const p=String(dataBR).split('/');
+  if(p.length!==3) return null;
+  const d=new Date(+p[2], +p[1]-1, +p[0]);
+  const dow=d.getDay();                       // 0 domingo … 6 sábado
+  const recuo=(dow===0)?6:(dow-1);            // volta até a segunda
+  d.setDate(d.getDate()-recuo);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function _crecDataBR(d){
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+
+/* Quanto já sobrou de cada recheio antes deste dia */
+function crecSaldoAnterior(dataBR, plano){
+  const saldo={};
+  const seg=_crecSegundaDaSemana(dataBR);
+  if(!seg || !plano) return saldo;
+  const alvo=String(dataBR);
+
+  for(let i=0;i<6;i++){
+    const d=new Date(seg); d.setDate(seg.getDate()+i);
+    const br=_crecDataBR(d);
+    if(br===alvo) break;                       // chegou no dia de hoje
+    const diaNome=CREC_DIAS[i];
+    const metas=_crecMetasDoDia(plano, diaNome);
+    // tudo que foi produzido naquele dia
+    Object.keys(metas).forEach(k=>{
+      const feito=(typeof _acCozProducaoRecheioDia==='function')
+        ? _acCozProducaoRecheioDia(k, br) : 0;
+      saldo[k]=(saldo[k]||0)+(feito-metas[k].meta);
+    });
+    // produção de recheio que não tinha meta naquele dia também vira saldo
+    (typeof regRecheios!=='undefined'?regRecheios:[]).forEach(r=>{
+      if(r.data!==br) return;
+      const k=_normNome(_recNomeOficial(r.recheio||'','recheio'));
+      if(metas[k]) return;                     // já contado acima
+      saldo[k]=(saldo[k]||0)+(parseFloat(r.qtdKg)||0);
+    });
+  }
+  // só o que sobrou conta; falta de ontem não aumenta a meta de hoje
+  Object.keys(saldo).forEach(k=>{ if(saldo[k]<0.0001) delete saldo[k]; });
+  return saldo;
+}
+window.crecSaldoAnterior=crecSaldoAnterior;
+
+/* A meta de cada recheio num dia do plano */
+function _crecMetasDoDia(plano, diaNome){
+  const out={};
+  _crecItensDoDia(plano.itens, diaNome).forEach(it=>{
+    const nome=it.nome||it.produtoNome||''; if(!nome) return;
+    const prod=(PRODUTOS||[]).find(p=>p.nome===nome); if(!prod) return;
+    const un=(parseInt(it.qtdPacotes||it.qtd)||0)*(prod.qtdPct||1);
+    if(un<=0) return;
+    [[prod.tipoRecheio, prod.grRecheio, prod.ocultarRecheioCoz],
+     [prod.tipoRecheio2, prod.grRecheio2, prod.ocultarRecheio2Coz]].forEach(([tipo,gr,oculto])=>{
+      if(!tipo || !(gr>0) || oculto) return;
+      const oficial=(typeof _recNomeOficial==='function')?_recNomeOficial(tipo,'recheio'):tipo;
+      const k=_normNome(oficial);
+      if(!out[k]) out[k]={nome:oficial, meta:0};
+      out[k].meta+=gr*un/1000;
+    });
+  });
+  return out;
+}
+
 /* Monta o que a cozinha precisa fazer neste dia.
 
    Calcula direto do plano em vez de pedir ao acompanhamento: aquela
@@ -26263,26 +26347,36 @@ function crecDados(dataBR){
     });
   });
 
+  // o que sobrou dos dias anteriores abate a meta de hoje
+  const saldoAnt=crecSaldoAnterior(dataBR, plano);
+
   const recheios=Object.values(porRecheio).map(r=>{
     const tipoNorm=_normNome(r.nome);
     const feito=(typeof _acCozProducaoRecheioDia==='function')
       ? _acCozProducaoRecheioDia(tipoNorm, dataBR) : 0;
+    const saldo=Math.max(0, Number(saldoAnt[tipoNorm])||0);
+    const necessario=r.meta;                      // o que os produtos pedem
+    const aFazer=Math.max(0, necessario-saldo);   // descontando o que sobrou
     const prontos=r.produtos.filter(x=>marcas[_crecIdItem(r.nome, x.produto)]);
     return {
-      nome:r.nome, meta:r.meta, feito,
-      falta:Math.max(0, r.meta-feito),
-      sobra:Math.max(0, feito-r.meta),
-      pct: r.meta>0 ? Math.min(100, feito/r.meta*100) : 0,
-      completo: feito>=r.meta-0.0001,
+      nome:r.nome,
+      necessario, saldoAnterior:saldo,
+      meta:aFazer, feito,
+      falta:Math.max(0, aFazer-feito),
+      sobra:Math.max(0, feito-aFazer),
+      pct: aFazer>0 ? Math.min(100, feito/aFazer*100) : 100,
+      completo: feito>=aFazer-0.0001,
+      cobertoPeloSaldo: aFazer<=0.0001 && saldo>0,
       produtos:r.produtos.sort((a,b)=>b.kg-a.kg),
       prontos:prontos.length,
       kgProntos:prontos.reduce((t,x)=>t+x.kg,0),
-      multiplos:_crecMultiplos(r.nome, Math.max(0, r.meta-feito))
+      multiplos:_crecMultiplos(r.nome, Math.max(0, aFazer-feito))
     };
   });
 
   recheios.sort((a,b)=>{
-    if(a.completo!==b.completo) return a.completo?1:-1;
+    const af=a.completo||a.cobertoPeloSaldo, bf=b.completo||b.cobertoPeloSaldo;
+    if(af!==bf) return af?1:-1;
     return b.falta-a.falta;
   });
   return {dia:dataBR, diaNome, recheios, semPlano:false};
@@ -37285,6 +37379,21 @@ function renderAdmContagemItens(){
   const totalDB=contagemItensFirebase.length;
   const totalCode=Object.values(_CONTAGEM_ITENS_ORIGINAIS).reduce((s,arr)=>s+arr.length,0);
   let html='';
+  // produtos cadastrados que ainda não estão na contagem
+  const foraDaContagem=(typeof contFaltandoNaContagem==='function')?contFaltandoNaContagem():[];
+  if(foraDaContagem.length){
+    html+='<button onclick="contAbrirSincronizar()" style="display:block;width:100%;text-align:left;background:#fffbeb;border:2px solid #d97706;border-radius:11px;padding:12px 14px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+      '<div style="display:flex;align-items:center;gap:10px;">'+
+        '<span style="font-size:20px;">🔄</span>'+
+        '<span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:14px;font-weight:800;color:#b45309;">'+foraDaContagem.length+' produto(s) fora da contagem</span>'+
+          '<span style="display:block;font-size:11px;color:#78350f;margin-top:2px;">'+
+            foraDaContagem.slice(0,3).map(x=>x.nome).join(' · ')+(foraDaContagem.length>3?(' · +'+(foraDaContagem.length-3)):'')+'</span></span>'+
+        '<span style="color:#b45309;font-size:18px;">›</span></div></button>';
+  } else {
+    html+='<button onclick="contAbrirSincronizar()" style="width:100%;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:12px;">🔄 Conferir com o cadastro de produtos</button>';
+  }
+
   if(totalDB===0&&totalCode>0){
     html+='<div class="mc-banner" style="background:var(--mc-laranja-claro);border-color:#fde68a;border-left-color:var(--mc-laranja);">'+
       '<span class="mc-banner-icon">⚠️</span>'+
@@ -37417,6 +37526,102 @@ function renderAdmContGrupoLista(){
 
   el.innerHTML=html;
 }
+
+/* ── SINCRONIZAR A CONTAGEM COM O CADASTRO ───────────────────────
+   A contagem tem lista própria, separada do cadastro de produtos.
+   Quem cadastra um produto novo não lembra de incluí-lo aqui, e ele
+   simplesmente não aparece na hora de contar. Esta função mostra o
+   que está faltando e inclui de uma vez. */
+function contFaltandoNaContagem(){
+  // tudo que já está na contagem, por código e por nome
+  const temCod={}, temNome={};
+  Object.keys(CONTAGEM_ITENS||{}).forEach(g=>{
+    (CONTAGEM_ITENS[g]||[]).forEach(it=>{
+      const c=String(it.cod||'').trim();
+      if(c) temCod[_ajRefNormCod(c)]=true;
+      if(it.nome) temNome[_normNome(it.nome)]=true;
+    });
+  });
+
+  const out=[];
+  const ver=(lista, grupo)=>{
+    (lista||[]).forEach(p=>{
+      const cod=String(p.cod||'').trim();
+      const nome=String(p.nome||'').trim();
+      if(!nome) return;
+      if(cod && temCod[_ajRefNormCod(cod)]) return;
+      if(temNome[_normNome(nome)]) return;
+      if(out.some(x=>_normNome(x.nome)===_normNome(nome))) return;
+      out.push({cod, nome, grupo});
+    });
+  };
+  ver(typeof PRODUTOS!=='undefined'?PRODUTOS:[], 'Salgados');
+  ver(typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[], 'Pães');
+  return out.sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+}
+window.contFaltandoNaContagem=contFaltandoNaContagem;
+
+function contAbrirSincronizar(){
+  const faltam=contFaltandoNaContagem();
+  const grupos=Object.keys(CONTAGEM_ITENS||{}).sort();
+
+  const ov=document.createElement('div');
+  ov.id='cont-sinc';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:500px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🔄 Produtos fora da contagem</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">'+
+        'Produtos do cadastro que ainda não estão na lista de contagem.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      (faltam.length
+        ? '<div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:9px;">'+faltam.length+' produto(s) faltando</div>'+
+          faltam.map((x,i)=>'<label style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:var(--bg-page);border-radius:9px;margin-bottom:5px;cursor:pointer;">'+
+            '<input type="checkbox" class="cont-sinc-item" checked data-cod="'+String(x.cod).replace(/"/g,'&quot;')+'" data-nome="'+String(x.nome).replace(/"/g,'&quot;')+'" style="width:18px;height:18px;cursor:pointer;">'+
+            '<span style="flex:1;min-width:0;">'+
+              '<span style="display:block;font-size:14px;font-weight:600;">'+x.nome+'</span>'+
+              '<span style="display:block;font-size:11px;color:var(--text-muted);">'+(x.cod?('cód '+x.cod+' · '):'')+'sugerido: '+x.grupo+'</span></span>'+
+            '<select class="cont-sinc-grupo" style="flex:0 0 auto;padding:6px 8px;border:1px solid var(--border-md,#d1d5db);border-radius:7px;font-size:12px;font-family:inherit;background:#fff;">'+
+              grupos.map(g=>'<option value="'+String(g).replace(/"/g,'&quot;')+'"'+(_normNome(g)===_normNome(x.grupo)?' selected':'')+'>'+g+'</option>').join('')+
+            '</select></label>').join('')
+        : '<div style="text-align:center;padding:26px;color:var(--text-secondary);">'+
+            '<div style="font-size:30px;">✓</div>'+
+            '<div style="font-size:14px;font-weight:700;margin-top:7px;color:#15803d;">Tudo em dia</div>'+
+            '<div style="font-size:12px;margin-top:3px;">Todos os produtos do cadastro estão na contagem.</div></div>')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'cont-sinc\').remove()">Fechar</button>'+
+      (faltam.length?'<button class="btn btn-primary" style="flex:1;" onclick="contSincronizar()">Incluir marcados</button>':'')+
+    '</div></div>';
+  document.body.appendChild(ov);
+}
+window.contAbrirSincronizar=contAbrirSincronizar;
+
+async function contSincronizar(){
+  const caixas=[...document.querySelectorAll('.cont-sinc-item')];
+  const selects=[...document.querySelectorAll('.cont-sinc-grupo')];
+  const escolhidos=[];
+  caixas.forEach((c,i)=>{
+    if(!c.checked) return;
+    escolhidos.push({cod:c.dataset.cod||'', nome:c.dataset.nome||'', grupo:(selects[i]||{}).value||'Outros'});
+  });
+  if(!escolhidos.length){ alert('Marque ao menos um produto.'); return; }
+  if(!confirm('Incluir '+escolhidos.length+' produto(s) na contagem?')) return;
+
+  document.getElementById('cont-sinc')?.remove();
+  let ok=0, erros=0;
+  for(const x of escolhidos){
+    try{
+      await addDoc(collection(db,'contagemItens'), {
+        grupo:x.grupo, cod:String(x.cod).trim(), nome:String(x.nome).trim().toUpperCase(),
+        atualizadoEm:agora(), origem:'cadastro'
+      });
+      ok++;
+    }catch(e){ erros++; console.error('sincronizar '+x.nome+':', e); }
+  }
+  alert('✓ '+ok+' produto(s) incluídos na contagem.'+(erros?('\n\n'+erros+' com erro.'):''));
+}
+window.contSincronizar=contSincronizar;
 
 async function adicionarItemContagem(){
   const grupo=_admContGrupoSel;
