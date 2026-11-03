@@ -10125,11 +10125,59 @@ function _buildContagemItemsHtml(filtrados){
 function filtrarContagem(val){
   contagemSrch=val||'';
   const itens=CONTAGEM_ITENS[contagemGrupoAtivo]||[];
-  const q=contagemSrch.toLowerCase();
-  const filtrados=q?itens.filter(i=>i.nome.toLowerCase().includes(q)||i.cod.toLowerCase().includes(q)):itens;
+  /* Um item sem código fazia .toLowerCase() estourar e a lista inteira
+     sumia — parecia que o produto não existia. Agora a busca também
+     ignora acento, para "banana" achar "BANANA". */
+  const q=_contNorm(contagemSrch);
+  const filtrados=q
+    ? itens.filter(i=>_contNorm(i&&i.nome).includes(q) || _contNorm(i&&i.cod).includes(q))
+    : itens;
   const listEl=document.getElementById('cont-itens-list');
   if(!listEl)return;
   listEl.innerHTML=_buildContagemItemsHtml(filtrados);
+  // quando a busca não acha nada, diz o porquê
+  if(q && !filtrados.length){
+    listEl.innerHTML='<div style="text-align:center;padding:22px;color:var(--text-secondary);">'+
+      '<div style="font-size:14px;font-weight:700;">Nada encontrado em '+contagemGrupoAtivo+'</div>'+
+      _contOndeEsta(contagemSrch)+'</div>';
+  }
+}
+
+function _contNorm(v){
+  return String(v==null?'':v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+
+/* Procura o produto nos outros grupos e no cadastro, para explicar
+   por que ele não aparece aqui */
+function _contOndeEsta(busca){
+  const q=_contNorm(busca);
+  if(!q) return '';
+  // em outro grupo da contagem?
+  const noutro=[];
+  Object.keys(CONTAGEM_ITENS||{}).forEach(g=>{
+    if(g===contagemGrupoAtivo) return;
+    (CONTAGEM_ITENS[g]||[]).forEach(i=>{
+      if(_contNorm(i&&i.nome).includes(q)||_contNorm(i&&i.cod).includes(q)) noutro.push({grupo:g, nome:i.nome});
+    });
+  });
+  if(noutro.length){
+    return '<div style="font-size:12px;margin-top:7px;line-height:1.6;">'+
+      'Está em <strong>'+[...new Set(noutro.map(x=>x.grupo))].join(', ')+'</strong>:<br>'+
+      noutro.slice(0,3).map(x=>x.nome).join('<br>')+'</div>';
+  }
+  // existe no cadastro mas não na contagem?
+  const cads=[];
+  [(typeof PRODUTOS!=='undefined'?PRODUTOS:[]), (typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[])]
+    .forEach(l=>(l||[]).forEach(p=>{
+      if(_contNorm(p&&p.nome).includes(q)||_contNorm(p&&p.cod).includes(q)) cads.push(p.nome);
+    }));
+  if(cads.length){
+    return '<div style="font-size:12px;margin-top:7px;line-height:1.6;color:#b45309;">'+
+      'Existe no cadastro mas <strong>não está na lista de contagem</strong>:<br>'+
+      cads.slice(0,3).join('<br>')+
+      '<div style="font-size:11px;margin-top:6px;">Peça ao admin para incluir em Itens da Contagem → Sincronizar.</div></div>';
+  }
+  return '<div style="font-size:12px;margin-top:7px;">Não achei esse produto em nenhum grupo nem no cadastro.</div>';
 }
 
 async function adicionarContagem(cod, nome){
