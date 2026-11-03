@@ -25852,7 +25852,7 @@ function _pontoLerDia(linha, prevEntrada, emissao){
    Coleção: cozRecheioCheck (marcações por produto)
    ══════════════════════════════════════════════════════════════════ */
 let cozRecheioCheck={};
-let _crecDia='', _crecAberto='';
+let _crecDia='';
 
 onSnapshot(collection(db,'cozRecheioCheck'), snap=>{
   try{
@@ -25864,7 +25864,6 @@ onSnapshot(collection(db,'cozRecheioCheck'), snap=>{
 
 function cozRecheiosAbrir(){
   _crecDia=_crecDia||hoje();
-  _crecAberto='';
   goTo('s-coz-recheios');
   renderCozRecheios();
 }
@@ -26027,7 +26026,7 @@ function renderCozRecheios(){
       : '<div style="font-size:13px;font-weight:700;color:#15803d;margin-top:8px;">✓ Tudo feito</div>')+
   '</div>';
 
-  h+=d.recheios.map(r=>_crecCard(r)).join('');
+  h+=_crecTabela(d.recheios);
   el.innerHTML=h;
 }
 window.renderCozRecheios=renderCozRecheios;
@@ -26048,104 +26047,82 @@ function _crecSeletorDia(){
       x.nome+'<br><span style="font-size:10px;font-weight:400;opacity:.8;">'+x.br.slice(0,5)+'</span></button>').join('')+
   '</div>';
 }
-function crecSetDia(d){ _crecDia=d; _crecAberto=''; renderCozRecheios(); }
+function crecSetDia(d){ _crecDia=d; renderCozRecheios(); }
 window.crecSetDia=crecSetDia;
 
-function _crecCard(r){
-  const aberto=_crecAberto===_normNome(r.nome);
-  const cor=r.completo?'#16a34a':(r.pct>0?'#d97706':'#dc2626');
-  const fundo=r.completo?'#f0fdf4':'#fff';
-
-  let h='<div class="card" style="margin-bottom:10px;background:'+fundo+';border-left:4px solid '+cor+';padding:0;overflow:hidden;">'+
-    '<button onclick="crecToggle(\''+escapeJsStr(r.nome)+'\')" style="display:block;width:100%;text-align:left;background:transparent;border:none;padding:14px 16px;cursor:pointer;font-family:inherit;color:inherit;">'+
-      '<div style="display:flex;align-items:flex-start;gap:10px;">'+
-        '<span style="flex:1;min-width:0;">'+
-          '<span style="display:block;font-size:17px;font-weight:800;line-height:1.2;">'+
-            (r.completo?'✓ ':'')+r.nome+'</span>'+
-          '<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px;">'+
-            r.produtos.length+' produto(s) · '+r.prontos+' marcado(s)</span></span>'+
-        '<span style="flex:0 0 auto;text-align:right;">'+
-          '<span style="display:block;font-size:24px;font-weight:900;color:'+cor+';line-height:1;">'+_fmtKg(r.meta)+'</span>'+
-          '<span style="display:block;font-size:10px;color:var(--text-muted);">kg a fazer</span></span>'+
-      '</div>'+
-
-      // a barra de progresso
-      '<div style="height:10px;background:var(--bg-page);border-radius:99px;margin-top:10px;overflow:hidden;">'+
-        '<div style="height:100%;width:'+r.pct+'%;background:'+cor+';transition:width .3s;"></div></div>'+
-      '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:5px;">'+
-        '<span style="color:var(--text-secondary);">feito <strong>'+_fmtKg(r.feito)+' kg</strong></span>'+
-        (r.falta>0.0001
-          ? '<span style="color:#b45309;font-weight:700;">faltam '+_fmtKg(r.falta)+' kg</span>'
-          : (r.sobra>0.0001
-            ? '<span style="color:#15803d;font-weight:700;">+'+_fmtKg(r.sobra)+' kg de saldo</span>'
-            : '<span style="color:#15803d;font-weight:700;">✓ na medida</span>'))+
-      '</div>'+
-      (aberto?'':'<div style="font-size:11px;color:var(--mc-azul,#2563eb);font-weight:700;margin-top:8px;">ver os produtos ›</div>')+
-    '</button>';
-
-  if(aberto) h+=_crecDetalhe(r);
-  return h+'</div>';
-}
-
-function crecToggle(nome){
-  const n=_normNome(nome);
-  _crecAberto=(_crecAberto===n)?'':n;
-  renderCozRecheios();
-}
-window.crecToggle=crecToggle;
-
-/* ── O DETALHE: para onde vai cada quilo ─────────────────────────── */
-function _crecDetalhe(r){
+/* Uma linha por recheio, com os produtos na própria linha. A cozinha
+   vê tudo de uma vez: o que falta, quanto e para quais produtos, sem
+   abrir nada e sem rolar. */
+function _crecTabela(recheios){
   const chave=_crecChave(_crecDia);
   const marcas=(cozRecheioCheck[chave]||{}).itens||{};
 
-  let h='<div style="padding:0 16px 14px;">'+
-    '<div style="border-top:1px solid var(--border);padding-top:12px;">'+
-      '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin-bottom:8px;">PARA QUAIS PRODUTOS</div>'+
-      r.produtos.map(x=>{
-        const id=_crecIdItem(r.nome, x.produto);
-        const m=marcas[id];
-        const pronto=!!m;
-        return '<button onclick="crecMarcarProduto(\''+escapeJsStr(r.nome)+'\',\''+escapeJsStr(x.produto)+'\')" '+
-          'style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:'+(pronto?'#f0fdf4':'var(--bg-page)')+';border:1px solid '+(pronto?'#bbf7d0':'var(--border)')+';border-radius:10px;padding:11px 13px;margin-bottom:6px;cursor:pointer;font-family:inherit;color:inherit;">'+
-          '<span style="flex:0 0 auto;width:24px;height:24px;border-radius:7px;border:2px solid '+(pronto?'#16a34a':'var(--border-md,#cbd5e1)')+';background:'+(pronto?'#16a34a':'#fff')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;">'+(pronto?'✓':'')+'</span>'+
-          '<span style="flex:1;min-width:0;">'+
-            '<span style="display:block;font-size:14px;font-weight:700;'+(pronto?'color:#15803d;':'')+'">'+x.produto+'</span>'+
-            '<span style="display:block;font-size:11px;color:var(--text-muted);">'+x.pacotes+' pct'+
-              (m&&m.por?(' · '+m.por+' às '+String(m.em||'').slice(-5)):'')+'</span></span>'+
-          '<span style="flex:0 0 auto;font-size:17px;font-weight:900;color:'+(pronto?'#16a34a':'var(--text-primary)')+';">'+_fmtKg(x.kg)+'<span style="font-size:11px;font-weight:400;"> kg</span></span>'+
-        '</button>';
+  return '<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:12px;">'+
+    '<table style="border-collapse:collapse;width:100%;font-size:13px;">'+
+      '<thead><tr style="background:#334155;color:#fff;font-size:10px;letter-spacing:.4px;">'+
+        '<th style="padding:9px 12px;text-align:left;white-space:nowrap;">RECHEIO</th>'+
+        '<th style="padding:9px 8px;text-align:center;white-space:nowrap;">A FAZER</th>'+
+        '<th style="padding:9px 8px;text-align:center;white-space:nowrap;">FEITO</th>'+
+        '<th style="padding:9px 12px;text-align:left;">PARA QUAIS PRODUTOS &middot; toque para marcar</th>'+
+      '</tr></thead><tbody>'+
+      recheios.map((r,i)=>{
+        const cor=r.completo?'#16a34a':(r.pct>0?'#d97706':'#dc2626');
+        const bg=r.completo?'#f0fdf4':(i%2?'#fafbfc':'#fff');
+        return '<tr style="background:'+bg+';border-top:1px solid #e5e7eb;">'+
+
+          // o recheio e a barra
+          '<td style="padding:10px 12px;vertical-align:top;min-width:160px;">'+
+            '<div style="font-size:15px;font-weight:800;line-height:1.2;color:'+(r.completo?'#15803d':'var(--text-primary)')+';">'+
+              (r.completo?'✓ ':'')+r.nome+'</div>'+
+            '<div style="height:6px;background:var(--bg-page);border-radius:99px;margin-top:5px;overflow:hidden;">'+
+              '<div style="height:100%;width:'+r.pct+'%;background:'+cor+';"></div></div>'+
+            '<div style="font-size:10px;color:var(--text-muted);margin-top:3px;">'+
+              r.prontos+'/'+r.produtos.length+' produtos marcados</div>'+
+          '</td>'+
+
+          // quanto fazer
+          '<td style="padding:10px 8px;text-align:center;vertical-align:top;white-space:nowrap;">'+
+            '<div style="font-size:21px;font-weight:900;color:'+cor+';line-height:1;">'+_fmtKg(r.meta)+'</div>'+
+            '<div style="font-size:9px;color:var(--text-muted);">kg</div>'+
+            (r.multiplos && r.multiplos.batidas.length
+              ? '<div style="font-size:10px;color:#1d4ed8;font-weight:700;margin-top:4px;white-space:nowrap;">'+
+                  r.multiplos.batidas.map(b=>_fmtKg(b)).join('+')+'</div>'
+              : '')+
+          '</td>'+
+
+          // quanto já foi feito
+          '<td style="padding:10px 8px;text-align:center;vertical-align:top;white-space:nowrap;">'+
+            '<div style="font-size:17px;font-weight:800;color:'+(r.feito>0?cor:'var(--text-muted)')+';line-height:1;">'+_fmtKg(r.feito)+'</div>'+
+            (r.falta>0.0001
+              ? '<div style="font-size:10px;color:#b45309;font-weight:700;margin-top:2px;">faltam '+_fmtKg(r.falta)+'</div>'
+              : (r.sobra>0.0001
+                ? '<div style="font-size:10px;color:#15803d;font-weight:700;margin-top:2px;">+'+_fmtKg(r.sobra)+' saldo</div>'
+                : '<div style="font-size:10px;color:#15803d;margin-top:2px;">na medida</div>'))+
+            '<button onclick="crecLancar(\''+escapeJsStr(r.nome)+'\')" style="margin-top:6px;background:#fff;border:1px solid var(--mc-azul,#2563eb);color:var(--mc-azul,#2563eb);border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">+ lancei</button>'+
+          '</td>'+
+
+          // os produtos, na própria linha
+          '<td style="padding:10px 12px;vertical-align:top;">'+
+            '<div style="display:flex;gap:5px;flex-wrap:wrap;">'+
+              r.produtos.map(x=>{
+                const pronto=!!marcas[_crecIdItem(r.nome, x.produto)];
+                return '<button onclick="crecMarcarProduto(\''+escapeJsStr(r.nome)+'\',\''+escapeJsStr(x.produto)+'\')" '+
+                  'style="display:flex;align-items:center;gap:6px;background:'+(pronto?'#dcfce7':'#fff')+';border:1px solid '+(pronto?'#16a34a':'var(--border-md,#d1d5db)')+';border-radius:8px;padding:6px 10px;cursor:pointer;font-family:inherit;text-align:left;">'+
+                  '<span style="flex:0 0 auto;width:16px;height:16px;border-radius:4px;border:2px solid '+(pronto?'#16a34a':'var(--border-md,#cbd5e1)')+';background:'+(pronto?'#16a34a':'#fff')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;">'+(pronto?'✓':'')+'</span>'+
+                  '<span style="font-size:12px;'+(pronto?'color:#15803d;text-decoration:line-through;':'color:var(--text-primary);')+'">'+x.produto+'</span>'+
+                  '<span style="font-size:13px;font-weight:800;color:'+(pronto?'#16a34a':'var(--text-primary)')+';white-space:nowrap;">'+_fmtKg(x.kg)+'kg</span>'+
+                '</button>';
+              }).join('')+
+            '</div>'+
+          '</td>'+
+        '</tr>';
       }).join('')+
-
-      // a batida sugerida
-      (r.multiplos && r.multiplos.batidas.length
-        ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:11px 13px;margin-top:4px;">'+
-            '<div style="font-size:11px;font-weight:800;color:#1d4ed8;">⚖️ PARA FAZER OS '+_fmtKg(r.falta)+' KG QUE FALTAM</div>'+
-            '<div style="font-size:15px;font-weight:800;color:#1e40af;margin-top:3px;">'+
-              r.multiplos.batidas.map(b=>_fmtKg(b)+' kg').join(' + ')+
-              ' = '+_fmtKg(r.multiplos.total)+' kg</div>'+
-            (r.multiplos.sobra>0.0001
-              ? '<div style="font-size:11px;color:#1e40af;margin-top:2px;">sobram '+_fmtKg(r.multiplos.sobra)+' kg para o resto da semana</div>'
-              : '<div style="font-size:11px;color:#15803d;margin-top:2px;">bate certinho</div>')+
-          '</div>'
-        : '')+
-
-      '<div style="display:flex;gap:8px;margin-top:11px;">'+
-        '<button onclick="crecLancar(\''+escapeJsStr(r.nome)+'\')" class="btn btn-primary" style="flex:1;">+ Lancei produção</button>'+
-        (r.produtos.length>1
-          ? '<button onclick="crecMarcarTudo(\''+escapeJsStr(r.nome)+'\')" class="btn btn-secondary" style="flex:0 0 auto;padding:0 16px;">✓ todos</button>'
-          : '')+
-      '</div>'+
-
-      (r.sobra>0.0001
-        ? '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:11px 13px;margin-top:9px;">'+
-            '<div style="font-size:12px;font-weight:800;color:#15803d;">+'+_fmtKg(r.sobra)+' kg a mais do que a meta de hoje</div>'+
-            '<div style="font-size:11px;color:#166534;margin-top:2px;line-height:1.5;">'+
-              'Fica de saldo para os próximos dias. Confira no estoque de recheios antes de fazer de novo.</div></div>'
-        : '')+
-    '</div></div>';
-  return h;
+    '</tbody></table></div>';
 }
+
+
+/* ── O DETALHE: para onde vai cada quilo ─────────────────────────── */
+
 
 /* Marcar que o recheio daquele produto já foi feito */
 async function crecMarcarProduto(recheio, produto){
