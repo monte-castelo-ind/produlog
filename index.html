@@ -29746,6 +29746,251 @@ function _ajContDados(id){ return ajContDados[id]||{eligo:{}, extra:{}, feitos:{
 
 /* Monta a tabela de um grupo: o que foi contado, o que o ELIGO tem e a
    diferença entre os dois */
+/* ── AJUSTAR O ELIGO PELA CONTAGEM ───────────────────────────────
+   Para cada produto, lança no ERP a diferença entre o que foi contado
+   e o que está lá, para os dois baterem. Entrada quando falta no ERP,
+   saída quando sobra. A observação vai como AJUSTE ESTOQUE.
+   O que falhar fica guardado num relatório. */
+let _ajEligoRel=null;     // relatório do último ajuste
+
+function _ajElTemRelatorio(){
+  if(_ajEligoRel) return true;
+  try{ return !!localStorage.getItem('ajEligoRel'); }catch(e){ return false; }
+}
+
+function ajContAjustaveis(){
+  const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel);
+  if(!c) return [];
+  return ajContLinhas(c).filter(l=>l.dif!==null && Math.abs(l.dif)>=0.01 && !l.feito);
+}
+
+function ajContAbrirAjuste(){
+  if(!eligoPronto()){ alert('A ponte do ELIGO não está configurada.\n\nConfigure em 🔗 ELIGO antes de ajustar.'); return; }
+  const linhas=ajContAjustaveis();
+  if(!linhas.length){ alert('Nada a ajustar: ou está tudo batendo, ou já foi marcado como feito.'); return; }
+
+  const entradas=linhas.filter(l=>l.dif>0);
+  const saidas=linhas.filter(l=>l.dif<0);
+
+  const ov=document.createElement('div');
+  ov.id='ajel-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">🔗 Ajustar o ELIGO pela contagem</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">'+
+        'Lança no ERP a diferença de cada produto, para o saldo bater com o que foi contado. '+
+        'A observação vai como <strong>AJUSTE ESTOQUE</strong>.</div>'+
+      '<div style="display:flex;gap:8px;margin-top:11px;">'+
+        '<div style="flex:1;text-align:center;background:#eff6ff;border-radius:9px;padding:9px;">'+
+          '<div style="font-size:19px;font-weight:900;color:#2563eb;">'+entradas.length+'</div>'+
+          '<div style="font-size:10px;color:var(--text-secondary);">entrada(s)</div></div>'+
+        '<div style="flex:1;text-align:center;background:#fef2f2;border-radius:9px;padding:9px;">'+
+          '<div style="font-size:19px;font-weight:900;color:#dc2626;">'+saidas.length+'</div>'+
+          '<div style="font-size:10px;color:var(--text-secondary);">saída(s)</div></div>'+
+      '</div>'+
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:11px;cursor:pointer;font-size:12px;font-weight:700;">'+
+        '<input type="checkbox" id="ajel-todos" checked onchange="_ajElMarcarTodos(this.checked)" style="width:18px;height:18px;cursor:pointer;">'+
+        'selecionar todos (<span id="ajel-conta">'+linhas.length+'</span> de '+linhas.length+')</label>'+
+    '</div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      linhas.map(l=>{
+        const ent=l.dif>0;
+        return '<label class="ajel-item" data-cod="'+String(l.cod).replace(/"/g,'&quot;')+'" data-dif="'+l.dif+'" '+
+          'style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:var(--bg-page);border-radius:9px;margin-bottom:5px;cursor:pointer;">'+
+          '<input type="checkbox" class="ajel-check" checked onchange="_ajElContar()" style="width:18px;height:18px;cursor:pointer;flex:0 0 auto;">'+
+          '<span style="flex:1;min-width:0;">'+
+            '<span style="display:block;font-size:13px;font-weight:600;">'+l.nome+'</span>'+
+            '<span style="display:block;font-size:11px;color:var(--text-muted);">'+
+              'cód '+l.cod+' · ELIGO '+_fmtKg(l.noEligo)+' · contado '+_fmtKg(l.contado)+'</span></span>'+
+          '<span style="flex:0 0 auto;text-align:right;white-space:nowrap;">'+
+            '<span style="display:block;font-size:15px;font-weight:900;color:'+(ent?'#2563eb':'#dc2626')+';">'+
+              (ent?'+':'')+_fmtKg(l.dif)+'</span>'+
+            '<span style="display:block;font-size:9px;color:var(--text-muted);">'+(ent?'entrada':'saída')+'</span></span>'+
+        '</label>';
+      }).join('')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'ajel-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="ajContExecutarAjuste()">Ajustar no ELIGO</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.ajContAbrirAjuste=ajContAbrirAjuste;
+
+async function ajContExecutarAjuste(){
+  const itens=[];
+  document.querySelectorAll('.ajel-item').forEach(el=>{
+    const c=el.querySelector('.ajel-check');
+    if(!c || !c.checked) return;
+    itens.push({cod:el.dataset.cod, dif:parseFloat(el.dataset.dif)||0});
+  });
+  if(!itens.length){ alert('Marque ao menos um produto.'); return; }
+
+  const linhas=ajContAjustaveis();
+  const alvos=itens.map(x=>{
+    const l=linhas.find(y=>String(y.cod)===String(x.cod));
+    return l?{...l}:null;
+  }).filter(Boolean);
+  if(!alvos.length){ alert('Nada a ajustar.'); return; }
+
+  const ent=alvos.filter(l=>l.dif>0), sai=alvos.filter(l=>l.dif<0);
+  if(!confirm('Ajustar '+alvos.length+' produto(s) no ELIGO?\n\n'+
+    ent.length+' entrada(s) · '+sai.length+' saída(s)\n\n'+
+    'Cada lançamento vai com a observação AJUSTE ESTOQUE.\n'+
+    'Isso mexe no estoque do ERP de verdade.')) return;
+
+  const senha=eligoSenha();
+  if(senha===null) return;
+
+  document.getElementById('ajel-modal')?.remove();
+  _ajElMostrarProgresso(alvos.length);
+
+  const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel);
+  const dataAj=(c&&c.data)?c.data:hoje();
+  const ok=[], falhas=[];
+
+  for(let i=0;i<alvos.length;i++){
+    const l=alvos[i];
+    _ajElProgresso(i+1, alvos.length, l.nome);
+    const qtd=Math.abs(l.dif);
+    const tipo=l.dif>0?'entrada':'saida';
+    try{
+      const r=await eligoLancar(String(l.cod), qtd, tipo, dataAj,
+        'AJUSTE ESTOQUE', 'manual');
+      if(r && r.ok){
+        ok.push({...l, tipo, qtd, id:r.id||''});
+      } else {
+        falhas.push({...l, tipo, qtd, erro:(r&&(r.erro||r.mensagem))||'sem resposta da ponte'});
+      }
+    }catch(e){
+      falhas.push({...l, tipo, qtd, erro:(e&&e.message)||String(e)});
+    }
+  }
+
+  // os que deram certo ficam marcados como resolvidos
+  if(ok.length && c){
+    try{
+      const feitos={};
+      ok.forEach(l=>{ feitos[l.cod]=true; });
+      await setDoc(doc(db,'ajustesContagem',c.firestoreId),
+        {feitos, ajusteEligoEm:agora(), ajusteEligoPor:_demAutor()},{merge:true});
+    }catch(e){ console.error('marcar feitos:', e); }
+  }
+
+  _ajElRelatorio({quando:agora(), por:_demAutor(), contagem:(c&&c.data)||'', ok, falhas});
+}
+window.ajContExecutarAjuste=ajContExecutarAjuste;
+
+function _ajElMostrarProgresso(total){
+  const ov=document.createElement('div');
+  ov.id='ajel-prog';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:24px;text-align:center;">'+
+    '<div style="font-size:30px;">🔗</div>'+
+    '<div style="font-size:15px;font-weight:800;margin-top:8px;">Ajustando no ELIGO…</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;" id="ajel-prog-txt">0 de '+total+'</div>'+
+    '<div style="height:10px;background:var(--bg-page);border-radius:99px;margin-top:12px;overflow:hidden;">'+
+      '<div id="ajel-prog-bar" style="height:100%;width:0%;background:var(--mc-azul,#2563eb);transition:width .2s;"></div></div>'+
+    '<div style="font-size:11px;color:var(--text-muted);margin-top:9px;">não feche esta tela</div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+
+function _ajElProgresso(i, total, nome){
+  const t=document.getElementById('ajel-prog-txt');
+  const b=document.getElementById('ajel-prog-bar');
+  if(t) t.textContent=i+' de '+total+' · '+String(nome||'').slice(0,28);
+  if(b) b.style.width=Math.round(i/total*100)+'%';
+}
+
+/* O relatório fica guardado para consulta depois */
+function _ajElRelatorio(rel){
+  _ajEligoRel=rel;
+  document.getElementById('ajel-prog')?.remove();
+  try{ localStorage.setItem('ajEligoRel', JSON.stringify(rel)); }catch(e){}
+  if(typeof renderAjCont==='function') renderAjCont();
+  ajContVerRelatorio();
+}
+
+function ajContVerRelatorio(){
+  let rel=_ajEligoRel;
+  if(!rel){ try{ rel=JSON.parse(localStorage.getItem('ajEligoRel')||'null'); }catch(e){} }
+  if(!rel){ alert('Nenhum ajuste foi feito ainda.'); return; }
+
+  const ov=document.createElement('div');
+  ov.id='ajel-rel';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">'+(rel.falhas.length?'⚠️':'✓')+' Relatório do ajuste</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+
+        (rel.contagem?('contagem de '+rel.contagem+' · '):'')+rel.quando+' · '+rel.por+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:11px;">'+
+        '<div style="flex:1;text-align:center;background:#f0fdf4;border-radius:9px;padding:10px;">'+
+          '<div style="font-size:21px;font-weight:900;color:#16a34a;">'+rel.ok.length+'</div>'+
+          '<div style="font-size:10px;color:var(--text-secondary);">ajustados</div></div>'+
+        '<div style="flex:1;text-align:center;background:'+(rel.falhas.length?'#fef2f2':'var(--bg-page)')+';border-radius:9px;padding:10px;">'+
+          '<div style="font-size:21px;font-weight:900;color:'+(rel.falhas.length?'#dc2626':'var(--text-muted)')+';">'+rel.falhas.length+'</div>'+
+          '<div style="font-size:10px;color:var(--text-secondary);">com erro</div></div>'+
+      '</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      (rel.falhas.length
+        ? '<div style="font-size:11px;font-weight:800;color:#b91c1c;margin-bottom:7px;">NÃO FOI POSSÍVEL AJUSTAR</div>'+
+          rel.falhas.map(f=>'<div class="card" style="margin-bottom:7px;background:#fef2f2;border-color:#fecaca;">'+
+            '<div style="display:flex;justify-content:space-between;gap:8px;">'+
+              '<span style="flex:1;min-width:0;font-size:13px;font-weight:700;">'+f.nome+'</span>'+
+              '<span style="font-size:13px;font-weight:800;color:#dc2626;white-space:nowrap;">'+(f.tipo==='entrada'?'+':'−')+_fmtKg(f.qtd)+'</span></div>'+
+            '<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">cód '+f.cod+'</div>'+
+            '<div style="font-size:11px;color:#b91c1c;margin-top:4px;line-height:1.4;">'+f.erro+'</div>'+
+          '</div>').join('')
+        : '<div style="text-align:center;padding:22px;color:#15803d;">'+
+            '<div style="font-size:30px;">✓</div>'+
+            '<div style="font-size:14px;font-weight:700;margin-top:7px;">Todos ajustados</div>'+
+            '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">o ELIGO deve estar batendo com a contagem</div></div>')+
+      (rel.ok.length
+        ? '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin:14px 0 7px;">AJUSTADOS ('+rel.ok.length+')</div>'+
+          '<div style="font-size:12px;color:var(--text-secondary);line-height:1.8;">'+
+            rel.ok.map(o=>o.nome+' <strong style="color:'+(o.tipo==='entrada'?'#2563eb':'#dc2626')+';">'+(o.tipo==='entrada'?'+':'−')+_fmtKg(o.qtd)+'</strong>').join('<br>')+
+          '</div>'
+        : '')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      (rel.falhas.length
+        ? '<button class="btn btn-secondary" style="flex:1;" onclick="ajContCopiarFalhas()">📋 Copiar</button>'
+        : '')+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'ajel-rel\').remove()">Fechar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.ajContVerRelatorio=ajContVerRelatorio;
+
+function ajContCopiarFalhas(){
+  let rel=_ajEligoRel;
+  if(!rel){ try{ rel=JSON.parse(localStorage.getItem('ajEligoRel')||'null'); }catch(e){} }
+  if(!rel || !rel.falhas.length) return;
+  const txt='Não ajustados no ELIGO — '+rel.quando+'\n\n'+
+    rel.falhas.map(f=>f.cod+'  '+f.nome+'  '+(f.tipo==='entrada'?'+':'-')+_fmtKg(f.qtd)+'  ('+f.erro+')').join('\n');
+  try{
+    navigator.clipboard.writeText(txt);
+    alert('✓ Copiado.');
+  }catch(e){ alert(txt); }
+}
+window.ajContCopiarFalhas=ajContCopiarFalhas;
+
+function _ajElMarcarTodos(on){
+  document.querySelectorAll('.ajel-check').forEach(c=>{ c.checked=!!on; });
+  _ajElContar();
+}
+window._ajElMarcarTodos=_ajElMarcarTodos;
+
+function _ajElContar(){
+  const n=[...document.querySelectorAll('.ajel-check')].filter(c=>c.checked).length;
+  const el=document.getElementById('ajel-conta');
+  if(el) el.textContent=n;
+}
+window._ajElContar=_ajElContar;
+
 function ajContLinhas(c){
   if(!c) return [];
   const d=_ajContDados(c.firestoreId);
@@ -29761,7 +30006,11 @@ function ajContLinhas(c){
     const contado=(Number(it.total)||0)+(chaveExtra?(Number(extra[chaveExtra])||0):0);
     const v=mapaEligo[cod];
     const noEligo=(v!==undefined && v!=='') ? (Number(v)||0) : null;
-    const dif=(noEligo===null)?null:(noEligo-contado);
+    /* Contagem menos ELIGO: positivo = falta lançar entrada no ERP,
+       negativo = falta dar saída. Antes era o contrário e o sinal
+       confundia na hora de ajustar.
+       O arredondamento evita o 280.08000000000004 da soma de decimais. */
+    const dif=(noEligo===null)?null:Math.round((contado-noEligo)*100)/100;
     return {
       cod, nome:it.nome||_ajContNome(cod)||('cód '+cod),
       contadoApp:Number(it.total)||0,
@@ -29959,6 +30208,13 @@ function _ajContRenderTabela(c){
     (d.eligoEm?'<div style="font-size:11px;color:var(--text-muted);margin-top:3px;">Saldo do ELIGO colado em '+d.eligoEm+(d.eligoPor?(' por '+d.eligoPor):'')+'</div>':'')+
     '<button onclick="ajContColarEligo()" class="btn '+(temEligo?'btn-secondary':'btn-primary')+'" style="width:100%;margin-top:10px;">'+
       (temEligo?'↻ Atualizar o saldo do ELIGO':'📋 Colar o saldo do ELIGO')+'</button>'+
+    // ajustar o ERP de uma vez, pela contagem
+    (temEligo && pend.length && (window.adminMode===true)
+      ? '<button onclick="ajContAbrirAjuste()" class="btn btn-primary" style="width:100%;margin-top:7px;background:#1e40af;">🔗 Ajustar o ELIGO pela contagem ('+pend.length+')</button>'
+      : '')+
+    (_ajElTemRelatorio()
+      ? '<button onclick="ajContVerRelatorio()" style="width:100%;margin-top:7px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;">📄 Ver o último relatório de ajuste</button>'
+      : '')+
   '</div>';
 
   if(!temEligo){
@@ -30018,7 +30274,7 @@ function _ajContRenderTabela(c){
       '<td style="padding:8px 6px;text-align:center;font-weight:800;">'+l.contado+'</td>'+
       '<td style="padding:8px 6px;text-align:center;font-weight:900;color:'+cor+';">'+
         (l.dif===null?'—':((l.dif>0?'+':'')+l.dif))+
-        (l.dif!==null&&l.dif!==0?'<div style="font-size:9px;font-weight:600;color:var(--text-muted);">'+(l.dif>0?'sobra no ERP':'falta no ERP')+'</div>':'')+'</td>'+
+        (l.dif!==null&&l.dif!==0?'<div style="font-size:9px;font-weight:600;color:var(--text-muted);">'+(l.dif>0?'falta entrada':'falta saída')+'</div>':'')+'</td>'+
       '<td style="padding:8px 6px;text-align:center;">'+
         '<button onclick="ajContToggleFeito(\''+escapeJsStr(l.cod)+'\')" title="'+(l.feito?'Marcado como ajustado':'Marcar como ajustado')+'" '+
           'style="width:25px;height:25px;border-radius:7px;border:2px solid '+(l.feito?'#16a34a':'#cbd5e1')+';background:'+(l.feito?'#16a34a':'#fff')+';color:#fff;cursor:pointer;font-size:14px;font-weight:900;line-height:1;">'+(l.feito?'✓':'')+'</button></td>'+
@@ -37804,11 +38060,28 @@ function contFaltandoNaContagem(){
       out.push({cod, nome, grupo});
     });
   };
+  /* Olha em todas as listas onde um produto pode ter sido cadastrado,
+     não só nas duas principais. */
   ver(typeof PRODUTOS!=='undefined'?PRODUTOS:[], 'Salgados');
   ver(typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:[], 'Pães');
+  ver(typeof produtosConfFirebase!=='undefined'?produtosConfFirebase:[], 'Salgados');
+  ver((typeof estProdutos!=='undefined'?estProdutos:[]).map(p=>({cod:p.codigo||p.cod, nome:p.nome})), 'Salgados');
   return out.sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
 }
 window.contFaltandoNaContagem=contFaltandoNaContagem;
+
+/* De onde vêm os produtos e quantos há em cada lista. Serve para ver
+   se o cadastro novo chegou ao app. */
+function _contDiagnostico(){
+  const n=l=>((typeof l!=='undefined'&&l)?l.length:0);
+  const naContagem=Object.values(CONTAGEM_ITENS||{}).reduce((t,a)=>t+(a||[]).length,0);
+  return '<div style="background:var(--bg-page);border-radius:9px;padding:10px 12px;margin-bottom:11px;font-size:11px;color:var(--text-secondary);line-height:1.7;">'+
+    '<div><strong>'+naContagem+'</strong> item(ns) na contagem, em '+Object.keys(CONTAGEM_ITENS||{}).length+' grupo(s)</div>'+
+    '<div>cadastro: '+n(typeof PRODUTOS!=='undefined'?PRODUTOS:null)+' salgado(s) · '+
+      n(typeof QUADRA_PRODUTOS!=='undefined'?QUADRA_PRODUTOS:null)+' pão(ẽs) · '+
+      n(typeof produtosConfFirebase!=='undefined'?produtosConfFirebase:null)+' na confeitaria</div>'+
+  '</div>';
+}
 
 function contAbrirSincronizar(){
   const faltam=contFaltandoNaContagem();
@@ -37823,6 +38096,7 @@ function contAbrirSincronizar(){
       '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">'+
         'Produtos do cadastro que ainda não estão na lista de contagem.</div></div>'+
     '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      _contDiagnostico()+
       (faltam.length
         ? '<div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:9px;">'+faltam.length+' produto(s) faltando</div>'+
           faltam.map((x,i)=>'<label style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:var(--bg-page);border-radius:9px;margin-bottom:5px;cursor:pointer;">'+
