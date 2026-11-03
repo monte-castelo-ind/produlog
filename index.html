@@ -29758,14 +29758,34 @@ function _ajElTemRelatorio(){
   try{ return !!localStorage.getItem('ajEligoRel'); }catch(e){ return false; }
 }
 
+function _ajContNormCod(c){ return String(c||'').trim().toUpperCase(); }
+
+/* Os códigos que pertencem a um grupo da contagem. Devolve null quando
+   o grupo não existe na lista, para não bloquear tudo por engano. */
+function _ajContCodigosDoGrupo(grupo){
+  if(!grupo || typeof CONTAGEM_ITENS==='undefined') return null;
+  const chave=Object.keys(CONTAGEM_ITENS||{}).find(g=>_normNome(g)===_normNome(grupo));
+  if(!chave) return null;
+  const out={};
+  (CONTAGEM_ITENS[chave]||[]).forEach(it=>{
+    const c=_ajContNormCod(it&&it.cod);
+    if(c) out[c]=true;
+  });
+  return Object.keys(out).length?out:null;
+}
+
 function ajContAjustaveis(){
   const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel);
   if(!c) return [];
+  /* Duas travas, porque o saldo colado traz o ELIGO inteiro e um
+     produto de outro grupo apareceria com contagem zero — o app
+     tentaria zerar o estoque dele no ERP.
+     1. tem de ter sido contado nesta contagem;
+     2. tem de pertencer ao grupo dela. */
+  const doGrupo=_ajContCodigosDoGrupo(c.grupo);
   return ajContLinhas(c).filter(l=>{
-    /* NUNCA ajustar produto que não foi contado. O saldo colado traz o
-       ELIGO inteiro; um produto de outro grupo apareceria com contagem
-       zero e o app tentaria zerar o estoque dele no ERP. */
     if(l.semContagem) return false;
+    if(doGrupo && !doGrupo[_ajContNormCod(l.cod)]) return false;
     if(l.dif===null || Math.abs(l.dif)<0.01) return false;
     if(l.feito) return false;
     return true;
@@ -29793,10 +29813,9 @@ function ajContAbrirAjuste(){
         'Lança no ERP a diferença de cada produto, para o saldo bater com o que foi contado. '+
         'A observação vai como <strong>AJUSTE ESTOQUE</strong>.</div>'+
       // deixa explícito o que fica de fora
-      (foraDoGrupo
-        ? '<div style="background:var(--bg-page);border-radius:8px;padding:9px 11px;margin-top:9px;font-size:11px;color:var(--text-secondary);line-height:1.5;">'+
-            '✓ '+foraDoGrupo+' produto(s) do saldo do ELIGO não fazem parte desta contagem e <strong>não serão tocados</strong>.</div>'
-        : '')+
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 11px;margin-top:9px;font-size:11px;color:#166534;line-height:1.5;">'+
+        '🔒 Só <strong>'+(c0&&c0.grupo?c0.grupo:'os produtos desta contagem')+'</strong>. '+
+        (foraDoGrupo?(foraDoGrupo+' produto(s) do saldo do ELIGO ficam de fora.'):'')+'</div>'+
       '<div style="display:flex;gap:8px;margin-top:11px;">'+
         '<div style="flex:1;text-align:center;background:#eff6ff;border-radius:9px;padding:9px;">'+
           '<div style="font-size:19px;font-weight:900;color:#2563eb;">'+entradas.length+'</div>'+
