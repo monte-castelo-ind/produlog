@@ -29761,13 +29761,24 @@ function _ajElTemRelatorio(){
 function ajContAjustaveis(){
   const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel);
   if(!c) return [];
-  return ajContLinhas(c).filter(l=>l.dif!==null && Math.abs(l.dif)>=0.01 && !l.feito);
+  return ajContLinhas(c).filter(l=>{
+    /* NUNCA ajustar produto que não foi contado. O saldo colado traz o
+       ELIGO inteiro; um produto de outro grupo apareceria com contagem
+       zero e o app tentaria zerar o estoque dele no ERP. */
+    if(l.semContagem) return false;
+    if(l.dif===null || Math.abs(l.dif)<0.01) return false;
+    if(l.feito) return false;
+    return true;
+  });
 }
 
 function ajContAbrirAjuste(){
   if(!eligoPronto()){ alert('A ponte do ELIGO não está configurada.\n\nConfigure em 🔗 ELIGO antes de ajustar.'); return; }
   const linhas=ajContAjustaveis();
   if(!linhas.length){ alert('Nada a ajustar: ou está tudo batendo, ou já foi marcado como feito.'); return; }
+  // quantos vieram do ELIGO mas não foram contados
+  const c0=(contagens||[]).find(x=>x.firestoreId===_ajContSel);
+  const foraDoGrupo=c0 ? ajContLinhas(c0).filter(l=>l.semContagem).length : 0;
 
   const entradas=linhas.filter(l=>l.dif>0);
   const saidas=linhas.filter(l=>l.dif<0);
@@ -29781,6 +29792,11 @@ function ajContAbrirAjuste(){
       '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">'+
         'Lança no ERP a diferença de cada produto, para o saldo bater com o que foi contado. '+
         'A observação vai como <strong>AJUSTE ESTOQUE</strong>.</div>'+
+      // deixa explícito o que fica de fora
+      (foraDoGrupo
+        ? '<div style="background:var(--bg-page);border-radius:8px;padding:9px 11px;margin-top:9px;font-size:11px;color:var(--text-secondary);line-height:1.5;">'+
+            '✓ '+foraDoGrupo+' produto(s) do saldo do ELIGO não fazem parte desta contagem e <strong>não serão tocados</strong>.</div>'
+        : '')+
       '<div style="display:flex;gap:8px;margin-top:11px;">'+
         '<div style="flex:1;text-align:center;background:#eff6ff;border-radius:9px;padding:9px;">'+
           '<div style="font-size:19px;font-weight:900;color:#2563eb;">'+entradas.length+'</div>'+
