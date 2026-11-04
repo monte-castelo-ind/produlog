@@ -25334,7 +25334,13 @@ function _simixDia(r, campo, anoMes){
   const batidas=_simixBatidas(r, campo);
   const minPrev=_simixMin(campo(r,'hrPrev','HorasPrevistas','Previsto'));
   const minTrab=_simixMin(campo(r,'hrTrab','HorasTrabalhadas','Trabalhado'));
-  const afast=String(campo(r,'afastaDesc','afastaSigla','Afastamento','Ocorrencia')||'').trim();
+  /* O Símix registra a falta de dia inteiro como um "afastamento"
+     chamado "Falta" (conferido em out/2026). Falta não é afastamento:
+     afastamento (atestado, férias…) sai da conta; falta entra. Mesma
+     regra da leitura do PDF, que trata qualquer "falta" como falta. */
+  const afastBruto=String(campo(r,'afastaDesc','afastaSigla','Afastamento','Ocorrencia')||'').trim();
+  const ehFalta=/falta/i.test(afastBruto);
+  const afast=ehFalta?'':afastBruto;
 
   /* Dia que ainda não chegou: o Símix já manda o mês inteiro, com os
      dias futuros vazios. Ficam fora da conta, como no PDF. */
@@ -25369,7 +25375,7 @@ function _simixDia(r, campo, anoMes){
      que o dia era de trabalho é o hrFaltas. Falta parcial (saiu cedo,
      chegou tarde) não é falta: aparece no atraso e no saldo. */
   const minFaltas=_simixMin(campo(r,'hrFaltas'))||0;
-  const falta=!futuro && !batidas.length && (!!minPrev || minFaltas>0) && !afast && !dsr &&
+  const falta=!futuro && !batidas.length && (ehFalta || !!minPrev || minFaltas>0) && !afast && !dsr &&
     (feriadoConta || !feriado);
   // saldo do dia como o Símix calculou (já com tolerâncias)
   const minSaldo=_simixMin(campo(r,'hrSaldo'));
@@ -25388,7 +25394,7 @@ function _simixDia(r, campo, anoMes){
     afastamento:afast||((feriado && !feriadoConta)?'feriado':''),
     folga:!futuro && !batidas.length && !afast && !falta && (dsr || (!minPrev && !minFaltas)),
     foraDoPeriodo:futuro,
-    obs:afast
+    obs:afastBruto
   };
 }
 
