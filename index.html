@@ -27820,44 +27820,61 @@ function _qualCarregarImagem(file){
 async function _qualComprimir(file){
   if(!file) throw new Error('Nenhuma imagem escolhida.');
   if(!/^image\//.test(file.type||'')) throw new Error('O arquivo não é uma imagem.');
-  if(file.size > 25*1024*1024) throw new Error('Imagem muito grande ('+Math.round(file.size/1024/1024)+' MB). Use uma foto menor.');
-
-  _qualEtapa('Abrindo a foto…');
-  const img=await _qualComLimite(_qualCarregarImagem(file), QUAL_FOTO_TIMEOUT, 'abrir a foto');
-
-  _qualEtapa('Reduzindo…');
-  await new Promise(r=>setTimeout(r,20));
 
   const alvo=QUAL_FOTO_LADO;
-  let w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
-  if(!w || !h) throw new Error('A imagem veio sem tamanho.');
-  const f=Math.min(1, alvo/Math.max(w,h));
-  const nw=Math.max(1, Math.round(w*f)), nh=Math.max(1, Math.round(h*f));
 
+  /* Caminho leve: createImageBitmap com redimensionamento reduz a foto
+     DURANTE a decodificação. Uma foto de 12 MP ocuparia uns 48 MB como
+     bitmap completo — é isso que trava o tablet. Assim ela nunca chega
+     a existir inteira na memória. */
+  if(window.createImageBitmap){
+    try{
+      _qualEtapa('Reduzindo a foto…');
+      await new Promise(r=>setTimeout(r,20));
+      const bmp=await _qualComLimite(
+        createImageBitmap(file, {resizeWidth:alvo, resizeQuality:'medium'}),
+        QUAL_FOTO_TIMEOUT, 'reduzir a foto');
+      try{
+        const out=_qualDoBitmap(bmp, alvo);
+        if(out) return out;
+      } finally { if(bmp.close) bmp.close(); }
+    }catch(e){
+      // não deu: segue pelo caminho tradicional
+      console.warn('createImageBitmap falhou:', e && e.message);
+    }
+  }
+
+  _qualEtapa('Abrindo a foto…');
+  await new Promise(r=>setTimeout(r,20));
+  const img=await _qualComLimite(_qualCarregarImagem(file), QUAL_FOTO_TIMEOUT, 'abrir a foto');
+  _qualEtapa('Finalizando…');
+  await new Promise(r=>setTimeout(r,20));
+  const out=_qualDoBitmap(img, alvo);
+  if(img._url) URL.revokeObjectURL(img._url);
+  if(!out) throw new Error('Não consegui converter a imagem.');
+  return out;
+}
+
+/* Desenha num canvas do tamanho certo e devolve o JPEG */
+function _qualDoBitmap(src, alvo){
+  const w=src.width||src.naturalWidth, h=src.height||src.naturalHeight;
+  if(!w || !h) return '';
+  const f=Math.min(1, alvo/Math.max(w,h));
+  const nw=Math.max(1,Math.round(w*f)), nh=Math.max(1,Math.round(h*f));
   const canvas=document.createElement('canvas');
   canvas.width=nw; canvas.height=nh;
   const ctx=canvas.getContext('2d');
   ctx.fillStyle='#fff'; ctx.fillRect(0,0,nw,nh);
-  ctx.drawImage(img, 0, 0, nw, nh);
-
-  _qualEtapa('Finalizando…');
-  await new Promise(r=>setTimeout(r,20));
-
-  let out='';
-  try{
-    out=canvas.toDataURL('image/jpeg', 0.6);
-  }catch(e){
-    throw new Error('O navegador não conseguiu converter a imagem.');
-  }
-  if(!out || out.length<100) throw new Error('A conversão falhou.');
-  if(out.length>QUAL_FOTO_MAX){
-    out=canvas.toDataURL('image/jpeg', 0.4);
-  }
-  if(out.length>QUAL_FOTO_MAX*1.4){
-    throw new Error('A imagem ficou grande demais ('+Math.round(out.length/1024)+' KB). Tente outra foto.');
-  }
-  return out;
+  ctx.drawImage(src, 0, 0, nw, nh);
+  let out=canvas.toDataURL('image/jpeg', 0.6);
+  if(out && out.length>QUAL_FOTO_MAX) out=canvas.toDataURL('image/jpeg', 0.4);
+  // libera o canvas, que no tablet segura memória
+  canvas.width=1; canvas.height=1;
+  return (out && out.length>100) ? out : '';
 }
+
+/* Usa um endereço temporário em vez de transformar o arquivo inteiro em
+   texto: readAsDataURL de uma foto de 10 MB cria uma string de 13 MB. */
 
 async function qualEscolherFoto(inp){
   const f=(inp.files||[])[0];
