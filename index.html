@@ -27786,6 +27786,52 @@ const QUAL_FOTO_MAX=180*1024;   // acima disso, comprime mais
    O lado menor (480px) é suficiente para conferir aparência e peso. */
 const QUAL_FOTO_TIMEOUT=25000;   // depois disso, desiste e avisa
 
+/* ── CAPTURADOR DE ERRO DA FOTO ──────────────────────────────────
+   Quatro tentativas de adivinhar a causa não resolveram. Isto mostra
+   o erro de verdade na tela, em vez de deixar a página travada. */
+let _qualErros=[];
+
+window.addEventListener('error', e=>{
+  _qualErros.push({tipo:'erro', msg:(e.message||''), arq:(e.filename||'').split('/').pop(), linha:e.lineno});
+  _qualMostrarErro();
+});
+window.addEventListener('unhandledrejection', e=>{
+  const r=e.reason;
+  _qualErros.push({tipo:'promessa', msg:(r&&(r.message||r.toString()))||'sem detalhe'});
+  _qualMostrarErro();
+});
+
+function _qualMostrarErro(){
+  // só atrapalha na tela de qualidade; nas outras, fica guardado
+  if(document.querySelector('.screen.active')?.id!=='s-qual') return;
+  if(document.getElementById('qual-erro-box')) return;
+  const ultimo=_qualErros[_qualErros.length-1];
+  if(!ultimo) return;
+  const el=document.createElement('div');
+  el.id='qual-erro-box';
+  el.style.cssText='position:fixed;left:10px;right:10px;bottom:10px;z-index:9999;background:#7f1d1d;color:#fff;border-radius:12px;padding:13px 15px;font-family:inherit;box-shadow:0 4px 16px rgba(0,0,0,.4);';
+  el.innerHTML='<div style="display:flex;align-items:flex-start;gap:10px;">'+
+    '<span style="font-size:19px;">⚠️</span>'+
+    '<div style="flex:1;min-width:0;">'+
+      '<div style="font-size:13px;font-weight:800;">Erro no app</div>'+
+      '<div style="font-size:12px;margin-top:4px;line-height:1.45;word-break:break-word;">'+
+        String(ultimo.msg).slice(0,220)+
+        (ultimo.arq?('<br><span style="opacity:.75;font-size:11px;">'+ultimo.arq+' linha '+ultimo.linha+'</span>'):'')+
+      '</div>'+
+      '<button onclick="qualCopiarErro()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:7px;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;">📋 copiar</button>'+
+    '</div>'+
+    '<button onclick="document.getElementById(\'qual-erro-box\').remove()" style="background:none;border:none;color:#fff;font-size:17px;cursor:pointer;padding:0 4px;font-family:inherit;">×</button>'+
+  '</div>';
+  document.body.appendChild(el);
+}
+
+function qualCopiarErro(){
+  const txt=_qualErros.slice(-5).map(e=>e.tipo+': '+e.msg+(e.arq?(' ('+e.arq+':'+e.linha+')'):'')).join('\n');
+  try{ navigator.clipboard.writeText(txt); alert('✓ Copiado. Me mande esse texto.'); }
+  catch(e){ alert(txt); }
+}
+window.qualCopiarErro=qualCopiarErro;
+
 function _qualEtapa(txt){
   const area=document.getElementById('qt-foto-area');
   if(area) area.innerHTML='<div style="padding:20px;text-align:center;">'+
@@ -27878,23 +27924,32 @@ function _qualDoBitmap(src, alvo){
    texto: readAsDataURL de uma foto de 10 MB cria uma string de 13 MB. */
 
 async function qualEscolherFoto(inp){
-  const f=(inp.files||[])[0];
-  inp.value='';
-  if(!f) return;
-  const ov=document.getElementById('qual-teste'); if(!ov) return;
-  const area=document.getElementById('qt-foto-area');
+  let etapa='início';
+  try{
+    etapa='ler o arquivo escolhido';
+    const f=(inp.files||[])[0];
+    inp.value='';
+    if(!f){ return; }
+    etapa='achar a janela do teste';
+    const ov=document.getElementById('qual-teste');
+    if(!ov){ alert('A janela do teste foi fechada. Abra de novo e tente.'); return; }
+    etapa='preparar a área da foto';
+    const area=document.getElementById('qt-foto-area');
   if(area) area.innerHTML='<div style="padding:20px;text-align:center;">'+
     '<div style="font-size:26px;">📷</div>'+
     '<div style="font-size:13px;font-weight:700;margin-top:6px;">Preparando a foto…</div>'+
     '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">pode levar alguns segundos</div></div>';
   await new Promise(r=>setTimeout(r,30));   // deixa o aviso aparecer antes de travar o processamento
-  try{
+    etapa='reduzir a imagem';
     const dataUrl=await _qualComprimir(f);
+    etapa='guardar a foto';
     _qtFotoAtual=dataUrl;
+    etapa='mostrar a foto';
     _qtPintarFoto();
   }catch(e){
-    alert(e.message||'Não consegui usar essa imagem.');
-    _qtPintarFoto();
+    // diz em qual passo parou, para não ficar no escuro
+    alert('Não consegui usar essa imagem.\n\nParou em: '+etapa+'\nMotivo: '+((e&&e.message)||e||'desconhecido'));
+    try{ _qtPintarFoto(); }catch(e2){}
   }
 }
 window.qualEscolherFoto=qualEscolherFoto;
