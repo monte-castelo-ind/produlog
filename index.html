@@ -20417,16 +20417,47 @@ function laAbrirEstoque(){
 }
 window.laAbrirEstoque=laAbrirEstoque;
 
+/* Lê uma quantidade no formato brasileiro. "1.945,96" é mil novecentos
+   e quarenta e cinco; ",06" é zero vírgula zero seis. Arredonda para
+   pacote inteiro, porque é isso que o resto do app usa. */
+function _laLerQtd(txt){
+  let t=String(txt==null?'':txt).trim();
+  if(!t) return null;
+  const neg=/^-/.test(t) || /-$/.test(t);
+  t=t.replace(/[^\d.,]/g,'');
+  if(!t) return null;
+  const temV=t.includes(','), temP=t.includes('.');
+  if(temV && temP){
+    // "1.945,96" → ponto é milhar, vírgula é decimal
+    t=t.replace(/\./g,'').replace(',', '.');
+  } else if(temV){
+    t=t.replace(',', '.');
+  } else if(temP){
+    // "1.945" é milhar; "1.9" é decimal
+    const partes=t.split('.');
+    const ultima=partes[partes.length-1];
+    if(partes.length>2 || ultima.length===3) t=t.replace(/\./g,'');
+  }
+  const n=parseFloat(t);
+  if(isNaN(n)) return null;
+  return Math.round(n)*(neg?-1:1);
+}
+window._laLerQtd=_laLerQtd;
+
 async function laSalvarEstoque(){
   const txt=(document.getElementById('la-est-txt')||{}).value||'';
   const linhas=txt.split('\n').map(l=>l.trim()).filter(Boolean);
   const estoque={}; let ok=0, ruins=[];
+  /* A vírgula NÃO é separador de colunas: o ELIGO exporta ",06" para
+     dizer 0,06, e tratá-la como separador fazia isso virar 6 pacotes.
+     Agora o código é o primeiro número e a quantidade é o último,
+     com vírgula e ponto lidos como no Brasil. */
   linhas.forEach(l=>{
-    const p=l.split(/\t|;|\s{2,}|,/).map(x=>x.trim()).filter(Boolean);
+    const p=l.split(/\t|;|\s{2,}/).map(x=>x.trim()).filter(Boolean);
     if(p.length<2){ ruins.push(l); return; }
     const cod=String(p[0]).replace(/\D/g,'');
-    const qtd=parseInt(String(p[1]).replace(/[^\d-]/g,''));
-    if(!cod || isNaN(qtd)){ ruins.push(l); return; }
+    const qtd=_laLerQtd(p[p.length-1]);
+    if(!cod || qtd===null){ ruins.push(l); return; }
     estoque[cod]=(estoque[cod]||0)+qtd; ok++;
   });
   if(!ok){ document.getElementById('la-est-result').innerHTML='<span style="color:#dc2626;">Nada reconhecido. Use código, TAB, quantidade.</span>'; return; }
