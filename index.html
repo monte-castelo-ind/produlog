@@ -24886,6 +24886,7 @@ function _pmesSemSetor(ch){
   const equipe=d.equipe||[];
   return d.ponto.filter(p=>{
     if(manual[p.codigo]) return false;            // já resolvido à mão
+    if(p.setor) return false;                     // veio do Símix pela matrícula
     const r=_pnCasar(p.nome, equipe);
     return r.tipo!=='exato';                       // sugestão também precisa confirmar
   });
@@ -24896,6 +24897,8 @@ window._pmesSemSetor=_pmesSemSetor;
 function _pmesSetorDe(p, ch){
   const manual=(pontoSetores||{})[p.codigo];
   if(manual) return manual;
+  // do Símix o setor já vem pela matrícula: mais seguro que casar pelo nome
+  if(p.setor) return p.setor;
   const d=_pmesDados(ch);
   if(d&&d.equipe){
     const r=_pnCasar(p.nome, d.equipe);
@@ -25105,12 +25108,7 @@ async function simixImportarMes(){
 
   try{
     _simixProgresso('Gravando…');
-    const {lote, partes}=await _pontoGravarPartes(_pmesSel, pessoas);
-    await setDoc(doc(db,'pontoMeses',_pmesSel),
-      {ponto:[], partes, partesLote:lote, pontoArquivo:'Símix (automático)', origem:'simix',
-       equipe:pessoas.map(p=>({nome:p.nome, cargo:p.cargo, setor:p.setor, admissao:p.admissao})),
-       equipeArquivo:'Símix (automático)',
-       pontoEm:agora(), pontoPor:_demAutor(), mes:_pmesSel},{merge:true});
+    await _simixGravarMes(_pmesSel, pessoas);
     await _pontoRecarregar();
     await _pontoLimparPartes(_pmesSel);
     _simixFecharProgresso();
@@ -25122,6 +25120,71 @@ async function simixImportarMes(){
   }
 }
 window.simixImportarMes=simixImportarMes;
+
+/* ── GRAVAR UM MÊS DO SÍMIX ──────────────────────────────────────
+   Usado pela busca de um mês e pela atualização do ano inteiro. */
+async function _simixGravarMes(ch, pessoas){
+  const {lote, partes}=await _pontoGravarPartes(ch, pessoas);
+  await setDoc(doc(db,'pontoMeses',ch),
+    {ponto:[], partes, partesLote:lote, pontoArquivo:'Símix (automático)', origem:'simix',
+     equipe:pessoas.map(p=>({nome:p.nome, cargo:p.cargo, setor:p.setor, admissao:p.admissao})),
+     equipeArquivo:'Símix (automático)',
+     pontoEm:agora(), pontoPor:_demAutor(), mes:ch},{merge:true});
+}
+
+/* ── ATUALIZAR O ANO INTEIRO ─────────────────────────────────────
+   Busca de janeiro até o mês atual, um mês por vez, e grava cada um.
+   Um mês com problema não para os outros: no fim, mostra o que
+   aconteceu com cada mês. */
+async function simixAtualizarAno(){
+  if(!simixPronto()){ simixAbrirConfig(); return; }
+  const hj=new Date(), ano=hj.getFullYear(), ate=hj.getMonth()+1;
+  if(!confirm('Buscar no Símix de Janeiro a '+PONTO_MES_NOMES[ate]+' de '+ano+' e atualizar todos esses meses?\n\n'+
+    'O que já houver em cada mês é substituído pelo Símix.\n'+
+    'Pode levar alguns minutos — não feche a tela.')) return;
+  if(simixSenha()===null) return;
+
+  const res=[];
+  for(let m=1;m<=ate;m++){
+    const ch=ano+'-'+String(m).padStart(2,'0');
+    const anoMes=String(ano)+String(m).padStart(2,'0');
+    const nome=PONTO_MES_NOMES[m];
+    const etapa=t=>_simixProgresso(nome+' · mês '+m+' de '+ate+'<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:6px;">'+t+'</div>');
+    try{
+      etapa('buscando o cadastro…');
+      const equipe=await simixBuscar('equipe', anoMes);
+      if(equipe===null){ res.push({nome, st:'cancelado'}); break; }
+      etapa('buscando as marcações…');
+      const ponto=await simixBuscar('ponto', anoMes);
+      if(ponto===null){ res.push({nome, st:'cancelado'}); break; }
+      if(!ponto.length){ res.push({nome, st:'vazio'}); continue; }
+      etapa('organizando…');
+      const pessoas=_simixMontar(equipe, ponto, anoMes);
+      const problema=_simixConferir(equipe, ponto, pessoas);
+      if(problema){ res.push({nome, st:'erro', msg:problema}); continue; }
+      etapa('gravando '+pessoas.length+' pessoas…');
+      await _simixGravarMes(ch, pessoas);
+      res.push({nome, st:'ok', n:pessoas.length, ch});
+    }catch(e){
+      res.push({nome, st:'erro', msg:(e&&e.message)||String(e)});
+    }
+  }
+
+  _simixProgresso('Recarregando os meses…');
+  try{
+    await _pontoRecarregar();
+    for(const r of res.filter(x=>x.st==='ok')) await _pontoLimparPartes(r.ch);
+  }catch(e){ console.warn('recarregar ponto', e); }
+  _simixFecharProgresso();
+
+  const ok=res.filter(r=>r.st==='ok'), vaz=res.filter(r=>r.st==='vazio'), err=res.filter(r=>r.st==='erro');
+  alert((ok.length?('✓ '+ok.length+' mês(es) atualizado(s):\n'+ok.map(r=>'  '+r.nome+' — '+r.n+' pessoas').join('\n')):'Nenhum mês atualizado.')+
+    (vaz.length?('\n\nSem dados no Símix: '+vaz.map(r=>r.nome).join(', ')):'')+
+    (err.length?('\n\n⚠️ Não atualizados:\n'+err.map(r=>'  '+r.nome+': '+r.msg).join('\n')):'')+
+    (res.some(r=>r.st==='cancelado')?'\n\nInterrompido no meio.':''));
+  renderPonto();
+}
+window.simixAtualizarAno=simixAtualizarAno;
 
 /* Junta cadastro e ponto no formato que o painel já usa.
    Os nomes dos campos podem variar; procuramos por várias formas. */
@@ -25419,7 +25482,8 @@ function _simixBatidas(r, campo){
     ['Marcacao1','Marcacao2','Marcacao3','Marcacao4','Entrada1','Saida1','Entrada2','Saida2']
       .forEach(n=>{ const v=_simixHora(campo(r,n)); if(v) out.push(v); });
   }
-  return [...new Set(out)].sort();
+  // mantém a ordem do Símix; só tira batida repetida em sequência
+  return out.filter((h,i)=>i===0 || h!==out[i-1]);
 }
 
 function _simixData(v){
@@ -25707,6 +25771,7 @@ async function pontoImportarPDF(input){
 window.pontoImportarPDF=pontoImportarPDF;
 
 /* ── RESUMO: o que um gestor olha primeiro ──────────────────────── */
+function _pontoPct(x){ return (Math.round((x||0)*10)/10).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}); }
 function _pontoResumo(){
   const ps=pontoPessoas();
   if(!ps.length) return _vazio('Ninguém no período escolhido.');
@@ -25725,12 +25790,56 @@ function _pontoResumo(){
     '<div style="font-size:28px;font-weight:900;color:'+cor+';line-height:1.1;margin-top:2px;">'+val+'</div>'+
     '<div style="font-size:10px;color:var(--text-muted);">'+sub+'</div></div>';
 
-  let h='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'+
-    cartao('ABSENTEÍSMO', _fmtKg(abs)+'%', totFaltas+' faltas em '+prev+' dias', abs>5?'#dc2626':(abs>2?'#d97706':'#16a34a'))+
-    cartao('ATRASOS', totAtrasos, _pontoHhmm(totMin)+' no total', totAtrasos?'#d97706':'#16a34a')+
+  // pontualidade da equipe: dias trabalhados sem atraso
+  const trabTot=ps.reduce((t,p)=>t+p.trabalhados,0);
+  const pont=trabTot?((trabTot-totAtrasos)/trabTot*100):100;
+  const saldoTot=ps.reduce((t,p)=>t+(p.horasSaldo||0),0);
+  ps.forEach(p=>_pontoJornada(p));
+  const extraTot=ps.reduce((t,p)=>t+p._jorn.extra,0);
+  const alertasTot=ps.reduce((t,p)=>t+p._jorn.alertas,0);
+  const comAlerta=ps.filter(p=>p._jorn.alertas>0).length;
+
+  const grupo=(t)=>'<div style="font-size:11px;font-weight:800;color:var(--text-secondary);letter-spacing:.4px;margin:2px 0 6px;">'+t+'</div>';
+  let h=grupo('PRESENÇA')+
+  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'+
+    cartao('ABSENTEÍSMO', _pontoPct(abs)+'%', totFaltas+' faltas em '+prev+' dias', abs>5?'#dc2626':(abs>2?'#d97706':'#16a34a'))+
+    cartao('PONTUALIDADE', _pontoPct(pont)+'%', totAtrasos+' atraso(s) · '+_pontoHhmm(totMin), pont>=95?'#16a34a':(pont>=85?'#d97706':'#dc2626'))+
     cartao('PESSOAS', ps.length, comFalta+' faltaram · '+comAtraso+' atrasaram', 'var(--text-primary)')+
-    cartao('SEM OCORRÊNCIA', limpos, _fmtKg(ps.length?limpos/ps.length*100:0)+'% da equipe', '#16a34a')+
+    cartao('SEM OCORRÊNCIA', limpos, _pontoPct(ps.length?limpos/ps.length*100:0)+'% da equipe', '#16a34a')+
+  '</div>'+
+  grupo('HORAS E JORNADA')+
+  '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'+
+    cartao('SALDO DE HORAS', (saldoTot>0?'+':'')+_pontoHhmm(saldoTot), 'banco de horas do período', saldoTot<0?'#dc2626':'#16a34a')+
+    cartao('HORA EXTRA', _pontoHhmm(extraTot), 'acima de 8:48 por dia', '#2563eb')+
+    cartao('ALERTAS DA CLT', alertasTot, comAlerta+' pessoa(s) · ver aba Jornada', alertasTot?'#dc2626':'#16a34a')+
   '</div>';
+
+  // faltas por dia da semana: mostra se o problema se concentra (segunda, sexta…)
+  const nomesSem=['seg','ter','qua','qui','sex','sáb','dom'];
+  const porSem={}; nomesSem.forEach(k=>porSem[k]={f:0,t:0});
+  ps.forEach(p=>p.dias.forEach(d=>{
+    if(d.afastamento) return;
+    const k=_normNome(d.semana||'').slice(0,3).toLowerCase().replace('sab','sáb');
+    if(!porSem[k]) return;
+    porSem[k].t++; if(d.falta) porSem[k].f++;
+  }));
+  const taxas=nomesSem.map(k=>({k, f:porSem[k].f, t:porSem[k].t, pct:porSem[k].t?porSem[k].f/porSem[k].t*100:0})).filter(x=>x.t>=5);
+  if(totFaltas && taxas.length){
+    const max=Math.max(...taxas.map(x=>x.pct),0.1);
+    h+='<div class="card" style="margin-bottom:12px;">'+
+      '<div style="font-size:13px;font-weight:800;">📅 Faltas por dia da semana</div>'+
+      '<div style="font-size:11px;color:var(--text-secondary);margin:2px 0 10px;">% dos dias de trabalho com falta — mostra se as faltas se concentram em algum dia</div>'+
+      '<div style="display:flex;gap:8px;align-items:flex-end;height:120px;">'+
+      taxas.map(x=>{
+        const alt=Math.max(4,Math.round(x.pct/max*90));
+        const top=x.pct===max;
+        return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">'+
+          '<div style="font-size:11px;font-weight:800;color:'+(top?'#dc2626':'var(--text-secondary)')+';margin-bottom:3px;">'+_pontoPct(x.pct)+'%</div>'+
+          '<div title="'+x.f+' falta(s) em '+x.t+' dias" style="width:100%;max-width:46px;height:'+alt+'px;background:'+(top?'#dc2626':'#94a3b8')+';border-radius:5px 5px 0 0;"></div>'+
+          '<div style="font-size:11px;font-weight:700;margin-top:4px;">'+x.k+'</div></div>';
+      }).join('')+
+      '</div></div>';
+  }
 
   // quem precisa de conversa
   const criticos=ps.filter(p=>p.faltas>=3 || p.atrasos>=4).slice(0,8);
@@ -25754,6 +25863,10 @@ function _pontoResumo(){
       p=>p.atrasos+'x · '+_pontoHhmm(p.atrasoMin)+' · méd '+p.atrasoMedio+'min', '#d97706');
   const negativos=ps.filter(p=>p.horasSaldo!==null && p.horasSaldo<0).sort((a,b)=>a.horasSaldo-b.horasSaldo).slice(0,6);
   h+=_pontoRanking('📉 Saldo de horas negativo', negativos, p=>_pontoHhmm(p.horasSaldo), '#b45309');
+  h+=_pontoRanking('⚖️ Mais alertas da CLT', ps.filter(p=>p._jorn&&p._jorn.alertas>0).sort((a,b)=>b._jorn.alertas-a._jorn.alertas).slice(0,6),
+      p=>[p._jorn.interj?(p._jorn.interj+'× descanso'):'', p._jorn.interv?(p._jorn.interv+'× intervalo'):'', p._jorn.longas?(p._jorn.longas+'× >10h'):''].filter(Boolean).join(' · '), '#dc2626');
+  h+=_pontoRanking('⏱️ Mais hora extra', ps.filter(p=>p._jorn&&p._jorn.extra>0).sort((a,b)=>b._jorn.extra-a._jorn.extra).slice(0,6),
+      p=>_pontoHhmm(p._jorn.extra)+' em '+p._jorn.dias+' dias', '#2563eb');
   const bons=ps.filter(p=>!p.faltas && !p.atrasos && p.trabalhados>=3).slice(0,6);
   h+=_pontoRanking('✅ Sem nenhuma ocorrência', bons, p=>p.trabalhados+' dias trabalhados', '#16a34a');
   return h;
@@ -25800,7 +25913,7 @@ function _pontoListaPessoas(){
         '<td style="padding:9px 8px;text-align:center;color:var(--text-secondary);">'+(p.atrasoMin?_pontoHhmm(p.atrasoMin):'—')+'</td>'+
         '<td style="padding:9px 8px;text-align:center;">'+p.trabalhados+'</td>'+
         '<td style="padding:9px 8px;text-align:center;color:'+((p.horasSaldo||0)<0?'#dc2626':'#16a34a')+';">'+(p.horasSaldo!==null?_pontoHhmm(p.horasSaldo):'—')+'</td>'+
-        '<td style="padding:9px 8px;text-align:center;font-weight:700;color:'+pc+';">'+_fmtKg(p.pontualidade)+'%</td>'+
+        '<td style="padding:9px 8px;text-align:center;font-weight:700;color:'+pc+';">'+_pontoPct(p.pontualidade)+'%</td>'+
       '</tr>';
     }).join('')+
   '</tbody></table></div>'+
@@ -25836,7 +25949,7 @@ function _pontoPorSetor(){
         return '<div style="margin-bottom:11px;">'+
           '<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;">'+
             '<span style="flex:1;min-width:0;font-weight:600;">'+x.setor+' <span style="font-size:11px;color:var(--text-muted);font-weight:400;">'+x.pessoas+' pessoa(s)</span></span>'+
-            '<span style="font-weight:800;color:'+cor+';">'+_fmtKg(x.abs)+'%</span></div>'+
+            '<span style="font-weight:800;color:'+cor+';">'+_pontoPct(x.abs)+'%</span></div>'+
           '<div style="height:8px;background:var(--bg-page);border-radius:99px;margin-top:4px;overflow:hidden;">'+
             '<div style="height:100%;width:'+Math.round(x.abs/pior*100)+'%;background:'+cor+';"></div></div>'+
           '<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">'+
@@ -25980,7 +26093,7 @@ function _pontoHistHtml(cod){
       '<td style="padding:7px 4px;text-align:center;font-weight:'+(m.atrasos?'800':'400')+';color:'+(m.atrasos?'#d97706':'var(--text-muted)')+';">'+(m.atrasos||'—')+'</td>'+
       '<td style="padding:7px 4px;text-align:center;color:var(--text-secondary);">'+(m.atrasoMin?_pontoHhmm(m.atrasoMin):'—')+'</td>'+
       '<td style="padding:7px 4px;text-align:center;">'+m.trabalhados+'</td>'+
-      '<td style="padding:7px 4px;text-align:center;font-weight:700;color:'+(m.absenteismo>5?'#dc2626':(m.absenteismo>2?'#d97706':'#16a34a'))+';">'+_fmtKg(m.absenteismo)+'%</td>'+
+      '<td style="padding:7px 4px;text-align:center;font-weight:700;color:'+(m.absenteismo>5?'#dc2626':(m.absenteismo>2?'#d97706':'#16a34a'))+';">'+_pontoPct(m.absenteismo)+'%</td>'+
     '</tr>').join('')+
   '</tbody></table></div>';
 
@@ -26008,8 +26121,8 @@ function _pontoHistHtml(cod){
 /* ── DETALHE DA PESSOA ───────────────────────────────────────────── */
 function _pontoDetalhe(){
   const p=pontoPessoas().find(x=>String(x.codigo)===String(_pontoPessoa));
-  if(!p){ _pontoPessoa=''; return _pontoFiltros()+_pontoResumo(); }
-  const dias=p.dias.slice().sort((a,b)=>_pontoDataNum(a.data)-_pontoDataNum(b.data));
+  if(!p){ _pontoPessoa=''; setTimeout(renderPonto,0); return ''; }
+  const dias=p.dias.slice().sort((a,b)=>_pontoDataNum(a.data,a._ano)-_pontoDataNum(b.data,b._ano));
 
   let h='<button onclick="pontoVoltar()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">&lsaquo; Voltar</button>';
   h+='<div class="card" style="margin-bottom:12px;">'+
@@ -26036,6 +26149,26 @@ function _pontoDetalhe(){
     '<button onclick="pontoDefinirSetor(\''+escapeJsStr(p.codigo)+'\')" style="width:100%;margin-top:10px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;">🏭 '+(p.setor?('Setor: '+p.setor):'Definir o setor')+'</button>'+
   '</div>';
 
+  // jornada no período
+  const J=_pontoJornada(p);
+  if(J.dias){
+    const mini=(val,rot,cor,fundo)=>'<div style="flex:1 1 92px;text-align:center;background:'+fundo+';border-radius:9px;padding:9px 6px;">'+
+      '<div style="font-size:17px;font-weight:900;color:'+cor+';">'+val+'</div>'+
+      '<div style="font-size:10px;color:var(--text-secondary);">'+rot+'</div></div>';
+    const ok='#f0fdf4', ruim='#fef2f2';
+    h+='<div class="card" style="margin-bottom:12px;">'+
+      '<div style="font-size:13px;font-weight:800;margin-bottom:9px;">⏱️ Jornada no período <span style="font-weight:500;color:var(--text-muted);font-size:11px;">· referência 8:48</span></div>'+
+      '<div style="display:flex;gap:7px;flex-wrap:wrap;">'+
+        mini(_pontoHhmm(J.media),'média por dia','var(--text-primary)','var(--bg-page)')+
+        mini(J.extra?_pontoHhmm(J.extra):'—','hora extra','#2563eb','#eff6ff')+
+        mini(J.devendo?_pontoHhmm(J.devendo):'—','horas faltando','#d97706','#fffbeb')+
+        mini(J.menorDesc===null?'—':_pontoHhmm(J.menorDesc),'menor descanso',(J.interj?'#dc2626':'#16a34a'),(J.interj?ruim:ok))+
+        mini(J.interj||'—','descanso < 11h',(J.interj?'#dc2626':'#16a34a'),(J.interj?ruim:ok))+
+        mini(J.interv||'—','intervalo < 1h',(J.interv?'#dc2626':'#16a34a'),(J.interv?ruim:ok))+
+        mini(J.longas||'—','jornada > 10h',(J.longas?'#dc2626':'#16a34a'),(J.longas?ruim:ok))+
+      '</div></div>';
+  }
+
   h+=_pontoHistHtml(p.codigo);
 
   h+='<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin:4px 0 6px;">DIA A DIA'+
@@ -26047,6 +26180,9 @@ function _pontoDetalhe(){
       '<th style="padding:9px 8px;text-align:center;">ENTRADA</th>'+
       '<th style="padding:9px 8px;text-align:center;">SAÍDA</th>'+
       '<th style="padding:9px 8px;text-align:center;">ATRASO</th>'+
+      '<th style="padding:9px 8px;text-align:center;">TRABALHOU</th>'+
+      '<th style="padding:9px 8px;text-align:center;">EXTRA/FALTA</th>'+
+      '<th style="padding:9px 8px;text-align:center;">DESCANSO</th>'+
       '<th style="padding:9px 10px;text-align:left;">SITUAÇÃO</th>'+
     '</tr></thead><tbody>'+
     dias.map((d,i)=>{
@@ -26057,12 +26193,28 @@ function _pontoDetalhe(){
       else if(d.afastamento){ sit=d.afastamento.charAt(0).toUpperCase()+d.afastamento.slice(1); cor='#2563eb'; }
       else if(atrasado){ sit='Atraso de '+d.atraso+' min'; cor='#d97706'; }
       else if(d.batidas&&d.batidas.length){ sit='Normal'; cor='#16a34a'; }
+      const jd=J.porDia[_pjNum(d)]||null;
+      const alertas=[];
+      if(jd){
+        if(jd.descanso!==null && jd.descanso<PONTO_INTERJORNADA) alertas.push('descanso '+_pontoHhmm(jd.descanso));
+        if(jd.semIntervalo) alertas.push('intervalo '+jd.maiorPausa+' min');
+        if(jd.longa) alertas.push('jornada > 10h');
+        if(jd.impar) alertas.push('batida faltando');
+      }
+      if(alertas.length){ sit=(sit&&sit!=='Normal'?sit+' · ':'')+'⚖️ '+alertas.join(' · '); cor='#dc2626'; }
+      const dif=jd?jd.dif:null;
+      const colJ='<td style="padding:8px 8px;text-align:center;">'+(jd?_pontoHhmm(jd.trab):'—')+'</td>'+
+        '<td style="padding:8px 8px;text-align:center;font-weight:'+(dif?'700':'400')+';color:'+(dif>0?'#2563eb':(dif<0?'#d97706':'var(--text-muted)'))+';">'+
+          (dif===null?'—':(dif===0?'ok':((dif>0?'+':'')+_pontoHhmm(dif))))+'</td>'+
+        '<td style="padding:8px 8px;text-align:center;color:'+(jd&&jd.descanso!==null&&jd.descanso<PONTO_INTERJORNADA?'#dc2626;font-weight:800':'var(--text-muted)')+';">'+
+          (jd&&jd.descanso!==null?_pontoHhmm(jd.descanso):'—')+'</td>';
       return '<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
         '<td style="padding:8px 12px;">'+d.data+' <span style="color:var(--text-muted);font-size:11px;">'+d.semana+'</span></td>'+
         '<td style="padding:8px 8px;text-align:center;font-weight:'+(atrasado?'800':'400')+';">'+(d.entrada||'—')+'</td>'+
         '<td style="padding:8px 8px;text-align:center;">'+(d.saida||'—')+'</td>'+
         '<td style="padding:8px 8px;text-align:center;font-weight:'+(atrasado?'800':'400')+';color:'+(atrasado?'#d97706':'var(--text-muted)')+';">'+
           (d.atraso===null?'—':((d.atraso>0?'+':'')+d.atraso+'min'))+'</td>'+
+        colJ+
         '<td style="padding:8px 10px;color:'+cor+';font-weight:'+(sit==='Normal'?'400':'700')+';">'+sit+'</td>'+
       '</tr>';
     }).join('')+
@@ -26196,6 +26348,39 @@ window.pontoExportar=pontoExportar;
 
 /* ── SALVAR A IMPORTAÇÃO ─────────────────────────────────────────── */
 /* ── A TELA ──────────────────────────────────────────────────────── */
+/* ══ CONTROLE DE PONTO — TELA PRINCIPAL ═════════════════════════════
+   Uma barra de filtros (período, setor, busca) desenhada uma vez, e o
+   corpo embaixo, que é a única parte que redesenha quando um filtro
+   muda. Antes, cada mudança redesenhava a tela inteira, inclusive o
+   campo de data que a pessoa estava preenchendo: ao digitar o ano, o
+   campo era recriado no meio e "bugava". Agora as datas só valem ao
+   tocar em Aplicar, e a busca não perde o foco. */
+let _pontoPer='', _pontoMesesAberto=false, _pontoBuscaTimer=null, _pontoJornOrdem='extra';
+
+function _pontoMesesComDados(){
+  return Object.keys(pontoMeses).filter(ch=>((pontoMeses[ch]||{}).ponto||[]).length).sort();
+}
+function _pontoBR(d){
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+function _pontoEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+/* Um período da lista vira as datas De/Até */
+function _pontoAplicarPer(k){
+  const h=new Date();
+  _pontoPer=k;
+  if(k==='tudo'){ _pontoDe=''; _pontoAte=''; }
+  else if(k==='este'){ _pontoDe=_pontoBR(new Date(h.getFullYear(),h.getMonth(),1)); _pontoAte=_pontoBR(new Date(h.getFullYear(),h.getMonth()+1,0)); }
+  else if(k==='passado'){ _pontoDe=_pontoBR(new Date(h.getFullYear(),h.getMonth()-1,1)); _pontoAte=_pontoBR(new Date(h.getFullYear(),h.getMonth(),0)); }
+  else if(k==='90'){ const d=new Date(h); d.setDate(d.getDate()-90); _pontoDe=_pontoBR(d); _pontoAte=_pontoBR(h); }
+  else if(k.indexOf('ano:')===0){ const a=+k.slice(4); _pontoDe='01/01/'+a; _pontoAte='31/12/'+a; }
+  else if(k.indexOf('mes:')===0){
+    const [a,m]=k.slice(4).split('-').map(Number);
+    _pontoDe=_pontoBR(new Date(a,m-1,1)); _pontoAte=_pontoBR(new Date(a,m,0));
+  }
+  // 'custom': mantém as datas que já estão, até tocar em Aplicar
+}
+
 function renderPonto(){
   const el=document.getElementById('ponto-content'); if(!el) return;
   if(_pontoPessoa){ el.innerHTML=_pontoDetalhe(); return; }
@@ -26205,60 +26390,114 @@ function renderPonto(){
       '<div style="font-size:14px;font-weight:700;margin-top:8px;">Carregando os meses…</div></div>';
     return;
   }
-  const temAlgo=Object.keys(pontoMeses).length>0;
-  el.innerHTML=_pontoPendencias()+_pontoCalendario()+
-    (!temAlgo ? _vazio('Nenhum mês com dados ainda.','Toque num mês acima para importar os arquivos.') : '')+
-    (!temAlgo ? '' : _pontoFiltros()+
-    (_pontoAba==='resumo'   ? _pontoResumo()   :
-     _pontoAba==='pessoas'  ? _pontoListaPessoas() :
-     _pontoAba==='setores'  ? _pontoPorSetor() :
-                              _pontoImportacoes()));
+  const meses=_pontoMesesComDados();
+  // primeira vez: abre no mês mais recente com dados
+  if(!_pontoPer) _pontoAplicarPer(meses.length?('mes:'+meses[meses.length-1]):'tudo');
+
+  el.innerHTML=_pontoPendencias()+_pontoBarra()+
+    ((_pontoMesesAberto||!meses.length)
+      ? '<div class="card" style="margin-bottom:12px;">'+_pontoCalendario()+'</div>' : '')+
+    (!meses.length
+      ? _vazio('Nenhum mês com dados ainda.','Toque num mês acima para importar, ou em 🔄 Atualizar ano.')
+      : _pontoAbas()+'<div id="ponto-corpo">'+_pontoCorpo()+'</div>');
 }
 window.renderPonto=renderPonto;
 
-function _pontoFiltros(){
-  const abas=[['resumo','📊 Resumo'],['pessoas','👥 Pessoas'],['setores','🏭 Setores'],['import','📄 Arquivos']];
-  let h='<div class="card" style="margin-bottom:12px;">'+
-    '<div style="display:flex;gap:9px;flex-wrap:wrap;">'+
-      '<div style="flex:1;min-width:130px;"><label style="font-size:11px;font-weight:700;color:var(--text-secondary);">De</label>'+
-        '<input type="date" value="'+(_pontoDe?estBRparaISO(_pontoDe):'')+'" onchange="pontoSetPeriodo(this.value,null)" style="width:100%;padding:10px;min-height:44px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:3px;"></div>'+
-      '<div style="flex:1;min-width:130px;"><label style="font-size:11px;font-weight:700;color:var(--text-secondary);">Até</label>'+
-        '<input type="date" value="'+(_pontoAte?estBRparaISO(_pontoAte):'')+'" onchange="pontoSetPeriodo(null,this.value)" style="width:100%;padding:10px;min-height:44px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:3px;"></div>'+
-    '</div>'+
-    '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'+
-      '<button onclick="pontoAtalho(0)" style="flex:1;min-width:92px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px;font-size:11px;cursor:pointer;font-family:inherit;">Este mês</button>'+
-      '<button onclick="pontoAtalho(1)" style="flex:1;min-width:92px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px;font-size:11px;cursor:pointer;font-family:inherit;">Mês passado</button>'+
-      '<button onclick="pontoAtalho(2)" style="flex:1;min-width:92px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px;font-size:11px;cursor:pointer;font-family:inherit;">90 dias</button>'+
-      '<button onclick="pontoAtalho(3)" style="flex:1;min-width:92px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px;font-size:11px;cursor:pointer;font-family:inherit;">Tudo</button>'+
-    '</div>'+
-    '<input type="text" id="ponto-busca" value="'+String(_pontoBusca).replace(/"/g,'&quot;')+'" oninput="pontoBuscar(this.value)" placeholder="🔍 Buscar pessoa, cargo ou código" autocomplete="off" style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:15px;font-family:inherit;box-sizing:border-box;margin-top:8px;">'+
-    // atalho: achou a pessoa, vai direto ao histórico dela
-    _pontoSugestoes();
+function _pontoCorpo(){
+  return _pontoAba==='pessoas' ? _pontoListaPessoas() :
+         _pontoAba==='jornada' ? _pontoJornadaTela() :
+         _pontoAba==='setores' ? _pontoPorSetor() :
+         _pontoAba==='import'  ? _pontoImportacoes() :
+                                 _pontoResumo();
+}
+
+/* Redesenha só o que depende dos filtros, sem tocar nos campos */
+function _pontoAtualizarCorpo(){
+  const c=document.getElementById('ponto-corpo'); if(c) c.innerHTML=_pontoCorpo();
+  const r=document.getElementById('ponto-filtro-txt'); if(r) r.innerHTML=_pontoFiltroTxt();
+  const s=document.getElementById('ponto-sug'); if(s) s.innerHTML=_pontoSugestoes();
+  const x=document.getElementById('ponto-busca-x'); if(x) x.style.display=_pontoBusca?'flex':'none';
+}
+
+function _pontoFiltroTxt(){
+  const n=pontoPessoas().length;
+  const per=(_pontoDe||_pontoAte) ? ((_pontoDe||'início')+' a '+(_pontoAte||'hoje')) : 'todo o histórico';
+  return '<b style="color:var(--text-primary);">'+n+'</b> pessoa'+(n===1?'':'s')+' · '+per+
+    (_pontoSetor?(' · '+_pontoEsc(_pontoSetor)):'')+
+    (_pontoBusca?(' · busca “'+_pontoEsc(_pontoBusca)+'”'):'');
+}
+
+function _pontoBarra(){
+  const meses=_pontoMesesComDados();
+  const anos=[...new Set(meses.map(m=>m.split('-')[0]))].sort().reverse();
+  const opt=(v,t)=>'<option value="'+_pontoEsc(v)+'"'+(_pontoPer===v?' selected':'')+'>'+_pontoEsc(t)+'</option>';
+  const rot=t=>'<div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:var(--text-secondary);margin-bottom:4px;">'+t+'</div>';
+  const campo='width:100%;height:42px;padding:0 12px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:14px;font-family:inherit;background:#fff;color:var(--text-primary);box-sizing:border-box;';
+  // a setinha deixa claro que é uma lista de escolha
+  const seta='appearance:none;-webkit-appearance:none;padding-right:36px;cursor:pointer;'+
+    'background:#fff url(&quot;data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27%3E%3Cpath d=%27M1 1l5 5 5-5%27 stroke=%27%2364748b%27 stroke-width=%271.8%27 fill=%27none%27/%3E%3C/svg%3E&quot;) no-repeat right 13px center;';
+
+  const selPer='<select onchange="pontoPeriodo(this.value)" style="'+campo+seta+'">'+
+    '<optgroup label="Atalhos">'+opt('este','Este mês')+opt('passado','Mês passado')+opt('90','Últimos 90 dias')+opt('tudo','Todo o histórico')+'</optgroup>'+
+    anos.map(a=>'<optgroup label="'+a+'">'+opt('ano:'+a,'Ano inteiro de '+a)+
+      meses.filter(m=>m.indexOf(a+'-')===0).reverse()
+        .map(m=>opt('mes:'+m, PONTO_MES_NOMES[+m.split('-')[1]]+' de '+a)).join('')+'</optgroup>').join('')+
+    '<optgroup label="Outro">'+opt('custom','📅 Escolher as datas…')+'</optgroup>'+
+  '</select>';
 
   const sets=pontoSetoresLista();
-  if(sets.length>1){
-    h+='<div style="display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;">'+
-      '<button onclick="pontoSetSetor(\'\')" style="background:'+(!_pontoSetor?'var(--text-primary)':'#fff')+';color:'+(!_pontoSetor?'#fff':'var(--text-secondary)')+';border:1px solid var(--border);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">todos</button>'+
-      sets.map(x=>'<button onclick="pontoSetSetor(\''+escapeJsStr(x)+'\')" style="background:'+(_pontoSetor===x?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_pontoSetor===x?'#fff':'var(--text-secondary)')+';border:1px solid var(--border);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">'+x+'</button>').join('')+
+  const selSet='<select onchange="pontoSetSetor(this.value)" style="'+campo+seta+'">'+
+    '<option value="">Todos os setores</option>'+
+    sets.map(x=>'<option value="'+_pontoEsc(x)+'"'+(_pontoSetor===x?' selected':'')+'>'+_pontoEsc(x)+'</option>').join('')+
+  '</select>';
+
+  const busca='<div style="position:relative;">'+
+    '<span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.55;pointer-events:none;">🔍</span>'+
+    '<input type="text" id="ponto-busca" value="'+_pontoEsc(_pontoBusca)+'" oninput="pontoBuscar(this.value)" '+
+      'placeholder="Nome, cargo ou código" autocomplete="off" style="'+campo+'padding-left:36px;padding-right:36px;">'+
+    '<button id="ponto-busca-x" onclick="pontoLimparBusca()" title="Limpar" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);'+
+      'display:'+(_pontoBusca?'flex':'none')+';align-items:center;justify-content:center;width:28px;height:28px;border:none;border-radius:50%;'+
+      'background:#f1f5f9;color:var(--text-secondary);font-size:13px;cursor:pointer;font-family:inherit;">✕</button>'+
+  '</div>';
+
+  let h='<div class="card" style="margin-bottom:12px;padding:14px;">'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;">'+
+      '<div style="flex:1 1 200px;min-width:0;">'+rot('PERÍODO')+selPer+'</div>'+
+      '<div style="flex:1 1 200px;min-width:0;">'+rot('SETOR')+selSet+'</div>'+
+      '<div style="flex:2 1 260px;min-width:0;">'+rot('BUSCAR PESSOA')+busca+'</div>'+
+    '</div>';
+
+  if(_pontoPer==='custom'){
+    h+='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);">'+
+      '<div style="flex:1 1 150px;">'+rot('DE')+
+        '<input type="date" id="ponto-de" value="'+(_pontoDe?estBRparaISO(_pontoDe):'')+'" onkeydown="if(event.key===\'Enter\')pontoAplicarDatas()" style="'+campo+'"></div>'+
+      '<div style="flex:1 1 150px;">'+rot('ATÉ')+
+        '<input type="date" id="ponto-ate" value="'+(_pontoAte?estBRparaISO(_pontoAte):'')+'" onkeydown="if(event.key===\'Enter\')pontoAplicarDatas()" style="'+campo+'"></div>'+
+      '<button onclick="pontoAplicarDatas()" class="btn btn-primary" style="flex:0 0 auto;width:auto;min-width:120px;height:42px;padding:0 22px;margin:0;">Aplicar</button>'+
+      '<div id="ponto-datas-erro" style="flex:1 1 100%;font-size:12px;color:#dc2626;min-height:0;"></div>'+
     '</div>';
   }
-  h+='</div>';
 
-  // o painel do gestor, por enquanto só para o admin conferir
-  h+=(window.adminMode===true
-    ? '<button onclick="pdashAbrir(\'\')" style="display:block;width:100%;text-align:left;background:linear-gradient(135deg,#1e40af,#2563eb);border:none;border-radius:12px;padding:14px 16px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
-        '<div style="display:flex;align-items:center;gap:11px;">'+
-          '<span style="font-size:24px;">📊</span>'+
-          '<span style="flex:1;min-width:0;">'+
-            '<span style="display:block;font-size:15px;font-weight:800;color:#fff;">Painel da Equipe</span>'+
-            '<span style="display:block;font-size:11px;color:#bfdbfe;margin-top:1px;">visão que o gestor terá · modelo para validar</span></span>'+
-          '<span style="color:#bfdbfe;font-size:18px;">›</span>'+
-        '</div></button>'
-    : '');
-  h+='<div style="display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px;">'+
-    abas.map(([id,nome])=>'<button onclick="pontoSetAba(\''+id+'\')" style="flex:0 0 auto;background:'+(_pontoAba===id?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_pontoAba===id?'#fff':'var(--text-secondary)')+';border:1px solid '+(_pontoAba===id?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:9px;padding:10px 15px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">'+nome+'</button>').join('')+
+  const btnLeve='background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:7px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;';
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:11px;">'+
+      '<div id="ponto-filtro-txt" style="flex:1 1 220px;font-size:12px;color:var(--text-secondary);line-height:1.4;">'+_pontoFiltroTxt()+'</div>'+
+      '<button onclick="pontoMesesToggle()" style="'+btnLeve+'">📅 Meses '+(_pontoMesesAberto?'▴':'▾')+'</button>'+
+      (simixPronto()?'<button onclick="simixAtualizarAno()" style="'+btnLeve+'">🔄 Atualizar o ano pelo Símix</button>':'')+
+      (window.adminMode===true?'<button onclick="pdashAbrir(\'\')" style="'+btnLeve+'">📊 Painel da Equipe</button>':'')+
+    '</div>'+
+    '<div id="ponto-sug">'+_pontoSugestoes()+'</div>'+
   '</div>';
   return h;
+}
+
+function _pontoAbas(){
+  const abas=[['resumo','📊 Resumo'],['pessoas','👥 Pessoas'],['jornada','⏱️ Jornada'],['setores','🏭 Setores'],['import','📄 Arquivos']];
+  return '<div style="display:flex;gap:4px;margin-bottom:12px;overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;padding:4px;">'+
+    abas.map(([id,nome])=>{
+      const on=_pontoAba===id;
+      return '<button onclick="pontoSetAba(\''+id+'\')" style="flex:1 0 auto;background:'+(on?'var(--mc-azul,#2563eb)':'transparent')+';color:'+(on?'#fff':'var(--text-secondary)')+';border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">'+nome+'</button>';
+    }).join('')+
+  '</div>';
 }
 
 /* Com a busca preenchida, oferece ir direto ao histórico da pessoa */
@@ -26266,50 +26505,249 @@ function _pontoSugestoes(){
   const q=_normNome(_pontoBusca||'');
   if(q.length<2) return '';
   const todas={};
-  (pontoDados||[]).forEach(imp=>(imp.pessoas||[]).forEach(p=>{ todas[p.codigo]=p; }));
+  Object.keys(pontoMeses).sort().forEach(ch=>((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{ todas[String(p.codigo||p.nome)]={...p, setor:_pmesSetorDe(p,ch)||p.setor||''}; }));
   const achados=Object.values(todas).filter(p=>
-    _normNome(p.nome).includes(q) || String(p.codigo).includes(_pontoBusca.trim())
-  ).slice(0,5);
-  if(!achados.length) return '<div style="font-size:12px;color:#b45309;margin-top:7px;">Ninguém encontrado.</div>';
-  return '<div style="margin-top:7px;">'+
-    achados.map(p=>'<button onclick="pontoVerPessoa(\''+escapeJsStr(p.codigo)+'\')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:var(--bg-page);border:1px solid var(--border);border-radius:8px;padding:8px 11px;margin-bottom:5px;cursor:pointer;font-family:inherit;color:inherit;">'+
-      '<span style="flex:1;min-width:0;">'+
-        '<span style="display:block;font-size:13px;font-weight:600;">'+p.nome+'</span>'+
-        '<span style="display:block;font-size:11px;color:var(--text-secondary);">'+
-          (pontoSetores[p.codigo]?(pontoSetores[p.codigo]+' · '):'')+(p.cargo||'')+' · cód '+p.codigo+'</span></span>'+
-      '<span style="font-size:11px;font-weight:700;color:var(--mc-azul,#2563eb);white-space:nowrap;">ver histórico ›</span>'+
+    (!_pontoSetor || p.setor===_pontoSetor) &&
+    (_normNome(p.nome).includes(q) || _normNome(p.cargo||'').includes(q) || String(p.codigo).includes(_pontoBusca.trim()))
+  ).sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR')).slice(0,6);
+  if(!achados.length) return '<div style="font-size:12px;color:#b45309;margin-top:9px;">Ninguém encontrado com “'+_pontoEsc(_pontoBusca)+'”.</div>';
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;">'+
+    achados.map(p=>'<button onclick="pontoVerPessoa(\''+escapeJsStr(p.codigo)+'\')" style="display:flex;align-items:center;gap:8px;background:var(--bg-page);border:1px solid var(--border);border-radius:9px;padding:7px 11px;cursor:pointer;font-family:inherit;color:inherit;text-align:left;">'+
+      '<span><span style="display:block;font-size:13px;font-weight:700;">'+_pontoEsc(p.nome)+'</span>'+
+      '<span style="display:block;font-size:10px;color:var(--text-secondary);">'+_pontoEsc((p.setor?(p.setor+' · '):'')+(p.cargo||''))+'</span></span>'+
+      '<span style="font-size:13px;color:var(--mc-azul,#2563eb);">›</span>'+
     '</button>').join('')+
   '</div>';
 }
 window._pontoSugestoes=_pontoSugestoes;
 
+function pontoPeriodo(v){
+  if(v==='custom'){ _pontoPer='custom'; renderPonto(); setTimeout(()=>document.getElementById('ponto-de')?.focus(),50); return; }
+  _pontoAplicarPer(v); renderPonto();
+}
+window.pontoPeriodo=pontoPeriodo;
+
+function pontoAplicarDatas(){
+  const de=(document.getElementById('ponto-de')||{}).value||'';
+  const ate=(document.getElementById('ponto-ate')||{}).value||'';
+  const err=document.getElementById('ponto-datas-erro');
+  const ok=v=>!v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+  if(!ok(de)||!ok(ate)){ if(err) err.textContent='Data incompleta. Confira dia, mês e ano.'; return; }
+  if(de && ate && de>ate){ if(err) err.textContent='A data inicial é depois da final.'; return; }
+  if(err) err.textContent='';
+  _pontoDe=de?estISOparaBR(de):'';
+  _pontoAte=ate?estISOparaBR(ate):'';
+  _pontoAtualizarCorpo();
+}
+window.pontoAplicarDatas=pontoAplicarDatas;
+
+// compatibilidade com chamadas antigas
 function pontoSetPeriodo(de, ate){
   if(de!==null) _pontoDe=de?estISOparaBR(de):'';
   if(ate!==null) _pontoAte=ate?estISOparaBR(ate):'';
-  renderPonto();
+  _pontoPer='custom'; renderPonto();
 }
 window.pontoSetPeriodo=pontoSetPeriodo;
-
-function pontoAtalho(q){
-  const h=new Date();
-  const br=d=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
-  if(q===3){ _pontoDe=''; _pontoAte=''; }
-  else if(q===0){ _pontoDe=br(new Date(h.getFullYear(),h.getMonth(),1)); _pontoAte=br(new Date(h.getFullYear(),h.getMonth()+1,0)); }
-  else if(q===1){ _pontoDe=br(new Date(h.getFullYear(),h.getMonth()-1,1)); _pontoAte=br(new Date(h.getFullYear(),h.getMonth(),0)); }
-  else { const d=new Date(h); d.setDate(d.getDate()-90); _pontoDe=br(d); _pontoAte=br(h); }
-  renderPonto();
-}
+function pontoAtalho(q){ _pontoAplicarPer(['este','passado','90','tudo'][q]||'tudo'); renderPonto(); }
 window.pontoAtalho=pontoAtalho;
+
 function pontoSetAba(a){ _pontoAba=a; renderPonto(); }
 window.pontoSetAba=pontoSetAba;
-function pontoSetSetor(x){ _pontoSetor=(_pontoSetor===x?'':x); renderPonto(); }
+function pontoSetSetor(x){ _pontoSetor=x||''; _pontoAtualizarCorpo(); }
 window.pontoSetSetor=pontoSetSetor;
-function pontoBuscar(v){ _pontoBusca=v||''; renderPonto(); const i=document.getElementById('ponto-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
+function pontoBuscar(v){
+  clearTimeout(_pontoBuscaTimer);
+  const x=document.getElementById('ponto-busca-x'); if(x) x.style.display=v?'flex':'none';
+  _pontoBuscaTimer=setTimeout(()=>{ _pontoBusca=v||''; _pontoAtualizarCorpo(); },220);
+}
 window.pontoBuscar=pontoBuscar;
-function pontoVerPessoa(c){ _pontoPessoa=c; renderPonto(); }
+function pontoLimparBusca(){
+  clearTimeout(_pontoBuscaTimer);
+  _pontoBusca='';
+  const i=document.getElementById('ponto-busca'); if(i){ i.value=''; i.focus(); }
+  _pontoAtualizarCorpo();
+}
+window.pontoLimparBusca=pontoLimparBusca;
+function pontoMesesToggle(){ _pontoMesesAberto=!_pontoMesesAberto; renderPonto(); }
+window.pontoMesesToggle=pontoMesesToggle;
+function pontoVerPessoa(c){ _pontoPessoa=c; renderPonto(); document.getElementById('ponto-content')?.scrollTo?.(0,0); }
 window.pontoVerPessoa=pontoVerPessoa;
 function pontoVoltar(){ _pontoPessoa=''; renderPonto(); }
 window.pontoVoltar=pontoVoltar;
+
+/* ══ JORNADA ══════════════════════════════════════════════════════
+   Olha a hora que a pessoa entrou e saiu, em cada dia, e compara com
+   a jornada de 8:48. Também confere as regras da CLT:
+     · descanso entre uma jornada e outra: mínimo 11h (art. 66)
+     · intervalo para refeição: mínimo 1h em jornada acima de 6h (art. 71)
+     · jornada máxima: 10h no dia, 8h + 2h extras (art. 59)
+   Tolerância de 10 min no dia para extra/falta (art. 58, §1º). */
+const PONTO_JORNADA=528;          // 8:48
+const PONTO_TOL_JORNADA=10;
+const PONTO_INTERJORNADA=660;     // 11h
+const PONTO_INTERVALO=60;
+const PONTO_TOL_INTERVALO=5;      // 55 min ainda passa
+const PONTO_JORNADA_MAX=600;      // 10h
+
+/* Um dia: horas trabalhadas, extra ou falta, maior intervalo */
+function _pjDia(d){
+  const b=(d.batidas||[]).map(_pontoMin).filter(x=>x!==null);
+  if(b.length<2) return null;
+  // virada da meia-noite: cada batida vem depois da anterior
+  for(let i=1;i<b.length;i++) while(b[i]<b[i-1]) b[i]+=1440;
+  const pares=Math.floor(b.length/2);
+  let trab=0, maiorPausa=0;
+  for(let i=0;i<pares;i++) trab+=b[2*i+1]-b[2*i];
+  for(let i=1;i<pares;i++) maiorPausa=Math.max(maiorPausa, b[2*i]-b[2*i-1]);
+  // dia de jornada: tem previsto (Símix) ou é dia útil (PDF, que não traz previsto)
+  const sem=_normNome(d.semana||'');
+  const diaUtil=(d.minPrev!==undefined) ? d.minPrev>0 : !(sem.indexOf('SAB')===0 || sem.indexOf('DOM')===0);
+  const ref=diaUtil?PONTO_JORNADA:0;
+  let dif=trab-ref;
+  if(diaUtil && Math.abs(dif)<=PONTO_TOL_JORNADA) dif=0;
+  return {
+    ini:b[0], fim:b[b.length-1], trab, dif, diaUtil, maiorPausa,
+    impar:b.length%2===1,
+    semIntervalo: trab>360 && maiorPausa<(PONTO_INTERVALO-PONTO_TOL_INTERVALO),
+    longa: trab>PONTO_JORNADA_MAX
+  };
+}
+
+function _pjNum(d){
+  const p=String(d.data||'').split('/');
+  if(p.length<2) return null;
+  const a=+(d._ano||new Date().getFullYear());
+  return Math.round(Date.UTC(a, +p[1]-1, +p[0])/864e5);
+}
+
+/* A pessoa no período: soma dos dias e as ocorrências */
+function _pontoJornada(p){
+  if(p._jorn) return p._jorn;
+  const dias=(p.dias||[]).map(d=>({d, n:_pjNum(d), j:_pjDia(d)}))
+    .filter(x=>x.n!==null).sort((a,b)=>a.n-b.n);
+  const r={dias:0, trab:0, extra:0, devendo:0, interj:0, menorDesc:null, interv:0, longas:0, impares:0, porDia:{}};
+  let ant=null;
+  dias.forEach(x=>{
+    const j=x.j;
+    if(!j) return;
+    r.dias++; r.trab+=j.trab;
+    if(j.dif>0) r.extra+=j.dif; else r.devendo+=-j.dif;
+    if(j.semIntervalo) r.interv++;
+    if(j.longa) r.longas++;
+    if(j.impar) r.impares++;
+    let desc=null;
+    if(ant && x.n-ant.n===1){
+      desc=(j.ini+1440)-ant.j.fim;
+      if(desc<PONTO_INTERJORNADA) r.interj++;
+      if(r.menorDesc===null || desc<r.menorDesc) r.menorDesc=desc;
+    }
+    r.porDia[x.n]={...j, descanso:desc};
+    ant=x;
+  });
+  r.media=r.dias?Math.round(r.trab/r.dias):0;
+  r.saldo=r.extra-r.devendo;
+  r.alertas=r.interj+r.interv+r.longas;
+  p._jorn=r;
+  return r;
+}
+
+function pontoJornOrdem(v){ _pontoJornOrdem=v; _pontoAtualizarCorpo(); }
+window.pontoJornOrdem=pontoJornOrdem;
+
+function _pontoJornadaTela(){
+  const ps=pontoPessoas().filter(p=>_pontoJornada(p).dias>0);
+  if(!ps.length) return _vazio('Ninguém com marcações no período escolhido.');
+  const J=p=>p._jorn;
+  const soma=f=>ps.reduce((t,p)=>t+f(J(p)),0);
+  const hh=_pontoHhmm;
+
+  const cartao=(rot,val,sub,cor)=>'<div class="card" style="flex:1 1 150px;text-align:center;padding:13px 8px;">'+
+    '<div style="font-size:10px;font-weight:800;color:var(--text-secondary);letter-spacing:.5px;">'+rot+'</div>'+
+    '<div style="font-size:26px;font-weight:900;color:'+cor+';line-height:1.15;margin-top:2px;">'+val+'</div>'+
+    '<div style="font-size:10px;color:var(--text-muted);">'+sub+'</div></div>';
+  const nInterj=ps.filter(p=>J(p).interj).length, nInterv=ps.filter(p=>J(p).interv).length, nLongas=ps.filter(p=>J(p).longas).length;
+  let h='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'+
+    cartao('HORA EXTRA', hh(soma(j=>j.extra)), ps.filter(p=>J(p).extra>0).length+' pessoa(s)', '#2563eb')+
+    cartao('HORAS FALTANDO', hh(soma(j=>j.devendo)), ps.filter(p=>J(p).devendo>0).length+' pessoa(s)', '#d97706')+
+    cartao('DESCANSO < 11H', soma(j=>j.interj), nInterj+' pessoa(s)', soma(j=>j.interj)?'#dc2626':'#16a34a')+
+    cartao('INTERVALO < 1H', soma(j=>j.interv), nInterv+' pessoa(s)', soma(j=>j.interv)?'#dc2626':'#16a34a')+
+    cartao('JORNADA > 10H', soma(j=>j.longas), nLongas+' pessoa(s)', soma(j=>j.longas)?'#dc2626':'#16a34a')+
+    cartao('MARCAÇÃO INCOMPLETA', soma(j=>j.impares), 'dias com batida faltando', soma(j=>j.impares)?'#d97706':'#16a34a')+
+  '</div>';
+
+  // por setor
+  const g={};
+  ps.forEach(p=>{
+    const k=p.setor||'(sem setor)', j=J(p);
+    if(!g[k]) g[k]={setor:k, pessoas:0, dias:0, trab:0, extra:0, devendo:0, interj:0, interv:0, longas:0};
+    const x=g[k]; x.pessoas++; x.dias+=j.dias; x.trab+=j.trab; x.extra+=j.extra; x.devendo+=j.devendo;
+    x.interj+=j.interj; x.interv+=j.interv; x.longas+=j.longas;
+  });
+  const th=(t,al)=>'<th style="padding:10px 8px;text-align:'+(al||'center')+';">'+t+'</th>';
+  const td=(t,st)=>'<td style="padding:9px 8px;text-align:center;'+(st||'')+'">'+t+'</td>';
+  const alerta=n=>n?('<b style="color:#dc2626;">'+n+'</b>'):'<span style="color:var(--text-muted);">—</span>';
+  h+='<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin:4px 0 6px;">POR SETOR</div>'+
+    '<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;margin-bottom:14px;">'+
+    '<table style="border-collapse:collapse;font-size:13px;white-space:nowrap;width:100%;">'+
+    '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
+      th('SETOR','left')+th('PESSOAS')+th('MÉDIA/DIA')+th('EXTRA')+th('FALTANDO')+th('SALDO')+th('DESC. &lt;11H')+th('INTERV. &lt;1H')+th('&gt;10H')+
+    '</tr></thead><tbody>'+
+    Object.values(g).sort((a,b)=>b.extra-a.extra).map((x,i)=>{
+      const sal=x.extra-x.devendo;
+      return '<tr style="background:'+(i%2?'#fafbfc':'#fff')+';border-top:1px solid #f1f5f9;">'+
+        '<td style="padding:9px 12px;font-weight:700;">'+_pontoEsc(x.setor)+'</td>'+
+        td(x.pessoas)+td(hh(x.dias?Math.round(x.trab/x.dias):0))+
+        td(hh(x.extra),'color:#2563eb;font-weight:700;')+td(hh(x.devendo),'color:#d97706;font-weight:700;')+
+        td((sal>0?'+':'')+hh(sal),'color:'+(sal<0?'#dc2626':'#16a34a')+';')+
+        td(alerta(x.interj))+td(alerta(x.interv))+td(alerta(x.longas))+
+      '</tr>';
+    }).join('')+
+    '</tbody></table></div>';
+
+  // pessoas
+  const ordens={
+    extra:   ['Mais hora extra',        (a,b)=>J(b).extra-J(a).extra],
+    devendo: ['Mais horas faltando',    (a,b)=>J(b).devendo-J(a).devendo],
+    alertas: ['Mais alertas da CLT',    (a,b)=>J(b).alertas-J(a).alertas || J(b).interj-J(a).interj],
+    descanso:['Menor descanso entre jornadas', (a,b)=>(J(a).menorDesc===null?1e9:J(a).menorDesc)-(J(b).menorDesc===null?1e9:J(b).menorDesc)]
+  };
+  const ord=ordens[_pontoJornOrdem]||ordens.extra;
+  const lista=ps.slice().sort(ord[1]);
+  h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:4px 0 6px;">'+
+      '<div style="flex:1;font-size:11px;font-weight:800;color:var(--text-secondary);">POR PESSOA</div>'+
+      '<select onchange="pontoJornOrdem(this.value)" style="width:auto;height:34px;padding:0 34px 0 10px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:12px;font-family:inherit;appearance:none;-webkit-appearance:none;cursor:pointer;background:#fff url(&quot;data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27%3E%3Cpath d=%27M1 1l5 5 5-5%27 stroke=%27%2364748b%27 stroke-width=%271.8%27 fill=%27none%27/%3E%3C/svg%3E&quot;) no-repeat right 11px center;">'+
+        Object.keys(ordens).map(k=>'<option value="'+k+'"'+(k===_pontoJornOrdem?' selected':'')+'>Ordenar: '+ordens[k][0]+'</option>').join('')+
+      '</select></div>'+
+    '<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
+    '<table style="border-collapse:collapse;font-size:13px;white-space:nowrap;width:100%;">'+
+    '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
+      '<th style="padding:10px 12px;text-align:left;position:sticky;left:0;background:#334155;">PESSOA</th>'+
+      th('DIAS')+th('MÉDIA/DIA')+th('EXTRA')+th('FALTANDO')+th('SALDO')+th('MENOR DESCANSO')+th('DESC. &lt;11H')+th('INTERV. &lt;1H')+th('&gt;10H')+
+    '</tr></thead><tbody>'+
+    lista.map((p,i)=>{
+      const j=J(p), sal=j.saldo;
+      const md=j.menorDesc;
+      return '<tr onclick="pontoVerPessoa(\''+escapeJsStr(p.codigo)+'\')" style="background:'+(i%2?'#fafbfc':'#fff')+';border-top:1px solid #f1f5f9;cursor:pointer;">'+
+        '<td style="padding:9px 12px;position:sticky;left:0;background:inherit;">'+
+          '<div style="font-weight:600;">'+_pontoEsc(p.nome)+'</div>'+
+          '<div style="font-size:10px;color:var(--text-muted);">'+_pontoEsc((p.setor?(p.setor+' · '):'')+(p.cargo||''))+'</div></td>'+
+        td(j.dias)+td(hh(j.media))+
+        td(j.extra?hh(j.extra):'—','color:#2563eb;font-weight:'+(j.extra?'700':'400')+';')+
+        td(j.devendo?hh(j.devendo):'—','color:#d97706;font-weight:'+(j.devendo?'700':'400')+';')+
+        td((sal>0?'+':'')+hh(sal),'color:'+(sal<0?'#dc2626':'#16a34a')+';')+
+        td(md===null?'—':hh(md),'color:'+(md!==null&&md<PONTO_INTERJORNADA?'#dc2626;font-weight:800':'var(--text-secondary)')+';')+
+        td(alerta(j.interj))+td(alerta(j.interv))+td(alerta(j.longas))+
+      '</tr>';
+    }).join('')+
+    '</tbody></table></div>'+
+    '<div style="font-size:11px;color:var(--text-muted);line-height:1.6;margin-top:10px;">'+
+      'Calculado pelas batidas de entrada e saída de cada dia. Jornada de referência <b>8:48</b> nos dias de trabalho; '+
+      'trabalho em dia de folga conta inteiro como extra. Diferença de até 10 min no dia é ignorada (CLT art. 58). '+
+      '<b>Descanso &lt; 11h</b>: menos de 11h entre a saída de um dia e a entrada do seguinte (art. 66). '+
+      '<b>Intervalo &lt; 1h</b>: jornada acima de 6h com pausa principal menor que 55 min (art. 71). '+
+      '<b>&gt; 10h</b>: mais de 10h trabalhadas no dia (art. 59).</div>';
+  return h;
+}
 
 function _pontoConfirmarImport(pessoas, arquivo){
   // dentro de um mês, o arquivo pertence àquele mês
@@ -26367,12 +26805,13 @@ function pontoPessoas(){
   const fontes=Object.keys(pontoMeses).sort().map(ch=>({ch, pessoas:(pontoMeses[ch]||{}).ponto||[]}));
   fontes.forEach(imp=>{
     (imp.pessoas||[]).forEach(p=>{
-      const ano=(p.emissao&&p.emissao.a)||2026;
+      // o ano vem do mês em que está gravado (antes era fixo em 2026)
+      const ano=(+String(imp.ch).slice(0,4))||(p.emissao&&p.emissao.a)||new Date().getFullYear();
       const dias=(p.dias||[]).filter(d=>{
         if(d.foraDoPeriodo || d.folga) return false;
         const n=_pontoDataNum(d.data, ano);
         return n>=de && n<=ate;
-      });
+      }).map(d=>({...d, _ano:ano}));
       if(!dias.length && (_pontoDe||_pontoAte)) return;
       const ch=String(p.codigo||p.nome);
       if(!mapa[ch]) mapa[ch]={...p, dias:[], importacoes:0, setor:_pmesSetorDe(p, imp.ch)};
