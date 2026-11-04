@@ -27803,17 +27803,18 @@ function _qualComLimite(promessa, ms, oque){
   ]);
 }
 
+/* Usa um endereço temporário em vez de transformar o arquivo em texto:
+   readAsDataURL de uma foto de 10 MB cria uma string de 13 MB antes
+   mesmo de a imagem ser aberta. */
 function _qualCarregarImagem(file){
   return new Promise((resolve,reject)=>{
-    const fr=new FileReader();
-    fr.onload=()=>{
-      const img=new Image();
-      img.onload=()=>resolve(img);
-      img.onerror=()=>reject(new Error('Não consegui abrir a imagem.'));
-      img.src=fr.result;
-    };
-    fr.onerror=()=>reject(new Error('Não consegui ler o arquivo.'));
-    fr.readAsDataURL(file);
+    let url='';
+    try{ url=URL.createObjectURL(file); }
+    catch(e){ reject(new Error('Não consegui abrir o arquivo.')); return; }
+    const img=new Image();
+    img.onload=()=>{ img._url=url; resolve(img); };
+    img.onerror=()=>{ try{ URL.revokeObjectURL(url); }catch(e){} reject(new Error('Não consegui abrir a imagem.')); };
+    img.src=url;
   });
 }
 
