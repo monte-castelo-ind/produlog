@@ -25181,7 +25181,8 @@ function _simixMontar(equipe, ponto, anoMes){
     p.diasFaltas=p.dias.filter(d=>d.falta).length;
     p.horasTrab=p.dias.reduce((t,d)=>t+(d.minTrab||0),0);
     p.horasPrev=p.dias.reduce((t,d)=>t+(d.minPrev||0),0);
-    p.horasSaldo=p.horasTrab-p.horasPrev;
+    const comSaldo=p.dias.filter(d=>d.minSaldo!==null && d.minSaldo!==undefined);
+    p.horasSaldo=comSaldo.length ? comSaldo.reduce((t,d)=>t+d.minSaldo,0) : p.horasTrab-p.horasPrev;
     p.horasFaltas=p.dias.reduce((t,d)=>t+(d.falta?(d.minPrev||0):0),0);
   });
 
@@ -25267,7 +25268,8 @@ function simixDiagnostico(equipe, ponto, motivo, anoMes){
     return ['', titulo+':', ...linhas, '  → o app entendeu: '+ent];
   };
   const exAtraso=pt.find(x=>num(x.hrAtrasosDec)>0);
-  const exFalta=pt.find(x=>num(x.hrFaltasDec)>0||num(x.hrFaltasNJDec)>0);
+  const exFalta=pt.find(x=>!x.trabalhou && (num(x.hrFaltasDec)>0||num(x.hrFaltasNJDec)>0))||
+    pt.find(x=>num(x.hrFaltasDec)>0||num(x.hrFaltasNJDec)>0);
   const exNormal=pt.find(x=>x.trabalhou===true&&!num(x.hrAtrasosDec));
 
   const texto=['DIAGNÓSTICO SÍMIX — '+(anoMes||''),
@@ -25341,14 +25343,18 @@ function _simixDia(r, campo, anoMes){
   const futuro=iso>hojeIso;
 
   /* Atraso igual ao do PDF: entrada real menos entrada prevista, em
-     minutos (negativo = chegou antes). Sem horário previsto, usa o
-     atraso que o Símix calculou. */
+     minutos (negativo = chegou antes).
+     ATENÇÃO: apesar do nome, t1EPrev/t1SPrev… são as batidas REAIS
+     (conferido no diagnóstico de out/2026). O horário previsto está em
+     horariosPrevResumo ("07:00 12:00; 13:00 16:48"). E o hrAtrasos do
+     Símix soma também a saída antecipada, então não serve para a
+     régua de chegada. */
   let atraso=null;
   if(batidas.length){
     const e=_pontoMin(batidas[0]);
-    const prevE=_pontoMin(_simixHora(campo(r,'t1EPrev')));
-    if(e!==null && prevE!==null) atraso=e-prevE;
-    else{ const a=_simixMin(campo(r,'hrAtrasos','Atraso')); atraso=a===null?0:a; }
+    const prev=String(campo(r,'horariosPrevResumo')||'').match(/(\d{1,2}):(\d{2})/);
+    const prevE=prev?(parseInt(prev[1])*60+parseInt(prev[2])):null;
+    atraso=(e!==null && prevE!==null) ? e-prevE : null;
   }
 
   // feriado: mesma regra do PDF — o admin decide se conta como falta
@@ -25358,8 +25364,15 @@ function _simixDia(r, campo, anoMes){
   const feriadoConta=(typeof pontoFeriadoConta==='function') ? pontoFeriadoConta() : false;
   const dsr=campo(r,'eDiaDSR')===true;
 
-  const falta=!futuro && !!minPrev && !batidas.length && !afast && !dsr &&
+  /* Falta de dia inteiro: sem nenhuma batida e com horas faltando.
+     O Símix deixa o hrPrev vazio nos dias sem batida, então quem diz
+     que o dia era de trabalho é o hrFaltas. Falta parcial (saiu cedo,
+     chegou tarde) não é falta: aparece no atraso e no saldo. */
+  const minFaltas=_simixMin(campo(r,'hrFaltas'))||0;
+  const falta=!futuro && !batidas.length && (!!minPrev || minFaltas>0) && !afast && !dsr &&
     (feriadoConta || !feriado);
+  // saldo do dia como o Símix calculou (já com tolerâncias)
+  const minSaldo=_simixMin(campo(r,'hrSaldo'));
 
   return {
     data,
@@ -25369,10 +25382,11 @@ function _simixDia(r, campo, anoMes){
     batidas,
     atraso,
     feriado,
-    minPrev:minPrev||0, minTrab:minTrab||0,
+    minPrev:minPrev||(falta?minFaltas:0), minTrab:minTrab||0,
+    minSaldo:(futuro||minSaldo===null)?null:minSaldo,
     falta,
     afastamento:afast||((feriado && !feriadoConta)?'feriado':''),
-    folga:!futuro && !batidas.length && !afast && (!minPrev || dsr),
+    folga:!futuro && !batidas.length && !afast && !falta && (dsr || (!minPrev && !minFaltas)),
     foraDoPeriodo:futuro,
     obs:afast
   };
@@ -25419,7 +25433,7 @@ function _simixHora(v){
 function _simixMin(v){
   if(v===null||v===undefined||v==='') return null;
   const t=String(v).trim();
-  const m=t.match(/^(-?)(\d{1,4}):(\d{2})/);
+  const m=t.match(/^([-+]?)(\d{1,4}):(\d{2})/);
   if(m) return (m[1]==='-'?-1:1)*(parseInt(m[2])*60+parseInt(m[3]));
   const n=parseFloat(t.replace(',','.'));
   return isNaN(n)?null:Math.round(n*60);   // veio em horas decimais
