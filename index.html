@@ -24604,7 +24604,27 @@ async function pontoCarregarMeses(){
   try{
     const snap=await getDocs(collection(db,'pontoMeses'));
     pontoMeses={};
-    snap.docs.forEach(d=>{ pontoMeses[d.id]=d.data(); });
+    _pontoPartesDocs={};
+    const partes=[];
+    snap.docs.forEach(d=>{
+      const x=d.data();
+      // pedaço de um mês grande (ver _pontoGravarPartes), não é um mês
+      if(x && x.parteDe){ partes.push({id:d.id, ...x}); return; }
+      pontoMeses[d.id]=x;
+    });
+    /* Junta os pedaços no mês, na ordem. Só valem os do lote atual:
+       sobras de uma importação anterior são ignoradas (e apagadas
+       depois de gravar). */
+    partes.forEach(x=>{
+      (_pontoPartesDocs[x.parteDe]=_pontoPartesDocs[x.parteDe]||[]).push({id:x.id, lote:x.lote});
+    });
+    Object.keys(pontoMeses).forEach(ch=>{
+      const m=pontoMeses[ch];
+      if(!m || !m.partesLote) return;
+      const minhas=partes.filter(x=>x.parteDe===ch && x.lote===m.partesLote).sort((a,b)=>a.i-b.i);
+      m.ponto=minhas.flatMap(x=>x.ponto||[]);
+      if(minhas.length!==m.partes) console.warn('pontoMeses '+ch+': esperava '+m.partes+' pedaço(s), achei '+minhas.length);
+    });
     _pontoCarregado=true;
   }catch(e){ console.error('pontoMeses',e); }
   _pontoCarregando=false;
@@ -24618,6 +24638,50 @@ window.pontoCarregarMeses=pontoCarregarMeses;
 /* Depois de gravar, recarrega para a tela mostrar o novo */
 async function _pontoRecarregar(){ _pontoCarregado=false; await pontoCarregarMeses(); }
 
+/* ── MÊS EM PEDAÇOS ──────────────────────────────────────────────
+   Um documento do Firestore aguenta 1 MB. O ponto dia a dia de 160
+   pessoas passa disso, então o mês grava as pessoas em pedaços, como
+   documentos irmãos na mesma coleção (2026-09_p_<lote>_0, _1…). O
+   documento do mês guarda quantos são e de qual lote.
+
+   Ordem de gravação: primeiro os pedaços novos, depois o mês apontando
+   para eles, e só então apagar os velhos. Se cair no meio, o mês
+   continua apontando para um lote completo. */
+let _pontoPartesDocs={};      // {AAAA-MM: [{id, lote}]}
+const PONTO_PARTE_MAX=600000; // bytes de JSON por pedaço — folga sob 1 MB
+
+function _pontoFatiar(pessoas){
+  const fatias=[]; let atual=[], tam=0;
+  (pessoas||[]).forEach(p=>{
+    const t=JSON.stringify(p).length;
+    if(atual.length && tam+t>PONTO_PARTE_MAX){ fatias.push(atual); atual=[]; tam=0; }
+    atual.push(p); tam+=t;
+  });
+  if(atual.length) fatias.push(atual);
+  return fatias;
+}
+
+async function _pontoGravarPartes(mes, pessoas){
+  const lote=Date.now().toString(36);
+  const fatias=_pontoFatiar(pessoas);
+  for(let i=0;i<fatias.length;i++){
+    await setDoc(doc(db,'pontoMeses',mes+'_p_'+lote+'_'+i),
+      {parteDe:mes, lote, i, ponto:fatias[i]});
+  }
+  return {lote, partes:fatias.length};
+}
+
+/* Apaga os pedaços que não são do lote atual do mês (ou todos) */
+async function _pontoLimparPartes(mes, todos){
+  const atual=todos?null:((pontoMeses[mes]||{}).partesLote||null);
+  const sobras=(_pontoPartesDocs[mes]||[]).filter(x=>todos || x.lote!==atual);
+  for(const x of sobras){
+    try{ await deleteDoc(doc(db,'pontoMeses',x.id)); }
+    catch(e){ console.warn('pedaço do ponto',x.id,e); }
+  }
+  _pontoPartesDocs[mes]=(_pontoPartesDocs[mes]||[]).filter(x=>!sobras.includes(x));
+}
+
 /* ── SALVAR OS ARQUIVOS NO MÊS ───────────────────────────────────── */
 async function _pmesSalvarPonto(pessoas, arquivo){
   const d=_pmesDados(_pmesSel)||{};
@@ -24630,8 +24694,10 @@ async function _pmesSalvarPonto(pessoas, arquivo){
   try{
     await setDoc(doc(db,'pontoMeses',_pmesSel),
       {ponto:pessoas, pontoArquivo:String(arquivo||''), emissoes:emis,
+       partes:0, partesLote:null,
        pontoEm:agora(), pontoPor:_demAutor(), mes:_pmesSel},{merge:true});
     await _pontoRecarregar();
+    await _pontoLimparPartes(_pmesSel);
     const pend=_pmesSemSetor(_pmesSel).length;
     alert('✓ '+pessoas.length+' pessoa(s) importadas.'+
       (pend?('\n\n⚠️ '+pend+' sem setor — importe a lista de colaboradores ou defina à mão.'):''));
@@ -24734,6 +24800,7 @@ async function pmesExcluir(){
   const [ano,mes]=_pmesSel.split('-');
   if(!confirm('Excluir '+PONTO_MES_NOMES[+mes]+' de '+ano+'?\n\nOs dois arquivos saem dos relatórios.')) return;
   try{
+    await _pontoLimparPartes(_pmesSel, true);
     await deleteDoc(doc(db,'pontoMeses',_pmesSel));
     _pmesSel='';
     goTo('s-ponto');
@@ -25026,11 +25093,10 @@ async function simixImportarMes(){
   }
   _simixFecharProgresso();
 
-  if(!pessoas.length){
-    alert('A ponte respondeu, mas não veio nenhuma pessoa para '+anoMes+'.\n\n'+
-      'Cadastro: '+equipe.length+' registro(s) · ponto: '+ponto.length+' registro(s).');
-    return;
-  }
+  /* Trava: se o resultado não faz sentido, NÃO grava — mostra o que o
+     Símix devolveu para a gente ajustar os nomes dos campos. */
+  const problema=_simixConferir(equipe, ponto, pessoas);
+  if(problema){ simixDiagnostico(equipe, ponto, problema, anoMes); return; }
 
   const semSetor=pessoas.filter(p=>!p.setor).length;
   if(!confirm('Importar '+pessoas.length+' pessoa(s) de '+PONTO_MES_NOMES[+mes]+'/'+ano+'?\n\n'+
@@ -25038,14 +25104,19 @@ async function simixImportarMes(){
     'Substitui o que já houver neste mês.')) return;
 
   try{
+    _simixProgresso('Gravando…');
+    const {lote, partes}=await _pontoGravarPartes(_pmesSel, pessoas);
     await setDoc(doc(db,'pontoMeses',_pmesSel),
-      {ponto:pessoas, pontoArquivo:'Símix (automático)', origem:'simix',
+      {ponto:[], partes, partesLote:lote, pontoArquivo:'Símix (automático)', origem:'simix',
        equipe:pessoas.map(p=>({nome:p.nome, cargo:p.cargo, setor:p.setor, admissao:p.admissao})),
        equipeArquivo:'Símix (automático)',
        pontoEm:agora(), pontoPor:_demAutor(), mes:_pmesSel},{merge:true});
     await _pontoRecarregar();
+    await _pontoLimparPartes(_pmesSel);
+    _simixFecharProgresso();
     alert('✓ '+pessoas.length+' pessoa(s) importadas direto do Símix.');
   }catch(e){
+    _simixFecharProgresso();
     alert('Busquei os dados mas não consegui salvar: '+e.message+
       (String(e.message||'').match(/too large|exceeds/i)?'\n\nO mês tem gente demais para um registro só.':''));
   }
@@ -25067,7 +25138,7 @@ function _simixMontar(equipe, ponto, anoMes){
   // cadastro por matrícula e por nome
   const porCod={}, porNome={};
   (equipe||[]).forEach(e=>{
-    const cod=String(campo(e,'FuncCodigo','Codigo','Matricula','FuncId','Id')||'').trim();
+    const cod=String(campo(e,'FuncCodigo','Codigo','Matricula','FuncId')||'').trim();
     const nome=String(campo(e,'FuncNome','Nome','NomeFuncionario')||'').trim();
     const reg={
       codigo:cod, nome,
@@ -25083,7 +25154,7 @@ function _simixMontar(equipe, ponto, anoMes){
   // o ponto, agrupado por pessoa
   const pessoas={};
   (ponto||[]).forEach(r=>{
-    const cod=String(campo(r,'FuncCodigo','Codigo','Matricula','FuncId','Id')||'').trim();
+    const cod=String(campo(r,'FuncCodigo','Codigo','Matricula','FuncId')||'').trim();
     const nome=String(campo(r,'FuncNome','Nome','NomeFuncionario')||'').trim();
     const cad=porCod[cod] || porNome[_normNome(nome)] || {};
     const chave=cod||_normNome(nome);
@@ -25125,6 +25196,80 @@ function _simixMontar(equipe, ponto, anoMes){
   return Object.values(pessoas)
     .sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR'));
 }
+
+/* Confere se o resultado faz sentido antes de gravar.
+   Devolve o motivo do problema, ou '' se estiver tudo certo. */
+function _simixConferir(equipe, ponto, pessoas){
+  const nEq=(equipe||[]).length, nPt=(ponto||[]).length, nP=pessoas.length;
+  if(!nP) return 'Não consegui montar nenhuma pessoa.';
+  if(nEq && nP>nEq*1.2+5)
+    return 'Montei '+nP+' pessoas, mas o cadastro tem '+nEq+'. Cada dia do ponto virou uma pessoa: não achei o campo que diz de quem é cada marcação.';
+  const semSetor=pessoas.filter(p=>!p.setor).length;
+  if(semSetor>nP*0.5)
+    return semSetor+' de '+nP+' pessoas ficaram sem setor: não achei o campo de setor.';
+  const dias=pessoas.reduce((t,p)=>t+p.dias.length,0);
+  if(nPt && dias<nPt*0.5)
+    return 'Vieram '+nPt+' linhas de ponto, mas só '+dias+' entraram: não achei de quem é cada linha, ou a data.';
+  const comBatida=pessoas.reduce((t,p)=>t+p.dias.filter(d=>d.batidas.length).length,0);
+  if(dias>50 && !comBatida)
+    return 'Reconheci '+dias+' dias, mas nenhum com marcação: não achei os campos de entrada e saída.';
+  return '';
+}
+
+/* Mostra o que o Símix devolveu: todos os campos e uma linha de cada
+   consulta, com botão de copiar. É o que eu preciso para ajustar. */
+function simixDiagnostico(equipe, ponto, motivo, anoMes){
+  const lim=v=>{ const t=JSON.stringify(v); return t&&t.length>60?t.slice(0,60)+'…':t; };
+  const resumo=(lista)=>{
+    if(!lista||!lista.length) return {campos:[], exemplo:null};
+    const campos=[...new Set(lista.slice(0,30).flatMap(x=>Object.keys(x||{})))];
+    const ex={}; campos.forEach(k=>{ ex[k]=lim(lista[0][k]); });
+    return {campos, exemplo:ex};
+  };
+  const rE=resumo(equipe), rP=resumo(ponto);
+  const texto=['DIAGNÓSTICO SÍMIX — '+(anoMes||''),
+    'Motivo: '+(motivo||'(teste)'),
+    '',
+    'CADASTRO (func-meses): '+(equipe||[]).length+' linha(s)',
+    ...rE.campos.map(k=>'  '+k+' = '+rE.exemplo[k]),
+    '',
+    'PONTO (ponto-calc-dias): '+(ponto||[]).length+' linha(s)',
+    ...rP.campos.map(k=>'  '+k+' = '+rP.exemplo[k])
+  ].join('\n');
+  window._simixDiagTexto=texto;
+
+  const esc=t=>String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  document.getElementById('simix-diag')?.remove();
+  const ov=document.createElement('div');
+  ov.id='simix-diag';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">'+
+    '<div style="padding:18px 20px 10px;">'+
+      '<div style="font-size:17px;font-weight:800;">🔍 O que o Símix devolveu</div>'+
+      (motivo?('<div style="margin-top:10px;padding:10px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;font-size:13px;color:#991b1b;line-height:1.5;">'+
+        '<b>Não gravei nada.</b> '+esc(motivo)+'</div>'):'')+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.5;">'+
+        'Toque em <b>Copiar</b> e cole na conversa com o Claude. Vai uma linha de exemplo de cada consulta.</div></div>'+
+    '<pre style="margin:0 20px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;font-size:11px;line-height:1.45;overflow:auto;flex:1;white-space:pre;">'+esc(texto)+'</pre>'+
+    '<div style="display:flex;gap:8px;padding:14px 20px 18px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'simix-diag\').remove()">Fechar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" id="simix-diag-cp" onclick="simixDiagCopiar()">📋 Copiar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.simixDiagnostico=simixDiagnostico;
+
+async function simixDiagCopiar(){
+  const t=window._simixDiagTexto||'';
+  const b=document.getElementById('simix-diag-cp');
+  try{ await navigator.clipboard.writeText(t); }
+  catch(e){
+    const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta);
+    ta.select(); try{ document.execCommand('copy'); }catch(_){} ta.remove();
+  }
+  if(b){ b.textContent='✓ Copiado'; setTimeout(()=>{ if(b.isConnected) b.textContent='📋 Copiar'; },1800); }
+}
+window.simixDiagCopiar=simixDiagCopiar;
 
 /* Uma linha de ponto vira um dia no formato do painel */
 function _simixDia(r, campo){
@@ -25246,10 +25391,19 @@ async function simixTestar(){
   const antes={...simixCfg};
   simixCfg={url, ativo:true};
   try{
-    const d=await simixBuscar('equipe', '');
+    /* Sempre com um mês: sem filtro, esta consulta devolve uma linha
+       por pessoa POR MÊS e traz anos de histórico de uma vez. */
+    const hj=new Date();
+    const anoMes=String(hj.getFullYear())+String(hj.getMonth()+1).padStart(2,'0');
+    const d=await simixBuscar('equipe', anoMes);
     if(d===null){ simixCfg=antes; if(res) res.innerHTML=''; return; }
-    if(res) res.innerHTML='<span style="color:#15803d;font-weight:700;">✓ Funcionou: '+d.length+' colaborador(es).</span>'+
-      (d.length?('<div style="color:var(--text-muted);margin-top:4px;">campos: '+Object.keys(d[0]).slice(0,6).join(', ')+'…</div>'):'');
+    if(res) res.innerHTML='<span style="color:var(--text-secondary);">Cadastro ok ('+d.length+'). Buscando o ponto…</span>';
+    const pt=await simixBuscar('ponto', anoMes);
+    if(pt===null){ simixCfg=antes; if(res) res.innerHTML=''; return; }
+    window._simixTesteDados={equipe:d, ponto:pt, anoMes};
+    if(res) res.innerHTML='<span style="color:#15803d;font-weight:700;">✓ Funcionou em '+anoMes+': '+d.length+' no cadastro, '+pt.length+' linha(s) de ponto.</span>'+
+      '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" '+
+        'onclick="simixDiagnostico(_simixTesteDados.equipe,_simixTesteDados.ponto,\'\',_simixTesteDados.anoMes)">🔍 Ver os campos</button>';
   }catch(e){
     simixCfg=antes;
     if(res) res.innerHTML='<span style="color:#dc2626;">'+((e&&e.message)||e)+'</span>';
@@ -25612,7 +25766,7 @@ async function pontoExcluirImport(ch){
   const d=pontoMeses[ch]; if(!d) return;
   const [ano,mes]=ch.split('-');
   if(!confirm('Excluir '+PONTO_MES_NOMES[+mes]+' de '+ano+'?\n\n'+((d.ponto||[]).length)+' pessoa(s) saem dos relatórios.')) return;
-  try{ await deleteDoc(doc(db,'pontoMeses',ch)); }
+  try{ await _pontoLimparPartes(ch, true); await deleteDoc(doc(db,'pontoMeses',ch)); }
   catch(e){ alert('Erro: '+e.message); }
 }
 window.pontoExcluirImport=pontoExcluirImport;
