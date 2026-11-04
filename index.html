@@ -24932,6 +24932,337 @@ function _pmesCardArquivo(icone, titulo, sub, arquivo, botao){
   '</div>';
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   PONTE DO SÍMIX
+   Busca o ponto direto do sistema, sem exportar PDF. A senha do Símix
+   fica no Cloudflare; o app só fala com a ponte.
+   Guarda em: configuracoes/simixCfg
+   ══════════════════════════════════════════════════════════════════ */
+let simixCfg={url:'', ativo:false};
+
+onSnapshot(doc(db,'configuracoes','simixCfg'), snap=>{
+  try{
+    const d=snap.data()||{};
+    simixCfg={url:d.url||'', ativo:!!d.ativo};
+    if(document.querySelector('.screen.active')?.id==='s-ponto') renderPonto();
+  }catch(e){ console.error('simixCfg snap',e); }
+});
+
+function simixPronto(){ return !!(simixCfg.url && simixCfg.ativo); }
+window.simixPronto=simixPronto;
+
+/* A senha fica só nesta sessão: não gravamos em lugar nenhum */
+let _simixSenha='';
+function simixSenha(){
+  if(_simixSenha) return _simixSenha;
+  const v=prompt('Senha da ponte do Símix:');
+  if(v===null) return null;
+  _simixSenha=String(v).trim();
+  return _simixSenha;
+}
+
+async function simixBuscar(consulta, anoMes){
+  if(!simixPronto()) throw new Error('A ponte do Símix não está configurada.');
+  const senha=simixSenha();
+  if(senha===null) return null;
+  const resp=await fetch(simixCfg.url, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({senha, consulta, anoMes:anoMes||''})
+  });
+  const txt=await resp.text();
+  let r;
+  try{ r=JSON.parse(txt); }
+  catch(e){ throw new Error('Resposta inesperada da ponte: '+txt.slice(0,120)); }
+  if(!resp.ok || r.erro){
+    if(resp.status===401) _simixSenha='';   // senha errada: pergunta de novo
+    throw new Error(r.erro||('A ponte respondeu '+resp.status));
+  }
+  return Array.isArray(r.dados)?r.dados:[];
+}
+window.simixBuscar=simixBuscar;
+
+/* ── CONFIGURAR ──────────────────────────────────────────────────── */
+/* ── BUSCAR UM MÊS PELA PONTE ────────────────────────────────────
+   Traz o ponto e o cadastro de uma vez. O cadastro já vem com o setor,
+   então não precisa da planilha de colaboradores. */
+async function simixImportarMes(){
+  if(!_pmesSel){ alert('Abra um mês primeiro.'); return; }
+  if(!simixPronto()){ simixAbrirConfig(); return; }
+
+  const [ano,mes]=_pmesSel.split('-');
+  const anoMes=String(ano)+String(mes).padStart(2,'0');
+
+  _simixProgresso('Buscando o cadastro…');
+  let equipe=[], ponto=[];
+  try{
+    equipe=await simixBuscar('equipe', anoMes);
+    if(equipe===null){ _simixFecharProgresso(); return; }
+    _simixProgresso('Buscando as marcações…');
+    ponto=await simixBuscar('ponto', anoMes);
+    if(ponto===null){ _simixFecharProgresso(); return; }
+  }catch(e){
+    _simixFecharProgresso();
+    alert('Não consegui buscar: '+((e&&e.message)||e));
+    return;
+  }
+
+  _simixProgresso('Organizando…');
+  let pessoas;
+  try{
+    pessoas=_simixMontar(equipe, ponto, anoMes);
+  }catch(e){
+    _simixFecharProgresso();
+    alert('Os dados vieram em formato inesperado: '+((e&&e.message)||e)+
+      '\n\nMe mande este aviso para eu ajustar.');
+    return;
+  }
+  _simixFecharProgresso();
+
+  if(!pessoas.length){
+    alert('A ponte respondeu, mas não veio nenhuma pessoa para '+anoMes+'.\n\n'+
+      'Cadastro: '+equipe.length+' registro(s) · ponto: '+ponto.length+' registro(s).');
+    return;
+  }
+
+  const semSetor=pessoas.filter(p=>!p.setor).length;
+  if(!confirm('Importar '+pessoas.length+' pessoa(s) de '+PONTO_MES_NOMES[+mes]+'/'+ano+'?\n\n'+
+    (semSetor?(semSetor+' sem setor informado.\n\n'):'Todas com setor. \n\n')+
+    'Substitui o que já houver neste mês.')) return;
+
+  try{
+    await setDoc(doc(db,'pontoMeses',_pmesSel),
+      {ponto:pessoas, pontoArquivo:'Símix (automático)', origem:'simix',
+       equipe:pessoas.map(p=>({nome:p.nome, cargo:p.cargo, setor:p.setor, admissao:p.admissao})),
+       equipeArquivo:'Símix (automático)',
+       pontoEm:agora(), pontoPor:_demAutor(), mes:_pmesSel},{merge:true});
+    await _pontoRecarregar();
+    alert('✓ '+pessoas.length+' pessoa(s) importadas direto do Símix.');
+  }catch(e){
+    alert('Busquei os dados mas não consegui salvar: '+e.message+
+      (String(e.message||'').match(/too large|exceeds/i)?'\n\nO mês tem gente demais para um registro só.':''));
+  }
+}
+window.simixImportarMes=simixImportarMes;
+
+/* Junta cadastro e ponto no formato que o painel já usa.
+   Os nomes dos campos podem variar; procuramos por várias formas. */
+function _simixMontar(equipe, ponto, anoMes){
+  const campo=(obj, ...nomes)=>{
+    for(const n of nomes){
+      for(const k of Object.keys(obj||{})){
+        if(_normNome(k)===_normNome(n)) return obj[k];
+      }
+    }
+    return undefined;
+  };
+
+  // cadastro por matrícula e por nome
+  const porCod={}, porNome={};
+  (equipe||[]).forEach(e=>{
+    const cod=String(campo(e,'FuncCodigo','Codigo','Matricula','FuncId','Id')||'').trim();
+    const nome=String(campo(e,'FuncNome','Nome','NomeFuncionario')||'').trim();
+    const reg={
+      codigo:cod, nome,
+      cargo:String(campo(e,'CargoNome','Cargo','CargoDesc')||'').trim(),
+      setor:String(campo(e,'SetorNome','Setor','SetorDesc','DepaNome','Departamento')||'').trim(),
+      admissao:_simixData(campo(e,'FuncAdmissao','Admissao','DataAdmissao')),
+      horario:String(campo(e,'HorarioNome','Horario','EscalaNome')||'').trim()
+    };
+    if(cod) porCod[cod]=reg;
+    if(nome) porNome[_normNome(nome)]=reg;
+  });
+
+  // o ponto, agrupado por pessoa
+  const pessoas={};
+  (ponto||[]).forEach(r=>{
+    const cod=String(campo(r,'FuncCodigo','Codigo','Matricula','FuncId','Id')||'').trim();
+    const nome=String(campo(r,'FuncNome','Nome','NomeFuncionario')||'').trim();
+    const cad=porCod[cod] || porNome[_normNome(nome)] || {};
+    const chave=cod||_normNome(nome);
+    if(!chave) return;
+
+    if(!pessoas[chave]){
+      pessoas[chave]={
+        codigo:cod||cad.codigo||'', nome:nome||cad.nome||'',
+        cargo:cad.cargo||'', setor:cad.setor||'',
+        admissao:cad.admissao||'', horario:cad.horario||'',
+        periodo:anoMes, emissao:null, dias:[],
+        horasTrab:0, horasPrev:0, horasSaldo:0, horasFaltas:0, diasFaltas:0
+      };
+    }
+    const p=pessoas[chave];
+    const dia=_simixDia(r, campo);
+    if(dia) p.dias.push(dia);
+  });
+
+  // totais calculados dos dias
+  Object.values(pessoas).forEach(p=>{
+    p.dias.sort((a,b)=>_simixOrdemData(a.data)-_simixOrdemData(b.data));
+    p.diasFaltas=p.dias.filter(d=>d.falta).length;
+    p.horasTrab=p.dias.reduce((t,d)=>t+(d.minTrab||0),0);
+    p.horasPrev=p.dias.reduce((t,d)=>t+(d.minPrev||0),0);
+    p.horasSaldo=p.horasTrab-p.horasPrev;
+    p.horasFaltas=p.dias.reduce((t,d)=>t+(d.falta?(d.minPrev||0):0),0);
+  });
+
+  // quem está no cadastro mas não tem ponto entra sem dias
+  Object.values(porCod).forEach(c=>{
+    const chave=c.codigo||_normNome(c.nome);
+    if(chave && !pessoas[chave]){
+      pessoas[chave]={...c, periodo:anoMes, emissao:null, dias:[],
+        horasTrab:0, horasPrev:0, horasSaldo:0, horasFaltas:0, diasFaltas:0};
+    }
+  });
+
+  return Object.values(pessoas)
+    .sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR'));
+}
+
+/* Uma linha de ponto vira um dia no formato do painel */
+function _simixDia(r, campo){
+  const data=_simixData(campo(r,'Data','DataPonto','Dia','DtPonto'));
+  if(!data) return null;
+  const batidas=[];
+  ['Marcacao1','Marcacao2','Marcacao3','Marcacao4','Entrada1','Saida1','Entrada2','Saida2','Ent1','Sai1','Ent2','Sai2']
+    .forEach(n=>{
+      const v=campo(r,n);
+      const h=_simixHora(v);
+      if(h) batidas.push(h);
+    });
+  batidas.sort();
+
+  const minPrev=_simixMin(campo(r,'HrPrev','HorasPrevistas','Previsto','HrPrevista'));
+  const minTrab=_simixMin(campo(r,'HrTrab','HorasTrabalhadas','Trabalhado','HrTrabalhada'));
+  const atrasoMin=_simixMin(campo(r,'Atraso','HrAtraso','Atrasos'));
+  const afast=String(campo(r,'AfastaDesc','Afastamento','Ocorrencia','Situacao')||'').trim();
+  const faltaCampo=campo(r,'Falta','Faltas','DiasFalta');
+
+  const falta = (Number(faltaCampo)>0) ||
+    (!!minPrev && !minTrab && !afast && !batidas.length);
+
+  return {
+    data,
+    semana:_simixSemana(data),
+    entrada:batidas[0]||null,
+    saida:batidas.length>1?batidas[batidas.length-1]:null,
+    batidas,
+    atraso:(atrasoMin!==null && atrasoMin>0)?atrasoMin:(batidas.length?0:null),
+    minPrev:minPrev||0, minTrab:minTrab||0,
+    falta:!!falta,
+    afastamento:afast,
+    folga:!minPrev && !batidas.length && !afast,
+    foraDoPeriodo:false,
+    obs:afast
+  };
+}
+
+function _simixData(v){
+  if(!v) return '';
+  const t=String(v);
+  let m=t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[3]+'/'+m[2];
+  m=t.match(/^(\d{2})\/(\d{2})/);
+  if(m) return m[1]+'/'+m[2];
+  return '';
+}
+function _simixHora(v){
+  if(!v) return '';
+  const m=String(v).match(/(\d{1,2}):(\d{2})/);
+  return m?(String(m[1]).padStart(2,'0')+':'+m[2]):'';
+}
+function _simixMin(v){
+  if(v===null||v===undefined||v==='') return null;
+  const t=String(v).trim();
+  const m=t.match(/^(-?)(\d{1,4}):(\d{2})/);
+  if(m) return (m[1]==='-'?-1:1)*(parseInt(m[2])*60+parseInt(m[3]));
+  const n=parseFloat(t.replace(',','.'));
+  return isNaN(n)?null:Math.round(n*60);   // veio em horas decimais
+}
+function _simixSemana(ddmm){
+  const p=String(ddmm).split('/');
+  if(p.length<2) return '';
+  const hoje0=new Date();
+  const d=new Date(hoje0.getFullYear(), +p[1]-1, +p[0]);
+  return ['dom','seg','ter','qua','qui','sex','sáb'][d.getDay()];
+}
+function _simixOrdemData(ddmm){
+  const p=String(ddmm).split('/');
+  return p.length>=2 ? (+p[1])*100+(+p[0]) : 0;
+}
+
+function _simixProgresso(txt){
+  let el=document.getElementById('simix-prog');
+  if(!el){
+    el=document.createElement('div');
+    el.id='simix-prog';
+    el.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.65);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML='<div style="background:#fff;border-radius:16px;max-width:340px;width:100%;padding:24px;text-align:center;">'+
+    '<div style="font-size:30px;">🔗</div>'+
+    '<div style="font-size:15px;font-weight:800;margin-top:8px;">'+txt+'</div>'+
+    '<div style="font-size:11px;color:var(--text-muted);margin-top:6px;">buscando no Símix</div></div>';
+}
+function _simixFecharProgresso(){ document.getElementById('simix-prog')?.remove(); }
+
+function simixAbrirConfig(){
+  if(window.adminMode!==true){ alert('Só o admin configura a ponte.'); return; }
+  const ov=document.createElement('div');
+  ov.id='simix-cfg';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:20px;">'+
+    '<div style="font-size:17px;font-weight:800;">🔗 Ponte do Símix</div>'+
+    '<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;line-height:1.5;">'+
+      'Busca o ponto direto do sistema, sem exportar PDF. A senha do Símix fica no Cloudflare, nunca aqui.</div>'+
+    '<label style="font-size:12px;font-weight:700;color:var(--text-secondary);display:block;margin-top:14px;">Endereço da ponte</label>'+
+    '<input type="text" id="simix-url" value="'+String(simixCfg.url||'').replace(/"/g,'&quot;')+'" placeholder="https://ponte-simix.xxx.workers.dev" autocomplete="off" '+
+      'style="width:100%;padding:11px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:14px;font-family:inherit;box-sizing:border-box;margin-top:4px;">'+
+    '<label style="display:flex;align-items:center;gap:9px;margin-top:12px;cursor:pointer;">'+
+      '<input type="checkbox" id="simix-ativo"'+(simixCfg.ativo?' checked':'')+' style="width:18px;height:18px;cursor:pointer;">'+
+      '<span style="font-size:13px;font-weight:700;">usar a ponte</span></label>'+
+    '<div style="display:flex;gap:8px;margin-top:16px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'simix-cfg\').remove()">Cancelar</button>'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="simixTestar()">Testar</button>'+
+      '<button class="btn btn-primary" style="flex:1;" onclick="simixSalvarConfig()">Salvar</button></div>'+
+    '<div id="simix-cfg-res" style="font-size:12px;margin-top:10px;line-height:1.5;"></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+}
+window.simixAbrirConfig=simixAbrirConfig;
+
+async function simixTestar(){
+  const url=((document.getElementById('simix-url')||{}).value||'').trim();
+  const res=document.getElementById('simix-cfg-res');
+  if(!url){ if(res) res.innerHTML='<span style="color:#dc2626;">Informe o endereço.</span>'; return; }
+  if(res) res.innerHTML='<span style="color:var(--text-secondary);">Testando…</span>';
+  const antes={...simixCfg};
+  simixCfg={url, ativo:true};
+  try{
+    const d=await simixBuscar('equipe', '');
+    if(d===null){ simixCfg=antes; if(res) res.innerHTML=''; return; }
+    if(res) res.innerHTML='<span style="color:#15803d;font-weight:700;">✓ Funcionou: '+d.length+' colaborador(es).</span>'+
+      (d.length?('<div style="color:var(--text-muted);margin-top:4px;">campos: '+Object.keys(d[0]).slice(0,6).join(', ')+'…</div>'):'');
+  }catch(e){
+    simixCfg=antes;
+    if(res) res.innerHTML='<span style="color:#dc2626;">'+((e&&e.message)||e)+'</span>';
+  }
+}
+window.simixTestar=simixTestar;
+
+async function simixSalvarConfig(){
+  const url=((document.getElementById('simix-url')||{}).value||'').trim();
+  const ativo=!!(document.getElementById('simix-ativo')||{}).checked;
+  if(ativo && !url){ alert('Informe o endereço da ponte.'); return; }
+  try{
+    await setDoc(doc(db,'configuracoes','simixCfg'),
+      {url, ativo, atualizadoEm:agora(), autor:_demAutor()});
+    document.getElementById('simix-cfg')?.remove();
+    renderPonto();
+  }catch(e){ alert('Erro: '+e.message); }
+}
+window.simixSalvarConfig=simixSalvarConfig;
+
 function _pmesChave(ano, mes){ return String(ano)+'-'+String(mes).padStart(2,'0'); }
 function _pmesDados(ch){ return pontoMeses[ch]||null; }
 
