@@ -28006,8 +28006,13 @@ async function _qualCarregarFoto(id){
   try{
     const snap=await getDoc(doc(db,'qualidadeFotos',id));
     qualFotos[id]=snap.exists()?((snap.data()||{}).foto||''):'';
-  }catch(e){ qualFotos[id]=''; }
-  delete _qualFotoBuscando[id];
+  }catch(e){
+    qualFotos[id]='';
+  }finally{
+    // sempre libera, mesmo se der errado no meio
+    delete _qualFotoBuscando[id];
+    if(qualFotos[id]===undefined) qualFotos[id]='';
+  }
   return qualFotos[id];
 }
 
@@ -28015,11 +28020,37 @@ function _qualFotoId(dia, tipo, cod){ return _qualChave(dia,tipo)+'__'+String(co
 function qualFoto(dia, tipo, cod){ return qualFotos[_qualFotoId(dia,tipo,cod)]||''; }
 
 /* Carrega as fotos dos produtos que estão na tela e redesenha */
+/* CUIDADO: esta função é chamada por _qualRenderDia e no fim chama
+   renderQual, que desenha o dia de novo. Se alguma foto não ficar
+   marcada como resolvida, o ciclo gira para sempre e trava a aba —
+   foi exatamente o que aconteceu. Por isso:
+   - só redesenha se alguma foto realmente chegou;
+   - marca a tentativa mesmo quando falha, para não repetir. */
+let _qualFotosPedidas={};
+
 async function _qualCarregarFotosDaTela(dia, tipo, codigos){
-  const falta=codigos.filter(c=>qualFotos[_qualFotoId(dia,tipo,c)]===undefined);
+  const falta=codigos.filter(c=>{
+    const id=_qualFotoId(dia,tipo,c);
+    return qualFotos[id]===undefined && !_qualFotosPedidas[id];
+  });
   if(!falta.length) return;
-  for(const c of falta){ await _qualCarregarFoto(_qualFotoId(dia,tipo,c)); }
-  if(document.querySelector('.screen.active')?.id==='s-qual') renderQual();
+
+  // marca ANTES de buscar: nenhuma volta pede a mesma foto de novo
+  falta.forEach(c=>{ _qualFotosPedidas[_qualFotoId(dia,tipo,c)]=true; });
+
+  let chegou=0;
+  for(const c of falta){
+    const id=_qualFotoId(dia,tipo,c);
+    try{
+      const f=await _qualCarregarFoto(id);
+      if(f) chegou++;
+    }catch(e){
+      qualFotos[id]='';     // não achou: fica vazio e não tenta mais
+    }
+    if(qualFotos[id]===undefined) qualFotos[id]='';
+  }
+  // sem foto nova, não há o que redesenhar
+  if(chegou && document.querySelector('.screen.active')?.id==='s-qual') renderQual();
 }
 window.qualFoto=qualFoto;
 
