@@ -25138,14 +25138,14 @@ function _simixMontar(equipe, ponto, anoMes){
   // cadastro por matrícula e por nome
   const porCod={}, porNome={};
   (equipe||[]).forEach(e=>{
-    const cod=String(campo(e,'FuncCodigo','Codigo','Matricula','FuncId')||'').trim();
-    const nome=String(campo(e,'FuncNome','Nome','NomeFuncionario')||'').trim();
+    const cod=String(campo(e,'cdFunc','FuncCodigo','Codigo','Matricula')??'').trim();
+    const nome=String(campo(e,'funcionarioNome','FuncNome','Nome','NomeFuncionario')||'').trim();
     const reg={
       codigo:cod, nome,
       cargo:String(campo(e,'CargoNome','Cargo','CargoDesc')||'').trim(),
       setor:String(campo(e,'SetorNome','Setor','SetorDesc','DepaNome','Departamento')||'').trim(),
-      admissao:_simixData(campo(e,'FuncAdmissao','Admissao','DataAdmissao')),
-      horario:String(campo(e,'HorarioNome','Horario','EscalaNome')||'').trim()
+      admissao:_simixData(campo(e,'dtAdmissao','FuncAdmissao','Admissao','DataAdmissao')),
+      horario:String(campo(e,'horarioDescricao','HorarioNome','Horario','EscalaNome')||'').trim()
     };
     if(cod) porCod[cod]=reg;
     if(nome) porNome[_normNome(nome)]=reg;
@@ -25154,8 +25154,8 @@ function _simixMontar(equipe, ponto, anoMes){
   // o ponto, agrupado por pessoa
   const pessoas={};
   (ponto||[]).forEach(r=>{
-    const cod=String(campo(r,'FuncCodigo','Codigo','Matricula','FuncId')||'').trim();
-    const nome=String(campo(r,'FuncNome','Nome','NomeFuncionario')||'').trim();
+    const cod=String(campo(r,'cdFunc','FuncCodigo','Codigo','Matricula')??'').trim();
+    const nome=String(campo(r,'funcNome','FuncNome','Nome','NomeFuncionario')||'').trim();
     const cad=porCod[cod] || porNome[_normNome(nome)] || {};
     const chave=cod||_normNome(nome);
     if(!chave) return;
@@ -25163,14 +25163,15 @@ function _simixMontar(equipe, ponto, anoMes){
     if(!pessoas[chave]){
       pessoas[chave]={
         codigo:cod||cad.codigo||'', nome:nome||cad.nome||'',
-        cargo:cad.cargo||'', setor:cad.setor||'',
+        cargo:cad.cargo||'',
+        setor:cad.setor||String(campo(r,'setorNome')||'').trim(),
         admissao:cad.admissao||'', horario:cad.horario||'',
         periodo:anoMes, emissao:null, dias:[],
         horasTrab:0, horasPrev:0, horasSaldo:0, horasFaltas:0, diasFaltas:0
       };
     }
     const p=pessoas[chave];
-    const dia=_simixDia(r, campo);
+    const dia=_simixDia(r, campo, anoMes);
     if(dia) p.dias.push(dia);
   });
 
@@ -25210,9 +25211,10 @@ function _simixConferir(equipe, ponto, pessoas){
   const dias=pessoas.reduce((t,p)=>t+p.dias.length,0);
   if(nPt && dias<nPt*0.5)
     return 'Vieram '+nPt+' linhas de ponto, mas só '+dias+' entraram: não achei de quem é cada linha, ou a data.';
+  const passados=pessoas.reduce((t,p)=>t+p.dias.filter(d=>!d.foraDoPeriodo).length,0);
   const comBatida=pessoas.reduce((t,p)=>t+p.dias.filter(d=>d.batidas.length).length,0);
-  if(dias>50 && !comBatida)
-    return 'Reconheci '+dias+' dias, mas nenhum com marcação: não achei os campos de entrada e saída.';
+  if(passados>50 && !comBatida)
+    return 'Reconheci '+passados+' dias já passados, mas nenhum com marcação: não achei os campos de entrada e saída.';
   return '';
 }
 
@@ -25223,7 +25225,13 @@ function simixDiagnostico(equipe, ponto, motivo, anoMes){
   const resumo=(lista)=>{
     if(!lista||!lista.length) return {campos:[], exemplo:null};
     const campos=[...new Set(lista.slice(0,30).flatMap(x=>Object.keys(x||{})))];
-    const ex={}; campos.forEach(k=>{ ex[k]=lim(lista[0][k]); });
+    // prefere uma linha com marcação, que é a que mostra o formato
+    const linha=lista.find(x=>x&&(x.trabalhou===true||x.horariosResumo||(Array.isArray(x.turnos)&&x.turnos.length)))||lista[0];
+    const longos=/^(turnos|turnosex|horariosresumo|horariosprevresumo|extras)$/i;
+    const ex={}; campos.forEach(k=>{
+      const t=JSON.stringify(linha[k]);
+      ex[k]=longos.test(k)?(t&&t.length>600?t.slice(0,600)+'…':t):lim(linha[k]);
+    });
     return {campos, exemplo:ex};
   };
   const rE=resumo(equipe), rP=resumo(ponto);
@@ -25272,41 +25280,83 @@ async function simixDiagCopiar(){
 window.simixDiagCopiar=simixDiagCopiar;
 
 /* Uma linha de ponto vira um dia no formato do painel */
-function _simixDia(r, campo){
-  const data=_simixData(campo(r,'Data','DataPonto','Dia','DtPonto'));
+function _simixDia(r, campo, anoMes){
+  const iso=String(campo(r,'data','Data','DataPonto','Dia','DtPonto')||'').slice(0,10);
+  const data=_simixData(iso);
   if(!data) return null;
-  const batidas=[];
-  ['Marcacao1','Marcacao2','Marcacao3','Marcacao4','Entrada1','Saida1','Entrada2','Saida2','Ent1','Sai1','Ent2','Sai2']
-    .forEach(n=>{
-      const v=campo(r,n);
-      const h=_simixHora(v);
-      if(h) batidas.push(h);
-    });
-  batidas.sort();
+  const ano=(iso.match(/^(\d{4})/)||[])[1] || String(anoMes||'').slice(0,4) || String(new Date().getFullYear());
 
-  const minPrev=_simixMin(campo(r,'HrPrev','HorasPrevistas','Previsto','HrPrevista'));
-  const minTrab=_simixMin(campo(r,'HrTrab','HorasTrabalhadas','Trabalhado','HrTrabalhada'));
-  const atrasoMin=_simixMin(campo(r,'Atraso','HrAtraso','Atrasos'));
-  const afast=String(campo(r,'AfastaDesc','Afastamento','Ocorrencia','Situacao')||'').trim();
-  const faltaCampo=campo(r,'Falta','Faltas','DiasFalta');
+  const batidas=_simixBatidas(r, campo);
+  const minPrev=_simixMin(campo(r,'hrPrev','HorasPrevistas','Previsto'));
+  const minTrab=_simixMin(campo(r,'hrTrab','HorasTrabalhadas','Trabalhado'));
+  const afast=String(campo(r,'afastaDesc','afastaSigla','Afastamento','Ocorrencia')||'').trim();
 
-  const falta = (Number(faltaCampo)>0) ||
-    (!!minPrev && !minTrab && !afast && !batidas.length);
+  /* Dia que ainda não chegou: o Símix já manda o mês inteiro, com os
+     dias futuros vazios. Ficam fora da conta, como no PDF. */
+  const h=new Date();
+  const hojeIso=h.getFullYear()+'-'+String(h.getMonth()+1).padStart(2,'0')+'-'+String(h.getDate()).padStart(2,'0');
+  const futuro=iso>hojeIso;
+
+  /* Atraso igual ao do PDF: entrada real menos entrada prevista, em
+     minutos (negativo = chegou antes). Sem horário previsto, usa o
+     atraso que o Símix calculou. */
+  let atraso=null;
+  if(batidas.length){
+    const e=_pontoMin(batidas[0]);
+    const prevE=_pontoMin(_simixHora(campo(r,'t1EPrev')));
+    if(e!==null && prevE!==null) atraso=e-prevE;
+    else{ const a=_simixMin(campo(r,'hrAtrasos','Atraso')); atraso=a===null?0:a; }
+  }
+
+  // feriado: mesma regra do PDF — o admin decide se conta como falta
+  const eFeriado=campo(r,'eFeriado')===true;
+  const feriadoCad=(typeof pontoFeriado==='function') ? pontoFeriado(data+'/'+ano) : '';
+  const feriado=feriadoCad || (eFeriado?'feriado':'');
+  const feriadoConta=(typeof pontoFeriadoConta==='function') ? pontoFeriadoConta() : false;
+  const dsr=campo(r,'eDiaDSR')===true;
+
+  const falta=!futuro && !!minPrev && !batidas.length && !afast && !dsr &&
+    (feriadoConta || !feriado);
 
   return {
     data,
-    semana:_simixSemana(data),
+    semana:_simixSemana(data, ano),
     entrada:batidas[0]||null,
     saida:batidas.length>1?batidas[batidas.length-1]:null,
     batidas,
-    atraso:(atrasoMin!==null && atrasoMin>0)?atrasoMin:(batidas.length?0:null),
+    atraso,
+    feriado,
     minPrev:minPrev||0, minTrab:minTrab||0,
-    falta:!!falta,
-    afastamento:afast,
-    folga:!minPrev && !batidas.length && !afast,
-    foraDoPeriodo:false,
+    falta,
+    afastamento:afast||((feriado && !feriadoConta)?'feriado':''),
+    folga:!futuro && !batidas.length && !afast && (!minPrev || dsr),
+    foraDoPeriodo:futuro,
     obs:afast
   };
+}
+
+/* As marcações do dia. O Símix guarda em "horariosResumo" (texto) ou
+   em "turnos" (lista); as previstas ficam em campos à parte (t1EPrev…)
+   e nunca entram aqui. */
+function _simixBatidas(r, campo){
+  const out=[];
+  const pega=t=>String(t||'').replace(/<[^>]*>/g,' ')
+    .replace(/(\d{1,2}):(\d{2})/g,(m,hh,mi)=>{ out.push(hh.padStart(2,'0')+':'+mi); return m; });
+  const resumo=campo(r,'horariosResumo');
+  if(resumo) pega(resumo);
+  else{
+    const turnos=campo(r,'turnos');
+    if(Array.isArray(turnos)) turnos.forEach(t=>{
+      if(t && typeof t==='object'){
+        Object.keys(t).forEach(k=>{ if(!/prev/i.test(k)) pega(t[k]); });
+      } else pega(t);
+    });
+  }
+  if(!out.length){
+    ['Marcacao1','Marcacao2','Marcacao3','Marcacao4','Entrada1','Saida1','Entrada2','Saida2']
+      .forEach(n=>{ const v=_simixHora(campo(r,n)); if(v) out.push(v); });
+  }
+  return [...new Set(out)].sort();
 }
 
 function _simixData(v){
@@ -25331,11 +25381,10 @@ function _simixMin(v){
   const n=parseFloat(t.replace(',','.'));
   return isNaN(n)?null:Math.round(n*60);   // veio em horas decimais
 }
-function _simixSemana(ddmm){
+function _simixSemana(ddmm, ano){
   const p=String(ddmm).split('/');
   if(p.length<2) return '';
-  const hoje0=new Date();
-  const d=new Date(hoje0.getFullYear(), +p[1]-1, +p[0]);
+  const d=new Date(+(ano||new Date().getFullYear()), +p[1]-1, +p[0]);
   return ['dom','seg','ter','qua','qui','sex','sáb'][d.getDay()];
 }
 function _simixOrdemData(ddmm){
