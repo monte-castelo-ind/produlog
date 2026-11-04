@@ -25234,15 +25234,58 @@ function simixDiagnostico(equipe, ponto, motivo, anoMes){
     });
     return {campos, exemplo:ex};
   };
-  const rE=resumo(equipe), rP=resumo(ponto);
+  const rE=resumo(equipe);
+  const campoNorm=(obj,...nomes)=>{
+    for(const n of nomes) for(const k of Object.keys(obj||{})) if(_normNome(k)===_normNome(n)) return obj[k];
+    return undefined;
+  };
+  const num=v=>Number(v)||0;
+  const pt=ponto||[];
+  const conta=f=>pt.filter(f).length;
+
+  /* Uma linha só com os campos preenchidos, e logo abaixo o que o app
+     entendeu dela — é aí que aparece onde a leitura erra. */
+  const mostra=(titulo, x)=>{
+    if(!x) return ['', titulo+': nenhuma linha assim no mês.'];
+    const cheios=Object.keys(x).filter(k=>{
+      const v=x[k];
+      if(v===null||v===undefined||v===''||v===false||v===0) return false;
+      if(Array.isArray(v)&&!v.length) return false;
+      return !/^(concurrencystamp|creationtime|lastmodificationtime|dtcalc|dtalter|dttroca|estabnome|funcionarioid|id|cdestab|cddepa|anomes)$/i.test(k);
+    });
+    const longos=/^(turnos|turnosex|horariosresumo|horariosprevresumo|extras|horariosresumohtml)$/i;
+    const linhas=cheios.map(k=>{
+      const t=JSON.stringify(x[k]);
+      return '  '+k+' = '+(longos.test(k)?(t.length>500?t.slice(0,500)+'…':t):lim(x[k]));
+    });
+    let ent='(não consegui ler)';
+    try{
+      const d=_simixDia(x, campoNorm, anoMes);
+      if(d) ent='batidas ['+d.batidas.join(' ')+'] · atraso '+d.atraso+' · falta '+d.falta+
+        ' · folga '+d.folga+' · previsto '+d.minPrev+' min · afast "'+d.afastamento+'"';
+    }catch(e){ ent='erro: '+e.message; }
+    return ['', titulo+':', ...linhas, '  → o app entendeu: '+ent];
+  };
+  const exAtraso=pt.find(x=>num(x.hrAtrasosDec)>0);
+  const exFalta=pt.find(x=>num(x.hrFaltasDec)>0||num(x.hrFaltasNJDec)>0);
+  const exNormal=pt.find(x=>x.trabalhou===true&&!num(x.hrAtrasosDec));
+
   const texto=['DIAGNÓSTICO SÍMIX — '+(anoMes||''),
     'Motivo: '+(motivo||'(teste)'),
     '',
     'CADASTRO (func-meses): '+(equipe||[]).length+' linha(s)',
-    ...rE.campos.map(k=>'  '+k+' = '+rE.exemplo[k]),
+    '  campos: '+rE.campos.join(', '),
     '',
-    'PONTO (ponto-calc-dias): '+(ponto||[]).length+' linha(s)',
-    ...rP.campos.map(k=>'  '+k+' = '+rP.exemplo[k])
+    'PONTO (ponto-calc-dias): '+pt.length+' linha(s)',
+    '  trabalhou=true: '+conta(x=>x.trabalhou===true),
+    '  com horariosResumo: '+conta(x=>!!x.horariosResumo)+' · com turnos: '+conta(x=>Array.isArray(x.turnos)&&x.turnos.length),
+    '  com t1EPrev: '+conta(x=>!!x.t1EPrev)+' · com hrPrev: '+conta(x=>!!x.hrPrev)+' · com hrPrevDec: '+conta(x=>num(x.hrPrevDec)>0),
+    '  com atraso (hrAtrasosDec>0): '+conta(x=>num(x.hrAtrasosDec)>0),
+    '  com falta (hrFaltasDec>0): '+conta(x=>num(x.hrFaltasDec)>0)+' · faltas não justif.: '+conta(x=>num(x.hrFaltasNJDec)>0),
+    '  com afastamento: '+conta(x=>!!x.afastaDesc||!!x.afastaSigla),
+    ...mostra('EXEMPLO COM ATRASO', exAtraso),
+    ...mostra('EXEMPLO COM FALTA', exFalta),
+    ...mostra('EXEMPLO NORMAL', exNormal)
   ].join('\n');
   window._simixDiagTexto=texto;
 
@@ -25442,8 +25485,10 @@ async function simixTestar(){
   try{
     /* Sempre com um mês: sem filtro, esta consulta devolve uma linha
        por pessoa POR MÊS e traz anos de histórico de uma vez. */
+    // o mês aberto na tela; sem nenhum aberto, o mês corrente
     const hj=new Date();
-    const anoMes=String(hj.getFullYear())+String(hj.getMonth()+1).padStart(2,'0');
+    const anoMes=(typeof _pmesSel==='string' && /^\d{4}-\d{2}$/.test(_pmesSel)) ? _pmesSel.replace('-','') :
+      String(hj.getFullYear())+String(hj.getMonth()+1).padStart(2,'0');
     const d=await simixBuscar('equipe', anoMes);
     if(d===null){ simixCfg=antes; if(res) res.innerHTML=''; return; }
     if(res) res.innerHTML='<span style="color:var(--text-secondary);">Cadastro ok ('+d.length+'). Buscando o ponto…</span>';
