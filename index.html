@@ -26610,15 +26610,24 @@ function pontoCmpAtalho(t){
 }
 window.pontoCmpAtalho=pontoCmpAtalho;
 
-function _ptCmpSeletor(qual, k, cor){
+
+
+/* Cores fixas da comparação: A sempre azul, B sempre laranja */
+const PT_COR_A='#2563eb', PT_COR_B='#ea8a0c';
+let _ptCmpMet='faltas', _ptCmpAcum=true;
+
+function _ptCmpSeletor(qual, k){
   const meses=_pontoMesesComDados();
   const anos=[...new Set(meses.map(x=>x.slice(0,4)))];
   const [a,m]=k.split('-');
   if(!anos.includes(a)) anos.push(a);
   anos.sort().reverse();
   const comDados=new Set(meses.filter(x=>x.indexOf(a+'-')===0).map(x=>x.slice(5)));
-  return '<div style="flex:1 1 280px;min-width:0;background:'+cor[0]+';border:1.5px solid '+cor[1]+';border-radius:14px;padding:12px 14px;">'+
-    '<div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:'+cor[2]+';margin-bottom:8px;">'+(qual==='A'?'PERÍODO A':'COMPARAR COM (B)')+'</div>'+
+  const cor=qual==='A'?PT_COR_A:PT_COR_B, fundo=qual==='A'?'#eff6ff':'#fff7ed', borda=qual==='A'?'#bfdbfe':'#fed7aa';
+  return '<div style="flex:1 1 280px;min-width:0;background:'+fundo+';border:1.5px solid '+borda+';border-radius:14px;padding:12px 14px;">'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">'+
+      '<span style="width:24px;height:24px;border-radius:7px;background:'+cor+';color:#fff;font-size:12.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;">'+qual+'</span>'+
+      '<span style="font-size:13px;font-weight:700;color:#334155;">'+(qual==='A'?'Período analisado':'Comparar com')+'</span></div>'+
     '<div style="display:flex;gap:8px;">'+
       '<select class="pt-ctl" style="width:100px;flex:0 0 100px;" onchange="pontoCmp(\''+qual+'\',\'ano\',this.value)">'+
         anos.map(x=>'<option value="'+x+'"'+(x===a?' selected':'')+'>'+x+'</option>').join('')+'</select>'+
@@ -26629,113 +26638,227 @@ function _ptCmpSeletor(qual, k, cor){
       '</select></div></div>';
 }
 
+/* Série dia a dia de um mês (1..31), para o gráfico da comparação */
+function _ptSerieDiaria(k, met){
+  const [a,m]=k.split('-').map(Number);
+  const [de,ate]=_ptCmpIntervalo(k);
+  const deB=_pontoDe, ateB=_pontoAte;
+  let ps;
+  try{ _pontoDe=de; _pontoAte=ate; ps=pontoPessoas(); } finally { _pontoDe=deB; _pontoAte=ateB; }
+  ps.forEach(p=>_pontoJornada(p));
+  const nd=new Date(a,m,0).getDate();
+  const h=new Date(), hoje=h.getFullYear()*10000+(h.getMonth()+1)*100+h.getDate();
+  const out=[];
+  for(let dia=1;dia<=31;dia++){
+    if(dia>nd || a*10000+m*100+dia>hoje){ out.push(null); continue; }
+    const ddmm=String(dia).padStart(2,'0')+'/'+String(m).padStart(2,'0');
+    let v=0;
+    ps.forEach(p=>{
+      p.dias.forEach(d=>{
+        if(d.data!==ddmm) return;
+        const jd=p._jorn.porDia[_pjNum(d)];
+        if(met==='pres'){ if(d.batidas&&d.batidas.length) v++; }
+        else if(met==='faltas'){ if(d.falta) v++; }
+        else if(met==='atrasos'){ if(d.atraso!==null && d.atraso>PONTO_TOL_ATRASO) v++; }
+        else if(met==='extra'){ if(jd&&jd.dif>0) v+=jd.dif/60; }
+        else if(met==='alertas'){ if(jd) v+=(jd.descanso!==null&&jd.descanso<PONTO_INTERJORNADA?1:0)+(jd.semIntervalo?1:0)+(jd.longa?1:0); }
+        else if(met==='saldo'){ if(d.minSaldo!==null && d.minSaldo!==undefined) v+=d.minSaldo/60; }
+      });
+    });
+    out.push(v);
+  }
+  return out;
+}
+
+function pontoCmpMet(k){ _ptCmpMet=k; const c=document.getElementById('pt-cmp-graf'); if(c) c.outerHTML=_ptCmpGrafico(); }
+window.pontoCmpMet=pontoCmpMet;
+function pontoCmpAcum(v){ _ptCmpAcum=!!v; const c=document.getElementById('pt-cmp-graf'); if(c) c.outerHTML=_ptCmpGrafico(); }
+window.pontoCmpAcum=pontoCmpAcum;
+
+function _ptCmpGrafico(){
+  const mets={pres:['Presentes',v=>String(Math.round(v)),false], faltas:['Faltas',v=>String(Math.round(v)),true],
+    atrasos:['Atrasos',v=>String(Math.round(v)),true], extra:['Hora extra',v=>_pontoHhmm(Math.round(v*60)),true],
+    alertas:['Alertas CLT',v=>String(Math.round(v)),true], saldo:['Banco de horas',v=>_ptSinal(Math.round(v*60)),true]};
+  if(!mets[_ptCmpMet]) _ptCmpMet='faltas';
+  const [nome,fmt,acumulavel]=mets[_ptCmpMet];
+  const anual=_ptCmpA.endsWith('-ano')||_ptCmpB.endsWith('-ano');
+  let vA, vB, rot, nA=_ptCmpNome(_ptCmpA), nB=_ptCmpNome(_ptCmpB);
+  if(anual){
+    // ano contra ano: um ponto por mês
+    const chave={pres:'pess', faltas:'falt', atrasos:'atr', extra:'extra', alertas:'clt', saldo:'saldo'}[_ptCmpMet];
+    const sA=_ptSerieMensal(+_ptCmpA.slice(0,4)), sB=_ptSerieMensal(+_ptCmpB.slice(0,4));
+    vA=sA.map(x=>x?x[chave]:null); vB=sB.map(x=>x?x[chave]:null);
+    rot=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    nA='Ano de '+_ptCmpA.slice(0,4); nB='Ano de '+_ptCmpB.slice(0,4);
+  } else {
+    vA=_ptSerieDiaria(_ptCmpA,_ptCmpMet); vB=_ptSerieDiaria(_ptCmpB,_ptCmpMet);
+    rot=Array.from({length:31},(_,i)=>String(i+1));
+  }
+  const acum=acumulavel && _ptCmpAcum;
+  const soma=arr=>{ let t=0; return arr.map(v=>v===null?null:(t+=v)); };
+  if(acum){ vA=soma(vA); vB=soma(vB); }
+  // corta os dias que nenhum dos dois tem
+  let fim=rot.length; while(fim>1 && vA[fim-1]===null && vB[fim-1]===null) fim--;
+  vA=vA.slice(0,fim); vB=vB.slice(0,fim); rot=rot.slice(0,fim);
+
+  const seg='<div class="pt-seg">'+Object.keys(mets).map(k=>'<button class="'+(k===_ptCmpMet?'on':'')+'" onclick="pontoCmpMet(\''+k+'\')">'+mets[k][0]+'</button>').join('')+'</div>';
+  const modo=acumulavel?'<div class="pt-seg"><button class="'+(acum?'on':'')+'" onclick="pontoCmpAcum(1)">Acumulado</button><button class="'+(!acum?'on':'')+'" onclick="pontoCmpAcum(0)">'+(anual?'Por mês':'Por dia')+'</button></div>':'';
+  const leg=(cor,txt,val)=>'<span style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#334155;">'+
+    '<span style="width:22px;height:4px;border-radius:2px;background:'+cor+';"></span><b>'+txt+'</b>'+(val!==null?'<span style="color:#94a3b8;">· '+val+'</span>':'')+'</span>';
+  const ult=arr=>{ for(let i=arr.length-1;i>=0;i--) if(arr[i]!==null) return arr[i]; return null; };
+  const legenda='<div style="display:flex;gap:18px;flex-wrap:wrap;margin:-4px 0 8px;">'+
+    leg(PT_COR_A,nA, acum?fmt(ult(vA)||0):null)+leg(PT_COR_B,nB, acum?fmt(ult(vB)||0):null)+
+    '<span style="margin-left:auto;font-size:11.5px;color:#94a3b8;">'+(anual?'mês a mês':'dia do mês')+(acum?' · somando desde o início':'')+'</span></div>';
+  const vals=(anual || !acum)?'todos':'fim';
+  return '<div id="pt-cmp-graf" class="pt-card" style="margin-bottom:16px;"><div class="pt-card-h"><h3>Evolução lado a lado</h3>'+
+      '<div class="dir">'+modo+seg+'</div></div>'+legenda+
+    _ptGrafico([{nome:nA, cor:PT_COR_A, vals:vA},{nome:nB, cor:PT_COR_B, vals:vB}], rot, fmt, {valores:(vals==='todos'&&rot.length>16)?'fim':vals, id:'cmp', alto:300, largo:1150})+
+  '</div>';
+}
+
 function _pontoComparar(){
   _ptCmpPadrao();
   if(!_ptCmpA) return '<div class="pt-card pt-vazio">Nenhum mês com dados para comparar.</div>';
   const A=_ptMetricas(_ptCmpA), B=_ptMetricas(_ptCmpB);
   const nA=_ptCmpNome(_ptCmpA), nB=_ptCmpNome(_ptCmpB);
   const [anoA,mA]=_ptCmpA.split('-');
+  const tagA='<span style="color:'+PT_COR_A+';font-weight:800;">'+nA+'</span>', tagB='<span style="color:'+PT_COR_B+';font-weight:800;">'+nB+'</span>';
 
   let h='<div class="pt-card" style="margin-bottom:16px;">'+
     '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;">'+
-      _ptCmpSeletor('A', _ptCmpA, ['#eff6ff','#bfdbfe','#1d4ed8'])+
+      _ptCmpSeletor('A', _ptCmpA)+
       '<button class="pt-ic-btn" style="align-self:center;" title="Trocar A e B" onclick="pontoCmpAtalho(\'trocar\')">⇄</button>'+
-      _ptCmpSeletor('B', _ptCmpB, ['#f8fafc','#e2e8f0','#475569'])+
+      _ptCmpSeletor('B', _ptCmpB)+
     '</div>'+
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">'+
-      '<span style="font-size:12px;color:var(--pt-sub);align-self:center;">Comparar A com:</span>'+
-      '<button class="pt-btn" onclick="pontoCmpAtalho(\'anterior\')">'+(mA==='ano'?'o ano anterior':'o mês anterior')+'</button>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center;">'+
+      '<span style="font-size:12px;color:var(--pt-sub);">Atalhos para B:</span>'+
+      '<button class="pt-btn" onclick="pontoCmpAtalho(\'anterior\')">'+(mA==='ano'?'Ano anterior':'Mês anterior')+'</button>'+
       (mA!=='ano'?'<button class="pt-btn" onclick="pontoCmpAtalho(\'anoPassado\')">'+PONTO_MES_NOMES[+mA]+' de '+(+anoA-1)+'</button>':'')+
     '</div></div>';
-
   if(!A.pessoas && !B.pessoas) return h+'<div class="pt-card pt-vazio">Sem dados nos dois períodos.</div>';
 
-  /* Variação: qual direção é boa depende do indicador.
-     melhor: 'menos' (faltas, atrasos…), 'mais' (pontualidade…) ou '' (neutro) */
-  const linha=(ico, rot, a, b, fmt, melhor, unidadePct)=>{
-    const d=a-b;
-    let tom='gray', seta='→';
-    if(Math.abs(d)>1e-9){
-      seta=d>0?'▲':'▼';
-      if(melhor) tom=((d<0)===(melhor==='menos'))?'green':'red';
-      else tom='blue';
-    }
-    // % só faz sentido com base positiva (saldo negativo daria leitura estranha)
-    const rel=(b>0 && !unidadePct)?(' ('+(d>0?'+':'')+Math.round(d/b*100)+'%)'):'';
-    const dTxt=Math.abs(d)<1e-9?'igual':(seta+' '+(unidadePct?(_pontoPct(Math.abs(d))+' p.p.'):fmt(Math.abs(d)).replace(/^[+-]/,''))+rel);
-    return '<div class="pt-card" style="padding:15px 16px;">'+
-      '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">'+ico+'</span><span style="font-size:12.5px;font-weight:600;color:var(--pt-sub);">'+rot+'</span>'+
-        '<span style="margin-left:auto;">'+_ptPill(dTxt, tom, true)+'</span></div>'+
-      '<div style="display:flex;align-items:baseline;gap:10px;margin-top:9px;">'+
-        '<span style="font-size:24px;font-weight:800;color:#1d4ed8;">'+fmt(a)+'</span>'+
-        '<span style="font-size:13px;color:var(--pt-mut);">vs '+fmt(b)+'</span></div></div>';
-  };
   const n=v=>String(Math.round(v)), pct=v=>_pontoPct(v)+'%', hh=v=>_ptHh(Math.round(v)), sh=v=>_ptSinal(Math.round(v));
-  h+='<div style="display:flex;align-items:center;gap:10px;margin:2px 0 10px;font-size:13px;color:var(--pt-sub);">'+
-    '<b style="color:#1d4ed8;">'+nA+'</b> comparado a <b style="color:#334155;">'+nB+'</b>'+
-    '<span style="margin-left:auto;font-size:11.5px;">verde = melhorou · vermelho = piorou</span></div>';
-  h+='<div class="pt-grid pt-g4">'+
-    linha('👥','Pessoas', A.pessoas, B.pessoas, n, '')+
-    linha('📉','Absenteísmo', A.abs, B.abs, pct, 'menos', true)+
-    linha('⏰','Pontualidade', A.pont, B.pont, pct, 'mais', true)+
-    linha('✅','Sem ocorrência', A.limpos, B.limpos, n, 'mais')+
-  '</div><div class="pt-grid pt-g4">'+
-    linha('🚫','Faltas', A.faltas, B.faltas, n, 'menos')+
-    linha('⏰','Atrasos', A.atrasos, B.atrasos, n, 'menos')+
-    linha('⌛','Tempo de atraso', A.atrasoMin, B.atrasoMin, hh, 'menos')+
-    linha('⚖️','Alertas da CLT', A.alertas, B.alertas, n, 'menos')+
-  '</div><div class="pt-grid pt-g4">'+
-    linha('🏦','Banco de horas', A.saldo, B.saldo, sh, 'mais')+
-    linha('⏱️','Hora extra', A.extra, B.extra, hh, 'menos')+
-    linha('➖','Horas faltando', A.devendo, B.devendo, hh, 'menos')+
-    linha('📅','Dias trabalhados', A.ps.reduce((t,p)=>t+p.trabalhados,0), B.ps.reduce((t,p)=>t+p.trabalhados,0), n, '')+
+  const trabA=A.ps.reduce((t,p)=>t+p.trabalhados,0), trabB=B.ps.reduce((t,p)=>t+p.trabalhados,0);
+  /* [rótulo, A, B, formato, o que é melhor ('menos'|'mais'|''), é porcentagem, explicação] */
+  const linhas=[
+    ['Equipe',null],
+    ['Pessoas', A.pessoas, B.pessoas, n, '', false, 'com ponto no período'],
+    ['Dias trabalhados', trabA, trabB, n, '', false, 'soma de todos'],
+    ['Sem nenhuma ocorrência', A.limpos, B.limpos, n, 'mais', false, 'sem falta e sem atraso'],
+    ['Presença',null],
+    ['Absenteísmo', A.abs, B.abs, pct, 'menos', true, 'faltas ÷ dias previstos'],
+    ['Faltas', A.faltas, B.faltas, n, 'menos', false, 'dias inteiros'],
+    ['Pontualidade', A.pont, B.pont, pct, 'mais', true, 'dias sem atraso'],
+    ['Atrasos', A.atrasos, B.atrasos, n, 'menos', false, 'acima de '+PONTO_TOL_ATRASO+' min'],
+    ['Tempo de atraso', A.atrasoMin, B.atrasoMin, hh, 'menos', false, 'somado'],
+    ['Horas',null],
+    ['Hora extra', A.extra, B.extra, hh, 'menos', false, 'acima de 8:48'],
+    ['Horas faltando', A.devendo, B.devendo, hh, 'menos', false, 'abaixo de 8:48'],
+    ['Banco de horas', A.saldo, B.saldo, sh, 'mais', false, 'saldo do Símix'],
+    ['Alertas da CLT', A.alertas, B.alertas, n, 'menos', false, 'descanso, intervalo, >10h']
+  ];
+  const mudancas=[];
+  const corpo=linhas.map(l=>{
+    if(l[1]===null) return '<tr><td colspan="6" style="background:#f8fafc;font-size:10.5px;font-weight:800;letter-spacing:.08em;color:#94a3b8;padding:8px 14px;">'+l[0].toUpperCase()+'</td></tr>';
+    const [rot,a,b,fmt,melhor,ehPct,expl]=l;
+    const d=a-b, igual=Math.abs(d)<1e-9;
+    let res=_ptPill('igual','gray',true), corD='#94a3b8';
+    if(!igual){
+      if(melhor){ const bom=(d<0)===(melhor==='menos'); res=_ptPill(bom?'melhorou':'piorou', bom?'green':'red'); corD=bom?'#047857':'#b91c1c'; }
+      else { res=_ptPill(d>0?'aumentou':'diminuiu','blue',true); corD='#1d4ed8'; }
+    }
+    const difTxt=igual?'—':(ehPct?((d>0?'+':'−')+_pontoPct(Math.abs(d))+' p.p.'):((d>0?'+':'−')+fmt(Math.abs(d)).replace(/^[+-]/,'')));
+    const rel=(!igual && !ehPct && b>0)?((d>0?'+':'−')+Math.round(Math.abs(d)/b*100)+'%'):'';
+    if(!igual && melhor) mudancas.push({rot, d, b, ehPct, fmt, bom:(d<0)===(melhor==='menos'), peso:ehPct?Math.abs(d)*10:(b>0?Math.abs(d)/b*100:Math.abs(d))});
+    // barrinhas: tamanho relativo de A e B
+    const mx=Math.max(Math.abs(a),Math.abs(b))||1;
+    const barra=(v,cor)=>'<div style="height:6px;border-radius:3px;background:'+cor+';width:'+Math.max(2,Math.round(Math.abs(v)/mx*100))+'%;"></div>';
+    return '<tr>'+
+      '<td><div style="font-weight:650;">'+rot+'</div><div style="font-size:11px;color:#94a3b8;">'+expl+'</div></td>'+
+      '<td class="c" style="font-size:15px;font-weight:800;color:'+PT_COR_A+';">'+fmt(a)+'</td>'+
+      '<td class="c" style="font-size:15px;font-weight:700;color:'+PT_COR_B+';">'+fmt(b)+'</td>'+
+      '<td style="min-width:120px;"><div style="display:flex;flex-direction:column;gap:4px;">'+barra(a,PT_COR_A)+barra(b,PT_COR_B)+'</div></td>'+
+      '<td class="c"><div style="font-weight:700;color:'+corD+';">'+difTxt+'</div>'+(rel?'<div style="font-size:11px;color:#94a3b8;">'+rel+'</div>':'')+'</td>'+
+      '<td class="c">'+res+'</td></tr>';
+  }).join('');
+
+  // as mudanças mais importantes, em frases
+  mudancas.sort((x,y)=>y.peso-x.peso);
+
+  const destaques=mudancas.slice(0,4);
+  const faixa=destaques.length
+    ? '<div class="pt-card" style="margin-bottom:16px;"><div class="pt-card-h"><h3>Principais mudanças</h3><span class="sub">de '+tagB+' para '+tagA+'</span></div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">'+destaques.map(m=>{
+          const qt=m.ehPct?(_pontoPct(Math.abs(m.d))+' p.p.'):(m.fmt(Math.abs(m.d)).replace(/^[+-]/,''));
+          const rel=(!m.ehPct&&m.b>0)?(' ('+(m.d>0?'+':'−')+Math.round(Math.abs(m.d)/m.b*100)+'%)'):'';
+          return '<div style="border-radius:12px;padding:12px 14px;background:'+(m.bom?'#ecfdf5':'#fef2f2')+';">'+
+            '<div style="font-size:12px;font-weight:700;color:'+(m.bom?'#047857':'#b91c1c')+';">'+(m.bom?'▲ melhorou':'▼ piorou')+'</div>'+
+            '<div style="font-size:14px;font-weight:700;color:#0f172a;margin-top:3px;">'+m.rot+'</div>'+
+            '<div style="font-size:13px;color:#334155;margin-top:2px;">'+(m.d>0?'subiu':'caiu')+' <b>'+qt+'</b>'+rel+'</div></div>';
+        }).join('')+'</div></div>'
+    : '';
+  h+=faixa+'<div class="pt-grid">'+
+    _ptCard('Indicador por indicador', '', 
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;margin:-6px 0 10px;"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+PT_COR_A+';margin-right:6px;"></span>A = '+tagA+'</span>'+
+        '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:'+PT_COR_B+';margin-right:6px;"></span>B = '+tagB+'</span></div>'+
+      '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Indicador</th>'+
+        '<th class="c" style="color:'+PT_COR_A+';">A · '+_pontoEsc(nA)+'</th><th class="c" style="color:'+PT_COR_B+';">B · '+_pontoEsc(nB)+'</th>'+
+        '<th>Proporção</th><th class="c">Diferença (A − B)</th><th class="c">Resultado</th></tr></thead><tbody>'+corpo+'</tbody></table></div>')+
   '</div>';
+
+  h+=_ptCmpGrafico();
 
   // por setor
   const porSetor=M=>{ const g={}; M.ps.forEach(p=>{ const k=p.setor||'(sem setor)';
-    if(!g[k]) g[k]={pessoas:0,prev:0,f:0,at:0,trab:0,extra:0,al:0};
-    const x=g[k]; x.pessoas++; x.prev+=p.previstos; x.f+=p.faltas; x.at+=p.atrasos; x.trab+=p.trabalhados; x.extra+=p._jorn.extra; x.al+=p._jorn.alertas; }); return g; };
+    if(!g[k]) g[k]={pessoas:0,prev:0,f:0,at:0,extra:0,al:0};
+    const x=g[k]; x.pessoas++; x.prev+=p.previstos; x.f+=p.faltas; x.at+=p.atrasos; x.extra+=p._jorn.extra; x.al+=p._jorn.alertas; }); return g; };
   const gA=porSetor(A), gB=porSetor(B);
   const setores=[...new Set([...Object.keys(gA),...Object.keys(gB)])].sort();
-  const vz={pessoas:0,prev:0,f:0,at:0,trab:0,extra:0,al:0};
+  const vz={pessoas:0,prev:0,f:0,at:0,extra:0,al:0};
   const cel=(a,b,fmt,melhor,ehPct)=>{
-    const d=a-b; let cor='#94a3b8', s='';
-    if(Math.abs(d)>1e-9){ s=(d>0?'▲':'▼'); cor=!melhor?'#2563eb':(((d<0)===(melhor==='menos'))?'#047857':'#b91c1c'); }
-    return '<td class="c"><b style="color:#1d4ed8;">'+fmt(a)+'</b> <span style="color:#94a3b8;">/ '+fmt(b)+'</span>'+
-      (s?' <span style="color:'+cor+';font-size:11px;font-weight:700;">'+s+(ehPct?_pontoPct(Math.abs(d)):fmt(Math.abs(d)))+'</span>':'')+'</td>';
+    const d=a-b; let cor='#94a3b8', s='—';
+    if(Math.abs(d)>1e-9){ cor=!melhor?'#1d4ed8':(((d<0)===(melhor==='menos'))?'#047857':'#b91c1c'); s=(d>0?'+':'−')+(ehPct?_pontoPct(Math.abs(d))+' p.p.':fmt(Math.abs(d)).replace(/^[+-]/,'')); }
+    return '<td class="c" style="color:'+PT_COR_A+';font-weight:700;">'+fmt(a)+'</td><td class="c" style="color:'+PT_COR_B+';">'+fmt(b)+'</td>'+
+      '<td class="c" style="color:'+cor+';font-weight:700;border-right:1px solid #eef1f5;">'+s+'</td>';
   };
-  const tab='<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Setor</th><th class="c">Pessoas</th><th class="c">Absenteísmo</th><th class="c">Faltas</th><th class="c">Atrasos</th><th class="c">Hora extra</th><th class="c">Alertas CLT</th></tr></thead><tbody>'+
-    setores.map(k=>{ const a=gA[k]||vz, b=gB[k]||vz;
-      const ab=x=>x.prev?x.f/x.prev*100:0;
+  const grp=t=>'<th colspan="3" class="c" style="border-right:1px solid #eef1f5;">'+t+'</th>';
+  const sub='<th class="c" style="color:'+PT_COR_A+';">A</th><th class="c" style="color:'+PT_COR_B+';">B</th><th class="c" style="border-right:1px solid #eef1f5;">dif.</th>';
+  const tab='<div class="pt-tw"><table class="pt-tab"><thead>'+
+    '<tr><th rowspan="2">Setor</th>'+grp('Pessoas')+grp('Absenteísmo')+grp('Faltas')+grp('Atrasos')+grp('Hora extra')+'</tr>'+
+    '<tr>'+sub+sub+sub+sub+sub+'</tr></thead><tbody>'+
+    setores.map(k=>{ const a=gA[k]||vz, b=gB[k]||vz, ab=x=>x.prev?x.f/x.prev*100:0;
       return '<tr><td style="font-weight:650;">'+_pontoEsc(k)+'</td>'+cel(a.pessoas,b.pessoas,n,'')+cel(ab(a),ab(b),pct,'menos',true)+
-        cel(a.f,b.f,n,'menos')+cel(a.at,b.at,n,'menos')+cel(a.extra,b.extra,hh,'menos')+cel(a.al,b.al,n,'menos')+'</tr>'; }).join('')+
+        cel(a.f,b.f,n,'menos')+cel(a.at,b.at,n,'menos')+cel(a.extra,b.extra,hh,'menos')+'</tr>'; }).join('')+
     '</tbody></table></div>';
-  h+='<div class="pt-grid">'+_ptCard('Por setor', '<b style="color:#1d4ed8;">A</b> / B', tab)+'</div>';
+  h+='<div class="pt-grid">'+_ptCard('Por setor', '', tab)+'</div>';
 
-  // quem mudou mais (só quem aparece nos dois)
+  // pessoas
   const mapaB={}; B.ps.forEach(p=>{ mapaB[String(p.codigo)]=p; });
   const nota=p=>p.faltas*3+p.atrasos+p._jorn.alertas;
   const ambos=A.ps.filter(p=>mapaB[String(p.codigo)]).map(p=>({p, b:mapaB[String(p.codigo)], d:nota(p)-nota(mapaB[String(p.codigo)])}));
-  const desc=x=>{ const df=x.p.faltas-x.b.faltas, da=x.p.atrasos-x.b.atrasos;
-    return [df?((df>0?'+':'')+df+' falta'+(Math.abs(df)>1?'s':'')):'', da?((da>0?'+':'')+da+' atraso'+(Math.abs(da)>1?'s':'')):''].filter(Boolean).join(' · ')||'alertas CLT'; };
-  const lista=(arr,tom)=>arr.length?'<div class="pt-lista">'+arr.map(x=>'<button class="pt-li" onclick="pontoVerPessoa(\''+escapeJsStr(x.p.codigo)+'\')">'+_ptQuem(x.p,34)+_ptPill(desc(x),tom,true)+'</button>').join('')+'</div>'
+  const desc=x=>{
+    const parte=(rot,a,b)=>a===b?'':(rot+' <b style="color:'+PT_COR_B+';">'+b+'</b> → <b style="color:'+PT_COR_A+';">'+a+'</b>');
+    return [parte('faltas',x.p.faltas,x.b.faltas), parte('atrasos',x.p.atrasos,x.b.atrasos)].filter(Boolean).join(' · ')||'alertas da CLT';
+  };
+  const lista=(arr)=>arr.length?'<div class="pt-lista">'+arr.map(x=>'<button class="pt-li" onclick="pontoVerPessoa(\''+escapeJsStr(x.p.codigo)+'\')">'+_ptQuem(x.p,34)+
+      '<span style="font-size:12px;color:#475569;white-space:nowrap;">'+desc(x)+'</span></button>').join('')+'</div>'
     :'<div class="pt-vazio" style="padding:18px;">Ninguém</div>';
   const piorou=ambos.filter(x=>x.d>0).sort((a,b)=>b.d-a.d).slice(0,6);
   const melhorou=ambos.filter(x=>x.d<0).sort((a,b)=>a.d-b.d).slice(0,6);
   const idsA=new Set(A.ps.map(p=>String(p.codigo))), idsB=new Set(B.ps.map(p=>String(p.codigo)));
   const entrou=A.ps.filter(p=>!idsB.has(String(p.codigo))), saiu=B.ps.filter(p=>!idsA.has(String(p.codigo)));
   h+='<div class="pt-grid pt-g3">'+
-    _ptCard('Piorou', 'mais faltas e atrasos em A', lista(piorou,'red'))+
-    _ptCard('Melhorou', 'menos faltas e atrasos em A', lista(melhorou,'green'))+
+    _ptCard('🔴 Piorou', 'B → A', lista(piorou))+
+    _ptCard('🟢 Melhorou', 'B → A', lista(melhorou))+
     _ptCard('Mudanças na equipe', '',
       '<div style="display:flex;gap:10px;margin-bottom:12px;">'+
-        '<div style="flex:1;background:#ecfdf5;border-radius:11px;padding:10px;text-align:center;"><b style="font-size:20px;color:#047857;">'+entrou.length+'</b><div style="font-size:11.5px;color:#047857;">só em A</div></div>'+
-        '<div style="flex:1;background:#fef2f2;border-radius:11px;padding:10px;text-align:center;"><b style="font-size:20px;color:#b91c1c;">'+saiu.length+'</b><div style="font-size:11.5px;color:#b91c1c;">só em B</div></div></div>'+
+        '<div style="flex:1;background:#ecfdf5;border-radius:11px;padding:10px;text-align:center;"><b style="font-size:20px;color:#047857;">'+entrou.length+'</b><div style="font-size:11.5px;color:#047857;">entraram (só em A)</div></div>'+
+        '<div style="flex:1;background:#fef2f2;border-radius:11px;padding:10px;text-align:center;"><b style="font-size:20px;color:#b91c1c;">'+saiu.length+'</b><div style="font-size:11.5px;color:#b91c1c;">saíram (só em B)</div></div></div>'+
       '<div class="pt-lista">'+entrou.slice(0,3).map(p=>'<button class="pt-li" onclick="pontoVerPessoa(\''+escapeJsStr(p.codigo)+'\')">'+_ptQuem(p,30)+_ptPill('entrou','green',true)+'</button>').join('')+
         saiu.slice(0,3).map(p=>'<div class="pt-li" style="cursor:default;">'+_ptQuem(p,30)+_ptPill('saiu','red',true)+'</div>').join('')+'</div>')+
   '</div>';
   h+='<div class="pt-nota">“Piorou” e “Melhorou” comparam só quem aparece nos dois períodos, pesando falta ×3, atraso ×1 e alerta da CLT ×1. '+
-    '“Só em A” e “só em B” mostram quem entrou ou saiu da equipe entre um período e outro.</div>';
+    'Nas listas, o número em laranja é de B e o azul é de A.</div>';
   return h;
 }
 
@@ -26808,9 +26931,11 @@ function _ptSerieMensal(ano){
       const prev=ps.reduce((t,p)=>t+p.previstos,0), f=ps.reduce((t,p)=>t+p.faltas,0);
       out.push({
         abs: prev?f/prev*100:0,
+        falt: f,
         atr: ps.reduce((t,p)=>t+p.atrasos,0),
         extra: ps.reduce((t,p)=>t+p._jorn.extra,0)/60,
         clt: ps.reduce((t,p)=>t+p._jorn.alertas,0),
+        saldo: ps.reduce((t,p)=>t+(p.horasSaldo||0),0)/60,
         pess: ps.length
       });
     }
@@ -26820,46 +26945,85 @@ function _ptSerieMensal(ano){
 function pontoSerie(k){ _ptSerie=k; const c=document.getElementById('pt-evol'); if(c) c.outerHTML=_ptEvolucao(); }
 window.pontoSerie=pontoSerie;
 
+/* ── GRÁFICO DE LINHAS ───────────────────────────────────────────
+   Uma ou duas séries. valores: 'todos' escreve o número em cima de
+   cada ponto (discreto, cinza; o último em destaque), 'fim' só no
+   último ponto de cada linha. Com duas linhas, o número da maior vai
+   em cima do ponto e o da menor embaixo, para não se encostarem. */
+function _ptGrafico(series, rotulos, fmt, op){
+  op=op||{};
+  const W=op.largo||700, H=op.alto||250, L=48, R=18, T=30, B=30, iw=W-L-R, ih=H-T-B;
+  const PX=16;   // folga para o primeiro e o último número não encostarem nas bordas
+  const todos=[]; series.forEach(s=>s.vals.forEach(v=>{ if(v!==null&&v!==undefined) todos.push(v); }));
+  let max=Math.max(0,...todos), min=Math.min(0,...todos);
+  const faixa=(max-min)||1;
+  const passo=(()=>{ const br=faixa/4, p=Math.pow(10,Math.floor(Math.log10(br))), n=br/p; return (n<=1?1:n<=2?2:n<=5?5:10)*p; })();
+  const y0=Math.floor(min/passo)*passo, y1=Math.ceil(max/passo)*passo||passo;
+  const n=rotulos.length;
+  const x=i=>L+PX+(n>1?(iw-2*PX)*(i/(n-1)):(iw-2*PX)/2), y=v=>T+ih*(1-(v-y0)/((y1-y0)||1));
+  let svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;" role="img">';
+  series.forEach((s,k)=>{ svg+='<defs><linearGradient id="ptg'+k+(op.id||'')+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+s.cor+'" stop-opacity="'+(series.length>1?'.10':'.22')+'"/><stop offset="1" stop-color="'+s.cor+'" stop-opacity="0"/></linearGradient></defs>'; });
+  for(let v=y0; v<=y1+1e-9; v+=passo){
+    const yy=y(v);
+    svg+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'" stroke="'+(Math.abs(v)<1e-9&&y0<0?'#cbd5e1':'#eef1f5')+'" stroke-width="1"/>'+
+      '<text x="'+(L-8)+'" y="'+(yy+4)+'" text-anchor="end" font-size="11" fill="#94a3b8">'+fmt(v)+'</text>';
+  }
+  const pulo=n>16?Math.ceil(n/8):1;
+  rotulos.forEach((r,i)=>{
+    if(i%pulo && i!==n-1) return;
+    const vazio=series.every(s=>s.vals[i]===null||s.vals[i]===undefined);
+    svg+='<text x="'+x(i)+'" y="'+(H-8)+'" text-anchor="middle" font-size="11" fill="'+(vazio?'#cbd5e1':'#64748b')+'">'+r+'</text>';
+  });
+  const base=y(Math.max(y0,0));
+  series.forEach((s,k)=>{
+    // trechos contínuos (sem os vazios)
+    const trechos=[]; let cur=[];
+    s.vals.forEach((v,i)=>{ if(v===null||v===undefined){ if(cur.length) trechos.push(cur); cur=[]; } else cur.push([x(i),y(v),v,i]); });
+    if(cur.length) trechos.push(cur);
+    trechos.forEach(pts=>{
+      const d=pts.map((p,i)=>{ if(!i) return 'M'+p[0]+','+p[1]; const a=pts[i-1], cx=(a[0]+p[0])/2; return 'C'+cx+','+a[1]+' '+cx+','+p[1]+' '+p[0]+','+p[1]; }).join(' ');
+      svg+='<path d="'+d+' L'+pts[pts.length-1][0]+','+base+' L'+pts[0][0]+','+base+' Z" fill="url(#ptg'+k+(op.id||'')+')"/>'+
+        '<path d="'+d+'" fill="none" stroke="'+s.cor+'" stroke-width="2.4" stroke-linecap="round"'+(s.tracejado?' stroke-dasharray="6 5"':'')+'/>';
+    });
+  });
+  // pontos e números
+  const r=n>16?2.6:3.8;
+  series.forEach((s,k)=>{
+    const outra=series[1-k];
+    let ultimo=-1; s.vals.forEach((v,i)=>{ if(v!==null&&v!==undefined) ultimo=i; });
+    s.vals.forEach((v,i)=>{
+      if(v===null||v===undefined) return;
+      const px=x(i), py=y(v);
+      svg+='<circle cx="'+px+'" cy="'+py+'" r="'+r+'" fill="#fff" stroke="'+s.cor+'" stroke-width="2"><title>'+(s.nome?s.nome+' · ':'')+rotulos[i]+': '+fmt(v)+'</title></circle>';
+      const mostrar=op.valores==='todos' || (op.valores==='fim' && i===ultimo);
+      if(!mostrar) return;
+      const ov=outra?outra.vals[i]:null;
+      const embaixo=outra && ov!==null && ov!==undefined && v<ov;
+      // embaixo só se couber acima do eixo; senão vai em cima
+      const ty=(embaixo && py+16<T+ih-4)?py+16:py-9;
+      const destaque=i===ultimo;
+      svg+='<text x="'+px+'" y="'+ty+'" text-anchor="middle" font-size="'+(destaque?'11.5':'10.5')+'" font-weight="'+(destaque?'700':'600')+'" fill="'+(destaque||series.length>1?s.cor:'#64748b')+'"'+
+        ' paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">'+fmt(v)+'</text>';
+    });
+  });
+  return svg+'</svg>';
+}
+
 function _ptEvolucao(){
   const meses=_pontoMesesComDados();
   const ref=(_pontoAte&&_pontoAte.slice(-4))||(meses.length?meses[meses.length-1].slice(0,4):String(new Date().getFullYear()));
   const ano=+ref;
   const serie=_ptSerieMensal(ano);
-  const met={pess:['Colaboradores','',v=>String(Math.round(v))], abs:['Absenteísmo','%',v=>_pontoPct(v)+'%'], atr:['Atrasos','',v=>String(Math.round(v))], extra:['Hora extra','h',v=>_pontoHhmm(Math.round(v*60))], clt:['Alertas CLT','',v=>String(Math.round(v))]};
-  const [nome,,fmt]=met[_ptSerie]||met.abs;
+  const met={pess:['Colaboradores',v=>String(Math.round(v))], abs:['Absenteísmo',v=>_pontoPct(v)+'%'], atr:['Atrasos',v=>String(Math.round(v))],
+    extra:['Hora extra',v=>_pontoHhmm(Math.round(v*60))], clt:['Alertas CLT',v=>String(Math.round(v))]};
+  if(!met[_ptSerie]) _ptSerie='abs';
+  const [nome,fmt]=met[_ptSerie];
   const vals=serie.map(x=>x?x[_ptSerie]:null);
-  const W=640,H=230,L=44,R=14,T=16,B=30, iw=W-L-R, ih=H-T-B;
-  const max=Math.max(...vals.filter(v=>v!==null),0);
-  const passo=(()=>{ const bruto=(max||1)/4; const p=Math.pow(10,Math.floor(Math.log10(bruto))); const n=bruto/p; return (n<=1?1:n<=2?2:n<=5?5:10)*p; })();
-  const topo=passo*4;
-  const x=i=>L+iw*(i/11), y=v=>T+ih*(1-v/topo);
-  const pts=vals.map((v,i)=>v===null?null:[x(i),y(v),v,i]).filter(Boolean);
-  const mesesN=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  let svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;" role="img" aria-label="'+nome+' por mês">'+
-    '<defs><linearGradient id="ptg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b82f6" stop-opacity=".28"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>';
-  for(let k=0;k<=4;k++){
-    const v=passo*k, yy=y(v);
-    svg+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'" stroke="#eef1f5" stroke-width="1"/>'+
-      '<text x="'+(L-8)+'" y="'+(yy+4)+'" text-anchor="end" font-size="11" fill="#94a3b8">'+fmt(v)+'</text>';
-  }
-  mesesN.forEach((m,i)=>{ svg+='<text x="'+x(i)+'" y="'+(H-8)+'" text-anchor="middle" font-size="11" fill="'+(vals[i]===null?'#cbd5e1':'#64748b')+'">'+m+'</text>'; });
-  if(pts.length){
-    // curva suave
-    const d=pts.map((p,i)=>{
-      if(!i) return 'M'+p[0]+','+p[1];
-      const a=pts[i-1], cx=(a[0]+p[0])/2;
-      return 'C'+cx+','+a[1]+' '+cx+','+p[1]+' '+p[0]+','+p[1];
-    }).join(' ');
-    svg+='<path d="'+d+' L'+pts[pts.length-1][0]+','+(T+ih)+' L'+pts[0][0]+','+(T+ih)+' Z" fill="url(#ptg)"/>'+
-      '<path d="'+d+'" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round"/>';
-    pts.forEach(p=>{ svg+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="4" fill="#fff" stroke="#2563eb" stroke-width="2"><title>'+mesesN[p[3]]+': '+fmt(p[2])+'</title></circle>'; });
-    const ult=pts[pts.length-1];
-    svg+='<text x="'+ult[0]+'" y="'+(ult[1]-11)+'" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e40af">'+fmt(ult[2])+'</text>';
-  }
-  svg+='</svg>';
+  const temDados=vals.some(v=>v!==null);
   const seg='<div class="pt-seg">'+Object.keys(met).map(k=>'<button class="'+(k===_ptSerie?'on':'')+'" onclick="pontoSerie(\''+k+'\')">'+met[k][0]+'</button>').join('')+'</div>';
   return '<div id="pt-evol" class="pt-card"><div class="pt-card-h"><h3>Evolução mês a mês</h3><span class="sub">'+ano+(_pontoSetor?(' · '+_pontoEsc(_pontoSetor)):'')+'</span><div class="dir">'+seg+'</div></div>'+
-    (pts.length?svg:'<div class="pt-vazio">Sem meses com dados em '+ano+'.</div>')+'</div>';
+    (temDados?_ptGrafico([{nome, cor:'#2563eb', vals}], ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'], fmt, {valores:'todos', id:'ev'})
+             :'<div class="pt-vazio">Sem meses com dados em '+ano+'.</div>')+'</div>';
 }
 
 function _ptDonut(ps){
