@@ -25427,6 +25427,26 @@ function simixDiagnostico(equipe, ponto, motivo, anoMes){
     }catch(e){ ent='erro: '+e.message; }
     return ['', titulo+':', ...linhas, '  → o app entendeu: '+ent];
   };
+  /* Quem está no cadastro do mês mas não tem nenhuma linha de ponto.
+     Serve para conferir se o Símix deixa de mandar o ponto de quem já
+     saiu da empresa. */
+  const dt=v=>{ const t=String(v||'').slice(0,10); return /^\d{4}-\d{2}-\d{2}$/.test(t)&&t>'1900'?t.split('-').reverse().join('/'):''; };
+  const codPonto=new Set(pt.map(x=>String(x.cdFunc)));
+  const linhasPorCod={}; pt.forEach(x=>{ const c=String(x.cdFunc); linhasPorCod[c]=(linhasPorCod[c]||0)+1; });
+  const cad=(equipe||[]);
+  const semPonto=cad.filter(e=>!codPonto.has(String(e.cdFunc)));
+  const desligados=cad.filter(e=>dt(e.dtDemissao));
+  const descr=e=>'  '+String(e.cdFunc).padStart(4)+' · '+(e.funcionarioNome||'?')+
+    ' · admissão '+(dt(e.dtAdmissao)||'—')+' · demissão '+(dt(e.dtDemissao)||'—')+
+    ' · '+(linhasPorCod[String(e.cdFunc)]||0)+' linha(s) de ponto';
+  const blocoSaida=['',
+    'QUEM SAIU / QUEM FICOU SEM PONTO',
+    '  pessoas no cadastro: '+cad.length+' · com ponto: '+codPonto.size+' · sem nenhuma linha de ponto: '+semPonto.length,
+    '  com data de demissão no cadastro: '+desligados.length+' (destas, '+desligados.filter(e=>codPonto.has(String(e.cdFunc))).length+' têm ponto)',
+    ...(desligados.length?['  — com demissão:', ...desligados.slice(0,25).map(descr)]:[]),
+    ...(semPonto.length?['  — sem ponto:', ...semPonto.filter(e=>!dt(e.dtDemissao)).slice(0,25).map(descr)]:[])
+  ];
+
   const exAtraso=pt.find(x=>num(x.hrAtrasosDec)>0);
   const exFalta=pt.find(x=>!x.trabalhou && (num(x.hrFaltasDec)>0||num(x.hrFaltasNJDec)>0))||
     pt.find(x=>num(x.hrFaltasDec)>0||num(x.hrFaltasNJDec)>0);
@@ -25445,6 +25465,7 @@ function simixDiagnostico(equipe, ponto, motivo, anoMes){
     '  com atraso (hrAtrasosDec>0): '+conta(x=>num(x.hrAtrasosDec)>0),
     '  com falta (hrFaltasDec>0): '+conta(x=>num(x.hrFaltasDec)>0)+' · faltas não justif.: '+conta(x=>num(x.hrFaltasNJDec)>0),
     '  com afastamento: '+conta(x=>!!x.afastaDesc||!!x.afastaSigla),
+    ...blocoSaida,
     ...mostra('EXEMPLO COM ATRASO', exAtraso),
     ...mostra('EXEMPLO COM FALTA', exFalta),
     ...mostra('EXEMPLO NORMAL', exNormal)
