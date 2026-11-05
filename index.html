@@ -956,6 +956,14 @@
           </div>
           <span class="mc-sector-arrow">›</span>
         </button>
+        <button class="mc-sector-card" onclick="abrirPin('rh')">
+          <div class="mc-sector-icon" style="background:#e0e7ff;">👥</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">RH</div>
+            <div class="mc-sector-desc">Controle de ponto, faltas, atrasos e jornada</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
         <button class="mc-sector-card" style="border-left:3px solid var(--mc-roxo);" onclick="abrirPin('alteracoes')">
           <div class="mc-sector-icon purple">✏️</div>
           <div class="mc-sector-info">
@@ -4772,6 +4780,46 @@
     </div>
   </div>
 
+  <!-- RH: entrada do setor -->
+  <div class="screen" id="s-rh-home">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">RH</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">👥 RH</div>
+        <div class="mc-page-sub">Painel de acesso</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
+      <div class="mc-section-header">Áreas de acesso</div>
+      <div class="mc-sector-grid">
+        <button class="mc-sector-card" style="border-left:3px solid var(--mc-azul);" onclick="pontoAbrir()">
+          <div class="mc-sector-icon" style="background:#e0e7ff;">🕐</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Controle de Ponto</div>
+            <div class="mc-sector-desc">Resumo, pessoas, jornada, setores e comparação</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+        <button class="mc-sector-card" onclick="pdashAbrir('')">
+          <div class="mc-sector-icon indigo">🧭</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Painel da Equipe</div>
+            <div class="mc-sector-desc">Absenteísmo, pontualidade e histórico por pessoa</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- COMPRAS: HUB -->
   <div class="screen" id="s-compras">
     <div class="mc-header">
@@ -5687,13 +5735,13 @@ let PINS = { admin:null,
   confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314',
   contagem:'0000', container:'0001', quadra:'2020', testes:'7070',
   simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030',
-  estoque:'8080', patrick:'9090' };
-const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo' };
+  estoque:'8080', patrick:'9090', rh:'9875' };
+const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo', rh:'indigo' };
 /* Todo setor que existe em DESTINOS precisa estar aqui: é desta lista
    que a tela de Gerenciar Senhas tira os setores. Faltavam patrick e
    estoque, e por isso a senha deles não aparecia para ninguém. */
-const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒', patrick:'Patrick 🧭', estoque:'Estoque 🏭' };
-const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home' };
+const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒', patrick:'Patrick 🧭', estoque:'Estoque 🏭', rh:'RH 👥' };
+const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home', rh:'s-rh-home' };
 
 let pinAtual = '';
 let setorAtivo = '';
@@ -16337,7 +16385,7 @@ const _SETOR_NOMES={
   admin:'Admin', confeitaria:'Confeitaria', cozinha:'Cozinha', embalagem:'Embalagem',
   expedicao:'Expedição', carregamento:'Carregamento', quadra:'Quadra', container:'Contêiner',
   contagem:'Contagem', estoque:'Estoque', comercial:'Comercial', testes:'Testes',
-  alteracoes:'Alterações', simone:'Simone', patrick:'Patrick'
+  alteracoes:'Alterações', simone:'Simone', patrick:'Patrick', rh:'RH'
 };
 
 /* O nome é guardado POR SETOR: o mesmo aparelho é usado por pessoas
@@ -24598,6 +24646,11 @@ const PONTO_MES_NOMES=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
    buscamos quando alguém entra no Controle de Ponto. */
 let _pontoCarregado=false, _pontoCarregando=false, _pontoErro='';
 
+/* Quem administra o ponto: o admin e o setor RH (senha própria).
+   O RH NÃO vira admin — só ganha o que é do ponto. */
+function _pontoGestor(){ return window.adminMode===true || window.setorAtual==='rh'; }
+window._pontoGestor=_pontoGestor;
+
 async function pontoCarregarMeses(){
   if(_pontoCarregado || _pontoCarregando) return;
   _pontoCarregando=true;
@@ -24803,7 +24856,7 @@ function pmesOutroSetor(cod){
 window.pmesOutroSetor=pmesOutroSetor;
 
 async function pmesExcluir(){
-  if(window.adminMode!==true){ alert('Só o admin pode excluir.'); return; }
+  if(!_pontoGestor()){ alert('Só o admin ou o RH podem excluir.'); return; }
   const [ano,mes]=_pmesSel.split('-');
   if(!confirm('Excluir '+PONTO_MES_NOMES[+mes]+' de '+ano+'?\n\nOs dois arquivos saem dos relatórios.')) return;
   try{
@@ -24999,7 +25052,7 @@ function renderPontoMes(){
     '</div>'+
   '</div>';
 
-  if(window.adminMode===true){
+  if(_pontoGestor()){
     h+='<button onclick="pmesExcluir()" style="width:100%;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:10px;font-size:12px;cursor:pointer;font-family:inherit;">🗑 Excluir este mês</button>';
   }
   el.innerHTML=h;
@@ -25690,7 +25743,7 @@ function _simixProgresso(txt){
 function _simixFecharProgresso(){ document.getElementById('simix-prog')?.remove(); }
 
 function simixAbrirConfig(){
-  if(window.adminMode!==true){ alert('Só o admin configura a ponte.'); return; }
+  if(!_pontoGestor()){ alert('Só o admin ou o RH configuram a ponte.'); return; }
   const ov=document.createElement('div');
   ov.id='simix-cfg';
   ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
@@ -25958,7 +26011,7 @@ function _pontoImportacoes(){
             ? '<div style="font-size:11px;color:#b45309;margin-top:4px;">⚠️ folhas emitidas em datas diferentes: '+(imp.emissoes||[]).join(', ')+'</div>'
             : '')+
         '</div>'+
-        (window.adminMode===true
+        (_pontoGestor()
           ? '<button onclick="pontoExcluirImport(\''+escapeJsStr(imp.firestoreId)+'\')" style="background:none;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit;">🗑</button>'
           : '')+
       '</div></div>').join('') || _vazio('Nenhum arquivo importado.');
@@ -26488,7 +26541,7 @@ function _ptMenu(){
     '<div class="pt-side-tit">FERRAMENTAS</div>'+
     '<button class="pt-nav'+(_pontoMesesAberto?' on':'')+'" onclick="pontoMesesToggle()"><span class="ic">📅</span>Meses e arquivos</button>'+
     (simixPronto()?'<button class="pt-nav" onclick="simixAtualizarAno()"><span class="ic">🔄</span>Atualizar anos</button>':'')+
-    (window.adminMode===true?'<button class="pt-nav" onclick="pdashAbrir(\'\')"><span class="ic">🧭</span>Painel da Equipe</button>':'')+
+    (_pontoGestor()?'<button class="pt-nav" onclick="pdashAbrir(\'\')"><span class="ic">🧭</span>Painel da Equipe</button>':'')+
   '</div></aside>';
   return h;
 }
