@@ -26368,7 +26368,7 @@ const _ptHh=m=>_pontoHhmm(m||0);
 const _ptSinal=m=>(m>0?'+':'')+_pontoHhmm(m||0);
 
 /* ── tela ──────────────────────────────────────────────────────── */
-const _PT_ABAS=[['resumo','📊','Resumo'],['pessoas','👥','Pessoas'],['jornada','⏱️','Jornada'],['setores','🏭','Setores'],['import','📄','Arquivos']];
+const _PT_ABAS=[['resumo','📊','Resumo'],['pessoas','👥','Pessoas'],['jornada','⏱️','Jornada'],['setores','🏭','Setores'],['comparar','⚖️','Comparar'],['import','📄','Arquivos']];
 
 function renderPonto(){
   const el=document.getElementById('ponto-content'); if(!el) return;
@@ -26443,7 +26443,8 @@ function _ptFiltros(){
     '<input class="pt-ctl" type="text" id="ponto-busca" value="'+_pontoEsc(_pontoBusca)+'" oninput="pontoBuscar(this.value)" placeholder="Buscar pessoa, cargo ou código" autocomplete="off">'+
     '<button class="x" id="ponto-busca-x" onclick="pontoLimparBusca()" title="Limpar" style="display:'+(_pontoBusca?'flex':'none')+';">✕</button>'+
     '<div class="pt-sug" id="ponto-sug">'+_pontoSugestoes()+'</div></div>';
-  return '<div class="pt-filtros">'+per+set+busca+'</div>';
+  // em Comparar, o período é escolhido dentro da própria tela
+  return '<div class="pt-filtros">'+(_pontoAba==='comparar'?'':per)+set+busca+'</div>';
 }
 
 /* Ano e mês que as listas mostram, a partir do período escolhido */
@@ -26478,7 +26479,7 @@ function pontoMes(v){
 window.pontoMes=pontoMes;
 
 function _ptDatas(){
-  if(_pontoPer!=='custom') return '';
+  if(_pontoPer!=='custom' || _pontoAba==='comparar') return '';
   return '<div class="pt-datas"><label>De</label>'+
     '<input class="pt-ctl" type="date" min="2020-01-01" max="2099-12-31" id="ponto-de" value="'+(_pontoDe?estBRparaISO(_pontoDe):'')+'" onkeydown="if(event.key===\'Enter\')pontoAplicarDatas()">'+
     '<label>até</label>'+
@@ -26492,6 +26493,7 @@ function _pontoCorpo(){
          _pontoAba==='jornada' ? _pontoJornadaTela() :
          _pontoAba==='setores' ? _pontoPorSetor() :
          _pontoAba==='import'  ? _ptCard('Arquivos importados','um registro por mês', '<div>'+_pontoImportacoes()+'</div>') :
+         _pontoAba==='comparar'? _pontoComparar() :
                                  _pontoResumo();
 }
 
@@ -26504,6 +26506,11 @@ function _pontoAtualizarCorpo(){
 }
 
 function _pontoFiltroTxt(){
+  if(_pontoAba==='comparar'){
+    _ptCmpPadrao();
+    return (_ptCmpA?(_ptCmpNome(_ptCmpA)+' vs '+_ptCmpNome(_ptCmpB)):'escolha os períodos')+
+      (_pontoSetor?(' · '+_pontoEsc(_pontoSetor)):'');
+  }
   const n=pontoPessoas().length;
   let per='todo o histórico';
   if(_pontoPer.indexOf('mes:')===0){ const [a,m]=_pontoPer.slice(4).split('-'); per=PONTO_MES_NOMES[+m]+' de '+a; }
@@ -26528,6 +26535,210 @@ function _pontoSugestoes(){
 }
 window._pontoSugestoes=_pontoSugestoes;
 
+
+/* ── COMPARAR DOIS PERÍODOS ──────────────────────────────────────
+   Período A (o que se quer analisar) contra o período B (a base).
+   Cada período é um mês ("2026-10") ou um ano inteiro ("2026-ano").
+   O filtro de setor e a busca valem para os dois. */
+let _ptCmpA='', _ptCmpB='';
+
+function _ptCmpIntervalo(k){
+  const [a,m]=k.split('-');
+  if(m==='ano') return ['01/01/'+a, '31/12/'+a];
+  const ult=new Date(+a,+m,0).getDate();
+  return ['01/'+m+'/'+a, String(ult).padStart(2,'0')+'/'+m+'/'+a];
+}
+function _ptCmpNome(k){
+  const [a,m]=k.split('-');
+  return m==='ano' ? ('Ano de '+a) : (PONTO_MES_NOMES[+m]+'/'+a);
+}
+/* Todos os indicadores de um período */
+function _ptMetricas(k){
+  const [de,ate]=_ptCmpIntervalo(k);
+  const deB=_pontoDe, ateB=_pontoAte;
+  let ps;
+  try{ _pontoDe=de; _pontoAte=ate; ps=pontoPessoas(); }
+  finally{ _pontoDe=deB; _pontoAte=ateB; }
+  ps.forEach(p=>_pontoJornada(p));
+  const soma=f=>ps.reduce((t,p)=>t+f(p),0);
+  const prev=soma(p=>p.previstos), trab=soma(p=>p.trabalhados), f=soma(p=>p.faltas), at=soma(p=>p.atrasos);
+  return {
+    ps,
+    pessoas: ps.length,
+    abs: prev?f/prev*100:0,
+    pont: trab?(trab-at)/trab*100:100,
+    faltas: f,
+    atrasos: at,
+    atrasoMin: soma(p=>p.atrasoMin),
+    saldo: soma(p=>p.horasSaldo||0),
+    extra: soma(p=>p._jorn.extra),
+    devendo: soma(p=>p._jorn.devendo),
+    alertas: soma(p=>p._jorn.alertas),
+    limpos: ps.filter(p=>!p.faltas&&!p.atrasos).length
+  };
+}
+
+function _ptCmpPadrao(){
+  const meses=_pontoMesesComDados();
+  if(!_ptCmpA){
+    _ptCmpA=(_pontoPer.indexOf('mes:')===0)?_pontoPer.slice(4):(meses[meses.length-1]||'');
+  }
+  if(!_ptCmpB && _ptCmpA){
+    const i=meses.indexOf(_ptCmpA);
+    _ptCmpB=i>0?meses[i-1]:_ptCmpA;
+  }
+}
+function pontoCmp(qual, parte, v){
+  const k=qual==='A'?_ptCmpA:_ptCmpB;
+  let [a,m]=k.split('-');
+  if(parte==='ano') a=v; else m=v;
+  // se o mês não existe no ano novo, cai para o ano inteiro
+  const nk=a+'-'+m;
+  const ok=m==='ano' || ((pontoMeses[nk]||{}).ponto||[]).length;
+  if(qual==='A') _ptCmpA=ok?nk:(a+'-ano'); else _ptCmpB=ok?nk:(a+'-ano');
+  _pontoAtualizarCorpo();
+}
+window.pontoCmp=pontoCmp;
+function pontoCmpAtalho(t){
+  const [a,m]=_ptCmpA.split('-');
+  if(t==='anterior'){
+    if(m==='ano') _ptCmpB=(+a-1)+'-ano';
+    else { const d=new Date(+a,+m-2,1); _ptCmpB=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  } else if(t==='anoPassado'){ _ptCmpB=(+a-1)+'-'+m; }
+  else if(t==='trocar'){ const x=_ptCmpA; _ptCmpA=_ptCmpB; _ptCmpB=x; }
+  _pontoAtualizarCorpo();
+}
+window.pontoCmpAtalho=pontoCmpAtalho;
+
+function _ptCmpSeletor(qual, k, cor){
+  const meses=_pontoMesesComDados();
+  const anos=[...new Set(meses.map(x=>x.slice(0,4)))];
+  const [a,m]=k.split('-');
+  if(!anos.includes(a)) anos.push(a);
+  anos.sort().reverse();
+  const comDados=new Set(meses.filter(x=>x.indexOf(a+'-')===0).map(x=>x.slice(5)));
+  return '<div style="flex:1 1 280px;min-width:0;background:'+cor[0]+';border:1.5px solid '+cor[1]+';border-radius:14px;padding:12px 14px;">'+
+    '<div style="font-size:11px;font-weight:800;letter-spacing:.06em;color:'+cor[2]+';margin-bottom:8px;">'+(qual==='A'?'PERÍODO A':'COMPARAR COM (B)')+'</div>'+
+    '<div style="display:flex;gap:8px;">'+
+      '<select class="pt-ctl" style="width:100px;flex:0 0 100px;" onchange="pontoCmp(\''+qual+'\',\'ano\',this.value)">'+
+        anos.map(x=>'<option value="'+x+'"'+(x===a?' selected':'')+'>'+x+'</option>').join('')+'</select>'+
+      '<select class="pt-ctl" style="flex:1;width:auto;min-width:0;" onchange="pontoCmp(\''+qual+'\',\'mes\',this.value)">'+
+        '<option value="ano"'+(m==='ano'?' selected':'')+'>Ano inteiro</option>'+
+        PONTO_MES_NOMES.slice(1,13).map((n,i)=>{ const mm=String(i+1).padStart(2,'0'), tem=comDados.has(mm);
+          return '<option value="'+mm+'"'+(mm===m?' selected':'')+(tem?'':' disabled')+'>'+n+(tem?'':' · sem dados')+'</option>'; }).join('')+
+      '</select></div></div>';
+}
+
+function _pontoComparar(){
+  _ptCmpPadrao();
+  if(!_ptCmpA) return '<div class="pt-card pt-vazio">Nenhum mês com dados para comparar.</div>';
+  const A=_ptMetricas(_ptCmpA), B=_ptMetricas(_ptCmpB);
+  const nA=_ptCmpNome(_ptCmpA), nB=_ptCmpNome(_ptCmpB);
+  const [anoA,mA]=_ptCmpA.split('-');
+
+  let h='<div class="pt-card" style="margin-bottom:16px;">'+
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch;">'+
+      _ptCmpSeletor('A', _ptCmpA, ['#eff6ff','#bfdbfe','#1d4ed8'])+
+      '<button class="pt-ic-btn" style="align-self:center;" title="Trocar A e B" onclick="pontoCmpAtalho(\'trocar\')">⇄</button>'+
+      _ptCmpSeletor('B', _ptCmpB, ['#f8fafc','#e2e8f0','#475569'])+
+    '</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">'+
+      '<span style="font-size:12px;color:var(--pt-sub);align-self:center;">Comparar A com:</span>'+
+      '<button class="pt-btn" onclick="pontoCmpAtalho(\'anterior\')">'+(mA==='ano'?'o ano anterior':'o mês anterior')+'</button>'+
+      (mA!=='ano'?'<button class="pt-btn" onclick="pontoCmpAtalho(\'anoPassado\')">'+PONTO_MES_NOMES[+mA]+' de '+(+anoA-1)+'</button>':'')+
+    '</div></div>';
+
+  if(!A.pessoas && !B.pessoas) return h+'<div class="pt-card pt-vazio">Sem dados nos dois períodos.</div>';
+
+  /* Variação: qual direção é boa depende do indicador.
+     melhor: 'menos' (faltas, atrasos…), 'mais' (pontualidade…) ou '' (neutro) */
+  const linha=(ico, rot, a, b, fmt, melhor, unidadePct)=>{
+    const d=a-b;
+    let tom='gray', seta='→';
+    if(Math.abs(d)>1e-9){
+      seta=d>0?'▲':'▼';
+      if(melhor) tom=((d<0)===(melhor==='menos'))?'green':'red';
+      else tom='blue';
+    }
+    // % só faz sentido com base positiva (saldo negativo daria leitura estranha)
+    const rel=(b>0 && !unidadePct)?(' ('+(d>0?'+':'')+Math.round(d/b*100)+'%)'):'';
+    const dTxt=Math.abs(d)<1e-9?'igual':(seta+' '+(unidadePct?(_pontoPct(Math.abs(d))+' p.p.'):fmt(Math.abs(d)).replace(/^[+-]/,''))+rel);
+    return '<div class="pt-card" style="padding:15px 16px;">'+
+      '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:16px;">'+ico+'</span><span style="font-size:12.5px;font-weight:600;color:var(--pt-sub);">'+rot+'</span>'+
+        '<span style="margin-left:auto;">'+_ptPill(dTxt, tom, true)+'</span></div>'+
+      '<div style="display:flex;align-items:baseline;gap:10px;margin-top:9px;">'+
+        '<span style="font-size:24px;font-weight:800;color:#1d4ed8;">'+fmt(a)+'</span>'+
+        '<span style="font-size:13px;color:var(--pt-mut);">vs '+fmt(b)+'</span></div></div>';
+  };
+  const n=v=>String(Math.round(v)), pct=v=>_pontoPct(v)+'%', hh=v=>_ptHh(Math.round(v)), sh=v=>_ptSinal(Math.round(v));
+  h+='<div style="display:flex;align-items:center;gap:10px;margin:2px 0 10px;font-size:13px;color:var(--pt-sub);">'+
+    '<b style="color:#1d4ed8;">'+nA+'</b> comparado a <b style="color:#334155;">'+nB+'</b>'+
+    '<span style="margin-left:auto;font-size:11.5px;">verde = melhorou · vermelho = piorou</span></div>';
+  h+='<div class="pt-grid pt-g4">'+
+    linha('👥','Pessoas', A.pessoas, B.pessoas, n, '')+
+    linha('📉','Absenteísmo', A.abs, B.abs, pct, 'menos', true)+
+    linha('⏰','Pontualidade', A.pont, B.pont, pct, 'mais', true)+
+    linha('✅','Sem ocorrência', A.limpos, B.limpos, n, 'mais')+
+  '</div><div class="pt-grid pt-g4">'+
+    linha('🚫','Faltas', A.faltas, B.faltas, n, 'menos')+
+    linha('⏰','Atrasos', A.atrasos, B.atrasos, n, 'menos')+
+    linha('⌛','Tempo de atraso', A.atrasoMin, B.atrasoMin, hh, 'menos')+
+    linha('⚖️','Alertas da CLT', A.alertas, B.alertas, n, 'menos')+
+  '</div><div class="pt-grid pt-g4">'+
+    linha('🏦','Banco de horas', A.saldo, B.saldo, sh, 'mais')+
+    linha('⏱️','Hora extra', A.extra, B.extra, hh, 'menos')+
+    linha('➖','Horas faltando', A.devendo, B.devendo, hh, 'menos')+
+    linha('📅','Dias trabalhados', A.ps.reduce((t,p)=>t+p.trabalhados,0), B.ps.reduce((t,p)=>t+p.trabalhados,0), n, '')+
+  '</div>';
+
+  // por setor
+  const porSetor=M=>{ const g={}; M.ps.forEach(p=>{ const k=p.setor||'(sem setor)';
+    if(!g[k]) g[k]={pessoas:0,prev:0,f:0,at:0,trab:0,extra:0,al:0};
+    const x=g[k]; x.pessoas++; x.prev+=p.previstos; x.f+=p.faltas; x.at+=p.atrasos; x.trab+=p.trabalhados; x.extra+=p._jorn.extra; x.al+=p._jorn.alertas; }); return g; };
+  const gA=porSetor(A), gB=porSetor(B);
+  const setores=[...new Set([...Object.keys(gA),...Object.keys(gB)])].sort();
+  const vz={pessoas:0,prev:0,f:0,at:0,trab:0,extra:0,al:0};
+  const cel=(a,b,fmt,melhor,ehPct)=>{
+    const d=a-b; let cor='#94a3b8', s='';
+    if(Math.abs(d)>1e-9){ s=(d>0?'▲':'▼'); cor=!melhor?'#2563eb':(((d<0)===(melhor==='menos'))?'#047857':'#b91c1c'); }
+    return '<td class="c"><b style="color:#1d4ed8;">'+fmt(a)+'</b> <span style="color:#94a3b8;">/ '+fmt(b)+'</span>'+
+      (s?' <span style="color:'+cor+';font-size:11px;font-weight:700;">'+s+(ehPct?_pontoPct(Math.abs(d)):fmt(Math.abs(d)))+'</span>':'')+'</td>';
+  };
+  const tab='<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Setor</th><th class="c">Pessoas</th><th class="c">Absenteísmo</th><th class="c">Faltas</th><th class="c">Atrasos</th><th class="c">Hora extra</th><th class="c">Alertas CLT</th></tr></thead><tbody>'+
+    setores.map(k=>{ const a=gA[k]||vz, b=gB[k]||vz;
+      const ab=x=>x.prev?x.f/x.prev*100:0;
+      return '<tr><td style="font-weight:650;">'+_pontoEsc(k)+'</td>'+cel(a.pessoas,b.pessoas,n,'')+cel(ab(a),ab(b),pct,'menos',true)+
+        cel(a.f,b.f,n,'menos')+cel(a.at,b.at,n,'menos')+cel(a.extra,b.extra,hh,'menos')+cel(a.al,b.al,n,'menos')+'</tr>'; }).join('')+
+    '</tbody></table></div>';
+  h+='<div class="pt-grid">'+_ptCard('Por setor', '<b style="color:#1d4ed8;">A</b> / B', tab)+'</div>';
+
+  // quem mudou mais (só quem aparece nos dois)
+  const mapaB={}; B.ps.forEach(p=>{ mapaB[String(p.codigo)]=p; });
+  const nota=p=>p.faltas*3+p.atrasos+p._jorn.alertas;
+  const ambos=A.ps.filter(p=>mapaB[String(p.codigo)]).map(p=>({p, b:mapaB[String(p.codigo)], d:nota(p)-nota(mapaB[String(p.codigo)])}));
+  const desc=x=>{ const df=x.p.faltas-x.b.faltas, da=x.p.atrasos-x.b.atrasos;
+    return [df?((df>0?'+':'')+df+' falta'+(Math.abs(df)>1?'s':'')):'', da?((da>0?'+':'')+da+' atraso'+(Math.abs(da)>1?'s':'')):''].filter(Boolean).join(' · ')||'alertas CLT'; };
+  const lista=(arr,tom)=>arr.length?'<div class="pt-lista">'+arr.map(x=>'<button class="pt-li" onclick="pontoVerPessoa(\''+escapeJsStr(x.p.codigo)+'\')">'+_ptQuem(x.p,34)+_ptPill(desc(x),tom,true)+'</button>').join('')+'</div>'
+    :'<div class="pt-vazio" style="padding:18px;">Ninguém</div>';
+  const piorou=ambos.filter(x=>x.d>0).sort((a,b)=>b.d-a.d).slice(0,6);
+  const melhorou=ambos.filter(x=>x.d<0).sort((a,b)=>a.d-b.d).slice(0,6);
+  const idsA=new Set(A.ps.map(p=>String(p.codigo))), idsB=new Set(B.ps.map(p=>String(p.codigo)));
+  const entrou=A.ps.filter(p=>!idsB.has(String(p.codigo))), saiu=B.ps.filter(p=>!idsA.has(String(p.codigo)));
+  h+='<div class="pt-grid pt-g3">'+
+    _ptCard('Piorou', 'mais faltas e atrasos em A', lista(piorou,'red'))+
+    _ptCard('Melhorou', 'menos faltas e atrasos em A', lista(melhorou,'green'))+
+    _ptCard('Mudanças na equipe', '',
+      '<div style="display:flex;gap:10px;margin-bottom:12px;">'+
+        '<div style="flex:1;background:#ecfdf5;border-radius:11px;padding:10px;text-align:center;"><b style="font-size:20px;color:#047857;">'+entrou.length+'</b><div style="font-size:11.5px;color:#047857;">só em A</div></div>'+
+        '<div style="flex:1;background:#fef2f2;border-radius:11px;padding:10px;text-align:center;"><b style="font-size:20px;color:#b91c1c;">'+saiu.length+'</b><div style="font-size:11.5px;color:#b91c1c;">só em B</div></div></div>'+
+      '<div class="pt-lista">'+entrou.slice(0,3).map(p=>'<button class="pt-li" onclick="pontoVerPessoa(\''+escapeJsStr(p.codigo)+'\')">'+_ptQuem(p,30)+_ptPill('entrou','green',true)+'</button>').join('')+
+        saiu.slice(0,3).map(p=>'<div class="pt-li" style="cursor:default;">'+_ptQuem(p,30)+_ptPill('saiu','red',true)+'</div>').join('')+'</div>')+
+  '</div>';
+  h+='<div class="pt-nota">“Piorou” e “Melhorou” comparam só quem aparece nos dois períodos, pesando falta ×3, atraso ×1 e alerta da CLT ×1. '+
+    '“Só em A” e “só em B” mostram quem entrou ou saiu da equipe entre um período e outro.</div>';
+  return h;
+}
+
 /* ── RESUMO ────────────────────────────────────────────────────── */
 function _pontoResumo(){
   const ps=pontoPessoas();
@@ -26548,7 +26759,8 @@ function _pontoResumo(){
     _ptKpi('⏰',tomPont, _pontoPct(pont)+'%', 'Pontualidade', totA+' atraso(s) · '+_ptHh(totMin))+
     _ptKpi('✅','green', limpos.length, 'Sem ocorrência', _pontoPct(ps.length?limpos.length/ps.length*100:0)+'% da equipe')+
   '</div><div class="pt-grid pt-g4">'+
-    _ptKpi('🏦',saldo<0?'red':'green', _ptSinal(saldo), 'Banco de horas', 'saldo do período')+
+    _ptKpi('🏦',saldo<0?'red':'green', _ptSinal(saldo), 'Banco de horas',
+      ps.some(p=>p.saldoParcial)?'saldo do período · meses de PDF cortados pelo filtro ficaram de fora':'saldo do período')+
     _ptKpi('⏱️','violet', _ptHh(extra), 'Hora extra', 'acima de 8:48 por dia')+
     _ptKpi('⚖️',alertas?'red':'green', alertas, 'Alertas da CLT', comAl+' pessoa(s) · descanso, intervalo, >10h')+
     _ptKpi('🚫',totF?'red':'green', totF, 'Faltas', ps.filter(p=>p.faltas>=3).length+' pessoa(s) com 3 ou mais')+
@@ -26598,7 +26810,8 @@ function _ptSerieMensal(ano){
         abs: prev?f/prev*100:0,
         atr: ps.reduce((t,p)=>t+p.atrasos,0),
         extra: ps.reduce((t,p)=>t+p._jorn.extra,0)/60,
-        clt: ps.reduce((t,p)=>t+p._jorn.alertas,0)
+        clt: ps.reduce((t,p)=>t+p._jorn.alertas,0),
+        pess: ps.length
       });
     }
   } finally { _pontoDe=deB; _pontoAte=ateB; }
@@ -26612,7 +26825,7 @@ function _ptEvolucao(){
   const ref=(_pontoAte&&_pontoAte.slice(-4))||(meses.length?meses[meses.length-1].slice(0,4):String(new Date().getFullYear()));
   const ano=+ref;
   const serie=_ptSerieMensal(ano);
-  const met={abs:['Absenteísmo','%',v=>_pontoPct(v)+'%'], atr:['Atrasos','',v=>String(Math.round(v))], extra:['Hora extra','h',v=>_pontoHhmm(Math.round(v*60))], clt:['Alertas CLT','',v=>String(Math.round(v))]};
+  const met={pess:['Colaboradores','',v=>String(Math.round(v))], abs:['Absenteísmo','%',v=>_pontoPct(v)+'%'], atr:['Atrasos','',v=>String(Math.round(v))], extra:['Hora extra','h',v=>_pontoHhmm(Math.round(v*60))], clt:['Alertas CLT','',v=>String(Math.round(v))]};
   const [nome,,fmt]=met[_ptSerie]||met.abs;
   const vals=serie.map(x=>x?x[_ptSerie]:null);
   const W=640,H=230,L=44,R=14,T=16,B=30, iw=W-L-R, ih=H-T-B;
@@ -26852,7 +27065,8 @@ function _pontoDetalhe(){
     _ptKpi('🚫',p.faltas?'red':'green', p.faltas, 'Faltas', p.afast?(p.afast+' dia(s) de afastamento'):'')+
     _ptKpi('⏰',p.atrasos?'amber':'green', p.atrasos, 'Atrasos', p.atrasoMin?_ptHh(p.atrasoMin)+' no total':'')+
     _ptKpi('📅','blue', p.trabalhados, 'Dias trabalhados', 'pontualidade '+_pontoPct(p.pontualidade)+'%')+
-    _ptKpi('🏦',(p.horasSaldo||0)<0?'red':'green', p.horasSaldo!==null?_ptSinal(p.horasSaldo):'—', 'Banco de horas', 'saldo do Símix')+
+    _ptKpi('🏦',(p.horasSaldo||0)<0?'red':'green', p.horasSaldo!==null?_ptSinal(p.horasSaldo):'—', 'Banco de horas',
+      p.saldoParcial?'parte do período veio de PDF sem saldo por dia':'saldo do período')+
   '</div>';
   if(J.dias){
     h+='<div class="pt-grid pt-g4">'+
@@ -27107,10 +27321,34 @@ function pontoPessoas(){
       }).map(d=>({...d, _ano:ano}));
       if(!dias.length && (_pontoDe||_pontoAte)) return;
       const ch=String(p.codigo||p.nome);
-      if(!mapa[ch]) mapa[ch]={...p, dias:[], importacoes:0, setor:_pmesSetorDe(p, imp.ch)};
+      if(!mapa[ch]) mapa[ch]={...p, dias:[], importacoes:0, setor:_pmesSetorDe(p, imp.ch),
+                              _saldo:0, _temSaldo:false, saldoParcial:false};
       if(!mapa[ch].setor) mapa[ch].setor=_pmesSetorDe(p, imp.ch);
       mapa[ch].dias=mapa[ch].dias.concat(dias);
       mapa[ch].importacoes++;
+
+      /* Saldo de horas SÓ do período escolhido.
+         Antes valia o total do primeiro mês da pessoa, fosse qual fosse
+         o período. Agora:
+         · Símix: soma o saldo de cada dia dentro do período (inclusive
+           folgas, que o Símix também pode ter saldo)
+         · PDF: o relatório só traz o total do mês, então ele entra
+           quando o mês inteiro está dentro do período; mês cortado pelo
+           filtro fica de fora e a pessoa é marcada como parcial. */
+      const m=mapa[ch];
+      const temDia=(p.dias||[]).some(d=>'minSaldo' in d);
+      if(temDia){
+        (p.dias||[]).forEach(d=>{
+          if(d.minSaldo===null || d.minSaldo===undefined) return;
+          const n=_pontoDataNum(d.data, ano);
+          if(n>=de && n<=ate){ m._saldo+=d.minSaldo; m._temSaldo=true; }
+        });
+      } else if(p.horasSaldo!==null && p.horasSaldo!==undefined){
+        const [a,mm]=String(imp.ch).split('-').map(Number);
+        const ini=a*10000+mm*100+1, fim=a*10000+mm*100+new Date(a,mm,0).getDate();
+        if(ini>=de && fim<=ate){ m._saldo+=p.horasSaldo; m._temSaldo=true; }
+        else m.saldoParcial=true;
+      }
     });
   });
   const q=_normNome(_pontoBusca||'');
@@ -27126,7 +27364,8 @@ function pontoPessoas(){
     const afast=p.dias.filter(d=>d.afastamento).length;
     const previstos=p.dias.filter(d=>!d.afastamento).length;
     const saidasCedo=p.dias.filter(d=>d.batidas&&d.batidas.length>=2 && d.obs && /-\d{2}:\d{2}/.test(d.obs)).length;
-    return {...p, faltas, atrasos:atrasosDias.length, atrasoMin,
+    return {...p, horasSaldo:p._temSaldo?p._saldo:null,
+            faltas, atrasos:atrasosDias.length, atrasoMin,
             atrasoMedio:atrasosDias.length?Math.round(atrasoMin/atrasosDias.length):0,
             trabalhados, afast, previstos, saidasCedo,
             absenteismo: previstos? (faltas/previstos*100) : 0,
