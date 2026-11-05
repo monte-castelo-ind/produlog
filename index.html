@@ -25132,59 +25132,156 @@ async function _simixGravarMes(ch, pessoas){
      pontoEm:agora(), pontoPor:_demAutor(), mes:ch},{merge:true});
 }
 
-/* ── ATUALIZAR O ANO INTEIRO ─────────────────────────────────────
-   Busca de janeiro até o mês atual, um mês por vez, e grava cada um.
-   Um mês com problema não para os outros: no fim, mostra o que
-   aconteceu com cada mês. */
-async function simixAtualizarAno(){
-  if(!simixPronto()){ simixAbrirConfig(); return; }
-  const hj=new Date(), ano=hj.getFullYear(), ate=hj.getMonth()+1;
-  if(!confirm('Buscar no Símix de Janeiro a '+PONTO_MES_NOMES[ate]+' de '+ano+' e atualizar todos esses meses?\n\n'+
-    'O que já houver em cada mês é substituído pelo Símix.\n'+
-    'Pode levar alguns minutos — não feche a tela.')) return;
-  if(simixSenha()===null) return;
-
+/* ── BUSCAR MESES NO SÍMIX ───────────────────────────────────────
+   O mesmo caminho para recarregar um mês, o ano inteiro ou vários
+   anos: busca um mês por vez e grava cada um. Um mês com problema não
+   para os outros; no fim, devolve o que aconteceu com cada um. */
+async function _simixBaixarMeses(lista){
   const res=[];
-  for(let m=1;m<=ate;m++){
+  for(let i=0;i<lista.length;i++){
+    const {ano, m}=lista[i];
     const ch=ano+'-'+String(m).padStart(2,'0');
     const anoMes=String(ano)+String(m).padStart(2,'0');
-    const nome=PONTO_MES_NOMES[m];
-    const etapa=t=>_simixProgresso(nome+' · mês '+m+' de '+ate+'<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:6px;">'+t+'</div>');
+    const nome=PONTO_MES_NOMES[m]+'/'+ano;
+    const etapa=t=>_simixProgresso(nome+(lista.length>1?(' · '+(i+1)+' de '+lista.length):'')+
+      '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:6px;">'+t+'</div>');
     try{
       etapa('buscando o cadastro…');
       const equipe=await simixBuscar('equipe', anoMes);
-      if(equipe===null){ res.push({nome, st:'cancelado'}); break; }
+      if(equipe===null){ res.push({ano, m, nome, st:'cancelado'}); break; }
       etapa('buscando as marcações…');
       const ponto=await simixBuscar('ponto', anoMes);
-      if(ponto===null){ res.push({nome, st:'cancelado'}); break; }
-      if(!ponto.length){ res.push({nome, st:'vazio'}); continue; }
+      if(ponto===null){ res.push({ano, m, nome, st:'cancelado'}); break; }
+      if(!ponto.length){ res.push({ano, m, nome, st:'vazio'}); continue; }
       etapa('organizando…');
       const pessoas=_simixMontar(equipe, ponto, anoMes);
       const problema=_simixConferir(equipe, ponto, pessoas);
-      if(problema){ res.push({nome, st:'erro', msg:problema}); continue; }
+      if(problema){ res.push({ano, m, nome, st:'erro', msg:problema}); continue; }
       etapa('gravando '+pessoas.length+' pessoas…');
       await _simixGravarMes(ch, pessoas);
-      res.push({nome, st:'ok', n:pessoas.length, ch});
+      res.push({ano, m, nome, st:'ok', n:pessoas.length, ch});
     }catch(e){
-      res.push({nome, st:'erro', msg:(e&&e.message)||String(e)});
+      res.push({ano, m, nome, st:'erro', msg:(e&&e.message)||String(e)});
     }
   }
-
   _simixProgresso('Recarregando os meses…');
   try{
     await _pontoRecarregar();
     for(const r of res.filter(x=>x.st==='ok')) await _pontoLimparPartes(r.ch);
   }catch(e){ console.warn('recarregar ponto', e); }
   _simixFecharProgresso();
+  return res;
+}
 
-  const ok=res.filter(r=>r.st==='ok'), vaz=res.filter(r=>r.st==='vazio'), err=res.filter(r=>r.st==='erro');
-  alert((ok.length?('✓ '+ok.length+' mês(es) atualizado(s):\n'+ok.map(r=>'  '+r.nome+' — '+r.n+' pessoas').join('\n')):'Nenhum mês atualizado.')+
-    (vaz.length?('\n\nSem dados no Símix: '+vaz.map(r=>r.nome).join(', ')):'')+
-    (err.length?('\n\n⚠️ Não atualizados:\n'+err.map(r=>'  '+r.nome+': '+r.msg).join('\n')):'')+
-    (res.some(r=>r.st==='cancelado')?'\n\nInterrompido no meio.':''));
+/* ↻ — recarrega um mês só: o que está na tela, ou o mês corrente */
+function _simixMesDoBotao(){
+  if(_pontoPer.indexOf('mes:')===0){ const [a,m]=_pontoPer.slice(4).split('-').map(Number); return {ano:a, m}; }
+  const h=new Date(); return {ano:h.getFullYear(), m:h.getMonth()+1};
+}
+async function simixRecarregarMes(){
+  if(!simixPronto()){ simixAbrirConfig(); return; }
+  const alvo=_simixMesDoBotao();
+  const ch=alvo.ano+'-'+String(alvo.m).padStart(2,'0');
+  const d=pontoMeses[ch];
+  // mês que veio de PDF: confirma antes de trocar pelo Símix
+  if(d && (d.ponto||[]).length && d.origem!=='simix' &&
+     !confirm(PONTO_MES_NOMES[alvo.m]+'/'+alvo.ano+' foi importado por PDF. Substituir pelo Símix?')) return;
+  if(simixSenha()===null) return;
+  const res=await _simixBaixarMeses([alvo]);
+  const r=res[0]||{};
+  if(r.st==='ok') _ptAviso('✓ '+r.nome+' atualizado · '+r.n+' pessoas');
+  else if(r.st==='vazio') alert(r.nome+': o Símix ainda não tem marcações neste mês.');
+  else if(r.st==='erro') alert(r.nome+': não atualizei.\n\n'+r.msg);
   renderPonto();
 }
+window.simixRecarregarMes=simixRecarregarMes;
+
+/* Aviso rápido no canto, some sozinho */
+function _ptAviso(txt){
+  document.getElementById('pt-aviso')?.remove();
+  const el=document.createElement('div');
+  el.id='pt-aviso';
+  el.style.cssText='position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:12px 18px;border-radius:12px;font-size:13.5px;font-weight:600;z-index:3500;box-shadow:0 12px 30px rgba(15,23,42,.3);';
+  el.textContent=txt;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 3200);
+}
+
+/* Atualizar anos inteiros: escolhe quais e busca tudo de uma vez */
+function simixAtualizarAno(){
+  if(!simixPronto()){ simixAbrirConfig(); return; }
+  const atual=new Date().getFullYear();
+  const comDados=new Set(_pontoMesesComDados().map(m=>+m.slice(0,4)));
+  const anos=[];
+  for(let a=atual;a>=atual-5;a--) anos.push(a);
+  [...comDados].forEach(a=>{ if(!anos.includes(a)) anos.push(a); });
+  anos.sort((a,b)=>b-a);
+  document.getElementById('simix-anos')?.remove();
+  const ov=document.createElement('div');
+  ov.id='simix-anos';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:420px;width:100%;padding:22px;box-shadow:0 24px 60px rgba(15,23,42,.25);">'+
+    '<div style="font-size:18px;font-weight:800;">🔄 Atualizar pelo Símix</div>'+
+    '<div style="font-size:13px;color:#64748b;margin-top:4px;line-height:1.5;">Marque os anos. Cada mês é buscado e substituído pelo que está no Símix.</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;">'+
+    anos.map(a=>{
+      const n=_pontoMesesComDados().filter(m=>+m.slice(0,4)===a).length;
+      return '<label style="display:flex;flex-direction:column;gap:2px;border:1.5px solid #e2e8f0;border-radius:12px;padding:10px 12px;cursor:pointer;" onclick="setTimeout(_simixAnosConta,0)">'+
+        '<span style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:800;">'+
+          '<input type="checkbox" value="'+a+'"'+(a===atual?' checked':'')+' style="width:17px;height:17px;margin:0;accent-color:#1e40af;">'+a+'</span>'+
+        '<span style="font-size:11px;color:#94a3b8;">'+(n?(n+' mês(es) no app'):'nada no app')+'</span></label>';
+    }).join('')+
+    '</div>'+
+    '<div id="simix-anos-info" style="font-size:12px;color:#64748b;margin-top:12px;"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:16px;">'+
+      '<button class="btn btn-secondary" style="flex:1;margin:0;" onclick="document.getElementById(\'simix-anos\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" id="simix-anos-ok" style="flex:1;margin:0;" onclick="simixAtualizarAnosOk()">Atualizar</button></div>'+
+  '</div>';
+  document.body.appendChild(ov);
+  _simixAnosConta();
+}
 window.simixAtualizarAno=simixAtualizarAno;
+
+function _simixAnosLista(){
+  const h=new Date(), atual=h.getFullYear();
+  const anos=[...document.querySelectorAll('#simix-anos input:checked')].map(i=>+i.value).sort((a,b)=>a-b);
+  const lista=[];
+  anos.forEach(a=>{ const ate=a===atual?h.getMonth()+1:(a>atual?0:12); for(let m=1;m<=ate;m++) lista.push({ano:a, m}); });
+  return {anos, lista};
+}
+function _simixAnosConta(){
+  const {anos, lista}=_simixAnosLista();
+  const info=document.getElementById('simix-anos-info'), ok=document.getElementById('simix-anos-ok');
+  document.querySelectorAll('#simix-anos label').forEach(l=>{
+    const on=l.querySelector('input').checked;
+    l.style.borderColor=on?'#1e40af':'#e2e8f0'; l.style.background=on?'#eff6ff':'#fff';
+  });
+  if(info) info.textContent=lista.length?(lista.length+' mês(es) para buscar · leva cerca de '+Math.max(1,Math.round(lista.length*6/60))+' min'):'Marque ao menos um ano.';
+  if(ok){ ok.disabled=!lista.length; ok.textContent=anos.length>1?('Atualizar '+anos.length+' anos'):'Atualizar'; }
+}
+window._simixAnosConta=_simixAnosConta;
+
+async function simixAtualizarAnosOk(){
+  const {anos, lista}=_simixAnosLista();
+  if(!lista.length) return;
+  document.getElementById('simix-anos')?.remove();
+  if(simixSenha()===null) return;
+  const res=await _simixBaixarMeses(lista);
+
+  // resumo por ano
+  const txt=anos.map(a=>{
+    const r=res.filter(x=>x.ano===a);
+    if(!r.length) return a+': não chegou a buscar';
+    const ok=r.filter(x=>x.st==='ok'), vaz=r.filter(x=>x.st==='vazio'), err=r.filter(x=>x.st==='erro');
+    let l=a+': '+(ok.length?('✓ '+ok.length+' mês(es) atualizado(s)'):'nenhum mês atualizado');
+    if(vaz.length) l+='\n   sem dados no Símix: '+vaz.map(x=>PONTO_MES_NOMES[x.m].slice(0,3)).join(', ');
+    if(err.length) l+='\n   ⚠️ '+err.map(x=>PONTO_MES_NOMES[x.m].slice(0,3)+': '+x.msg).join('\n   ⚠️ ');
+    return l;
+  }).join('\n\n');
+  alert(txt+(res.some(r=>r.st==='cancelado')?'\n\nInterrompido no meio.':''));
+  renderPonto();
+}
+window.simixAtualizarAnosOk=simixAtualizarAnosOk;
 
 /* Junta cadastro e ponto no formato que o painel já usa.
    Os nomes dos campos podem variar; procuramos por várias formas. */
@@ -26119,16 +26216,22 @@ function _ptCss(){
 .pt{--pt-brand:#1e40af;--pt-brand2:#3b82f6;--pt-soft:#eff6ff;--pt-txt:#0f172a;--pt-sub:#64748b;--pt-mut:#94a3b8;--pt-line:#eef1f5;
   display:flex;min-height:100%;background:#f5f7fb;color:var(--pt-txt);font-family:inherit;}
 .pt *{box-sizing:border-box;}
-.pt-side{flex:0 0 232px;background:#fff;border-right:1px solid #eceff4;padding:16px 12px 24px;}
+.pt-side{flex:0 0 232px;background:#e9eef7;border-right:1px solid #d9e1ee;padding:16px 12px 24px;}
 .pt-side-in{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px;}
 .pt-side-tit{font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--pt-mut);padding:16px 12px 6px;}
 .pt-side-tit:first-child{padding-top:4px;}
 .pt-nav{display:flex;align-items:center;gap:11px;width:100%;border:none;background:transparent;padding:10px 12px;border-radius:10px;
   font-family:inherit;font-size:13.5px;font-weight:600;color:#475569;cursor:pointer;text-align:left;transition:background .15s;}
-.pt-nav:hover{background:#f1f5f9;}
+.pt-nav:hover{background:#dbe3f1;color:#1e293b;}
 .pt-nav.on{background:var(--pt-brand);color:#fff;box-shadow:0 6px 16px rgba(30,64,175,.22);}
 .pt-nav .ic{width:20px;text-align:center;font-size:15px;}
-.pt-nav .ct{margin-left:auto;font-size:11px;font-weight:700;background:#f1f5f9;color:#475569;border-radius:99px;padding:1px 8px;}
+.pt-nav .ct{margin-left:auto;font-size:11px;font-weight:700;background:#fff;color:#475569;border-radius:99px;padding:1px 8px;}
+.pt-per{display:flex;gap:8px;align-items:center;}
+.pt .pt-filtros select.pt-ctl.pt-ano{width:104px;min-width:0;}
+.pt .pt-filtros select.pt-ctl.pt-mes{width:190px;}
+.pt .pt-filtros select.pt-ctl:disabled{opacity:.55;cursor:default;}
+.pt-ic-btn{width:40px;height:40px;flex:0 0 40px;border:1px solid #e2e8f0;background:#fff;border-radius:11px;color:#1e40af;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,transform .3s;}
+.pt-ic-btn:hover{background:#eff6ff;transform:rotate(-40deg);}
 .pt-nav.on .ct{background:rgba(255,255,255,.2);color:#fff;}
 .pt-main{flex:1;min-width:0;padding:24px 28px 44px;}
 .pt-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
@@ -26204,7 +26307,10 @@ function _ptCss(){
 @media (max-width:1180px){.pt-g4{grid-template-columns:repeat(2,minmax(0,1fr));} .pt-g3{grid-template-columns:repeat(2,minmax(0,1fr));} .pt-g21{grid-template-columns:minmax(0,1fr);}}
 @media (max-width:860px){
   .pt{flex-direction:column;}
-  .pt-side{position:sticky;top:0;z-index:5;flex:none;overflow-x:auto;border-right:none;border-bottom:1px solid #eceff4;padding:8px 10px;}
+  .pt-side{position:sticky;top:0;z-index:5;flex:none;overflow-x:auto;border-right:none;border-bottom:1px solid #d9e1ee;padding:8px 10px;}
+  .pt-per{width:100%;}
+  .pt .pt-filtros select.pt-ctl.pt-ano{width:96px;flex:0 0 96px;}
+  .pt .pt-filtros select.pt-ctl.pt-mes{flex:1;width:auto;}
   .pt-side-in{position:static;flex-direction:row;gap:4px;}
   .pt-side-tit{display:none;}
   .pt-nav{flex:0 0 auto;width:auto;white-space:nowrap;padding:9px 12px;}
@@ -26301,7 +26407,7 @@ function _ptMenu(){
       (id==='pessoas'?'<span class="ct">'+n+'</span>':'')+'</button>').join('')+
     '<div class="pt-side-tit">FERRAMENTAS</div>'+
     '<button class="pt-nav'+(_pontoMesesAberto?' on':'')+'" onclick="pontoMesesToggle()"><span class="ic">📅</span>Meses e arquivos</button>'+
-    (simixPronto()?'<button class="pt-nav" onclick="simixAtualizarAno()"><span class="ic">🔄</span>Atualizar o ano</button>':'')+
+    (simixPronto()?'<button class="pt-nav" onclick="simixAtualizarAno()"><span class="ic">🔄</span>Atualizar anos</button>':'')+
     (window.adminMode===true?'<button class="pt-nav" onclick="pdashAbrir(\'\')"><span class="ic">🧭</span>Painel da Equipe</button>':'')+
   '</div></aside>';
   return h;
@@ -26310,12 +26416,26 @@ function _ptMenu(){
 function _ptFiltros(){
   const meses=_pontoMesesComDados();
   const anos=[...new Set(meses.map(m=>m.split('-')[0]))].sort().reverse();
-  const opt=(v,t)=>'<option value="'+_pontoEsc(v)+'"'+(_pontoPer===v?' selected':'')+'>'+_pontoEsc(t)+'</option>';
-  const per='<select class="pt-ctl" onchange="pontoPeriodo(this.value)" title="Período">'+
-    '<optgroup label="Atalhos">'+opt('este','Este mês')+opt('passado','Mês passado')+opt('90','Últimos 90 dias')+opt('tudo','Todo o histórico')+'</optgroup>'+
-    anos.map(a=>'<optgroup label="'+a+'">'+opt('ano:'+a,'Ano inteiro de '+a)+
-      meses.filter(m=>m.indexOf(a+'-')===0).reverse().map(m=>opt('mes:'+m, PONTO_MES_NOMES[+m.split('-')[1]]+' de '+a)).join('')+'</optgroup>').join('')+
-    '<optgroup label="Outro">'+opt('custom','📅 Escolher as datas…')+'</optgroup></select>';
+  // ano e mês em listas separadas
+  const atual=new Date().getFullYear();
+  if(!anos.includes(String(atual))) anos.unshift(String(atual));
+  anos.sort().reverse();
+  const anoSel=_ptAnoSel(), mesSel=_ptMesSel();
+  const selAno='<select class="pt-ctl pt-ano" onchange="pontoAno(this.value)" title="Ano">'+
+    anos.map(a=>'<option value="'+a+'"'+(String(anoSel)===a?' selected':'')+'>'+a+'</option>').join('')+
+    '<option value="tudo"'+(anoSel==='tudo'?' selected':'')+'>Todo o histórico</option></select>';
+  const comDados=new Set(meses.filter(m=>m.indexOf(anoSel+'-')===0).map(m=>+m.slice(5)));
+  const selMes='<select class="pt-ctl pt-mes" onchange="pontoMes(this.value)" title="Mês"'+(anoSel==='tudo'?' disabled':'')+'>'+
+    '<option value="ano"'+(mesSel==='ano'?' selected':'')+'>Ano inteiro</option>'+
+    PONTO_MES_NOMES.slice(1,13).map((n,i)=>{ const m=i+1, tem=comDados.has(m);
+      return '<option value="'+m+'"'+(mesSel===m?' selected':'')+(tem?'':' disabled')+'>'+n+(tem?'':' · sem dados')+'</option>'; }).join('')+
+    '<option value="custom"'+(mesSel==='custom'?' selected':'')+'>📅 Escolher as datas…</option></select>';
+  const alvo=_simixMesDoBotao();
+  const recarregar=simixPronto()
+    ? '<button class="pt-ic-btn" onclick="simixRecarregarMes()" title="Buscar de novo '+PONTO_MES_NOMES[alvo.m]+'/'+alvo.ano+' no Símix" aria-label="Recarregar o mês pelo Símix">'+
+        '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg></button>'
+    : '';
+  const per='<div class="pt-per">'+selAno+selMes+recarregar+'</div>';
   const sets=pontoSetoresLista();
   const set='<select class="pt-ctl" onchange="pontoSetSetor(this.value)" title="Setor"><option value="">Todos os setores</option>'+
     sets.map(x=>'<option value="'+_pontoEsc(x)+'"'+(_pontoSetor===x?' selected':'')+'>'+_pontoEsc(x)+'</option>').join('')+'</select>';
@@ -26325,6 +26445,37 @@ function _ptFiltros(){
     '<div class="pt-sug" id="ponto-sug">'+_pontoSugestoes()+'</div></div>';
   return '<div class="pt-filtros">'+per+set+busca+'</div>';
 }
+
+/* Ano e mês que as listas mostram, a partir do período escolhido */
+function _ptAnoSel(){
+  if(_pontoPer==='tudo') return 'tudo';
+  if(_pontoPer.indexOf('mes:')===0 || _pontoPer.indexOf('ano:')===0) return +_pontoPer.slice(4,8);
+  const a=(_pontoAte||_pontoDe||'').slice(-4);
+  return a?+a:new Date().getFullYear();
+}
+function _ptMesSel(){
+  if(_pontoPer.indexOf('mes:')===0) return +_pontoPer.slice(9);
+  if(_pontoPer.indexOf('ano:')===0 || _pontoPer==='tudo') return 'ano';
+  return 'custom';
+}
+function pontoAno(a){
+  if(a==='tudo'){ _pontoAplicarPer('tudo'); renderPonto(); return; }
+  const m=_ptMesSel();
+  const ch=a+'-'+String(m).padStart(2,'0');
+  // mantém o mês escolhido, se o ano novo tiver dados dele
+  if(typeof m==='number' && ((pontoMeses[ch]||{}).ponto||[]).length) _pontoAplicarPer('mes:'+ch);
+  else _pontoAplicarPer('ano:'+a);
+  renderPonto();
+}
+window.pontoAno=pontoAno;
+function pontoMes(v){
+  const a=_ptAnoSel();
+  if(v==='custom'){ pontoPeriodo('custom'); return; }
+  if(v==='ano') _pontoAplicarPer('ano:'+a);
+  else _pontoAplicarPer('mes:'+a+'-'+String(v).padStart(2,'0'));
+  renderPonto();
+}
+window.pontoMes=pontoMes;
 
 function _ptDatas(){
   if(_pontoPer!=='custom') return '';
