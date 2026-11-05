@@ -24596,13 +24596,18 @@ const PONTO_MES_NOMES=['','Janeiro','Fevereiro','Março','Abril','Maio','Junho',
 /* Cada mês guarda 160 pessoas com 30 dias cada — alguns megabytes por
    documento. Carregar todos ao abrir o app derruba o celular, então só
    buscamos quando alguém entra no Controle de Ponto. */
-let _pontoCarregado=false, _pontoCarregando=false;
+let _pontoCarregado=false, _pontoCarregando=false, _pontoErro='';
 
 async function pontoCarregarMeses(){
   if(_pontoCarregado || _pontoCarregando) return;
   _pontoCarregando=true;
+  _pontoErro='';
   try{
-    const snap=await getDocs(collection(db,'pontoMeses'));
+    // sem resposta em 60 s, desiste e oferece tentar de novo
+    const snap=await Promise.race([
+      getDocs(collection(db,'pontoMeses')),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('O servidor demorou demais para responder.')),60000))
+    ]);
     pontoMeses={};
     _pontoPartesDocs={};
     const partes=[];
@@ -24626,7 +24631,7 @@ async function pontoCarregarMeses(){
       if(minhas.length!==m.partes) console.warn('pontoMeses '+ch+': esperava '+m.partes+' pedaço(s), achei '+minhas.length);
     });
     _pontoCarregado=true;
-  }catch(e){ console.error('pontoMeses',e); }
+  }catch(e){ console.error('pontoMeses',e); _pontoErro=(e&&e.message)||'Falha ao carregar.'; }
   _pontoCarregando=false;
   const t=document.querySelector('.screen.active')?.id;
   if(t==='s-ponto') renderPonto();
@@ -24634,6 +24639,8 @@ async function pontoCarregarMeses(){
   if(t==='s-ponto-dash') renderPdash();
 }
 window.pontoCarregarMeses=pontoCarregarMeses;
+function pontoTentarDeNovo(){ _pontoErro=''; renderPonto(); }
+window.pontoTentarDeNovo=pontoTentarDeNovo;
 
 /* Depois de gravar, recarrega para a tela mostrar o novo */
 async function _pontoRecarregar(){ _pontoCarregado=false; await pontoCarregarMeses(); }
@@ -25108,11 +25115,12 @@ async function simixImportarMes(){
 
   try{
     _simixProgresso('Gravando…');
-    await _simixGravarMes(_pmesSel, pessoas);
+    const g=await _simixGravarMes(_pmesSel, pessoas);
     await _pontoRecarregar();
     await _pontoLimparPartes(_pmesSel);
     _simixFecharProgresso();
-    alert('✓ '+pessoas.length+' pessoa(s) importadas direto do Símix.');
+    alert('✓ '+g.n+' pessoa(s) importadas direto do Símix.'+
+      (g.mantidos?('\n\n'+g.mantidos+' pessoa(s) desligada(s) mantida(s) da importação anterior — o Símix não manda mais o ponto delas.'):''));
   }catch(e){
     _simixFecharProgresso();
     alert('Busquei os dados mas não consegui salvar: '+e.message+
@@ -25123,13 +25131,38 @@ window.simixImportarMes=simixImportarMes;
 
 /* ── GRAVAR UM MÊS DO SÍMIX ──────────────────────────────────────
    Usado pela busca de um mês e pela atualização do ano inteiro. */
-async function _simixGravarMes(ch, pessoas){
+/* O Símix NÃO manda o ponto de quem já foi desligado — nem dos meses
+   em que a pessoa ainda trabalhava (conferido em out/2026: os 15
+   desligados vieram sem nenhuma linha, até quem saiu em 03/11).
+   Então buscar um mês de novo apagaria essas pessoas do histórico.
+   Para não perder: quem vem agora sem nenhum dia, mas tinha dias na
+   versão já gravada, continua com os dias antigos. */
+function _simixPreservar(ch, pessoas){
+  const antigo=((pontoMeses[ch]||{}).ponto||[]).filter(p=>(p.dias||[]).length);
+  if(!antigo.length) return {lista:pessoas, mantidos:0};
+  const chave=p=>String(p.codigo||'').trim()||_normNome(p.nome);
+  const velhos={}; antigo.forEach(p=>{ velhos[chave(p)]=p; });
+  let mantidos=0;
+  const lista=pessoas.map(p=>{
+    const v=velhos[chave(p)];
+    if((p.dias||[]).length || !v) return p;
+    mantidos++;
+    return {...v, setor:p.setor||v.setor, cargo:p.cargo||v.cargo, demissao:p.demissao||v.demissao||'', preservado:true};
+  });
+  const novos=new Set(pessoas.map(chave));
+  antigo.forEach(v=>{ if(!novos.has(chave(v))){ mantidos++; lista.push({...v, preservado:true}); } });
+  return {lista, mantidos};
+}
+
+async function _simixGravarMes(ch, entrada){
+  const {lista:pessoas, mantidos}=_simixPreservar(ch, entrada);
   const {lote, partes}=await _pontoGravarPartes(ch, pessoas);
   await setDoc(doc(db,'pontoMeses',ch),
     {ponto:[], partes, partesLote:lote, pontoArquivo:'Símix (automático)', origem:'simix',
      equipe:pessoas.map(p=>({nome:p.nome, cargo:p.cargo, setor:p.setor, admissao:p.admissao})),
      equipeArquivo:'Símix (automático)',
      pontoEm:agora(), pontoPor:_demAutor(), mes:ch},{merge:true});
+  return {n:pessoas.length, mantidos};
 }
 
 /* ── BUSCAR MESES NO SÍMIX ───────────────────────────────────────
@@ -25158,8 +25191,8 @@ async function _simixBaixarMeses(lista){
       const problema=_simixConferir(equipe, ponto, pessoas);
       if(problema){ res.push({ano, m, nome, st:'erro', msg:problema}); continue; }
       etapa('gravando '+pessoas.length+' pessoas…');
-      await _simixGravarMes(ch, pessoas);
-      res.push({ano, m, nome, st:'ok', n:pessoas.length, ch});
+      const g=await _simixGravarMes(ch, pessoas);
+      res.push({ano, m, nome, st:'ok', n:g.n, mantidos:g.mantidos, ch});
     }catch(e){
       res.push({ano, m, nome, st:'erro', msg:(e&&e.message)||String(e)});
     }
@@ -25189,7 +25222,7 @@ async function simixRecarregarMes(){
   if(simixSenha()===null) return;
   const res=await _simixBaixarMeses([alvo]);
   const r=res[0]||{};
-  if(r.st==='ok') _ptAviso('✓ '+r.nome+' atualizado · '+r.n+' pessoas');
+  if(r.st==='ok') _ptAviso('✓ '+r.nome+' atualizado · '+r.n+' pessoas'+(r.mantidos?(' · '+r.mantidos+' desligada(s) mantida(s)'):''));
   else if(r.st==='vazio') alert(r.nome+': o Símix ainda não tem marcações neste mês.');
   else if(r.st==='erro') alert(r.nome+': não atualizei.\n\n'+r.msg);
   renderPonto();
@@ -25274,6 +25307,8 @@ async function simixAtualizarAnosOk(){
     if(!r.length) return a+': não chegou a buscar';
     const ok=r.filter(x=>x.st==='ok'), vaz=r.filter(x=>x.st==='vazio'), err=r.filter(x=>x.st==='erro');
     let l=a+': '+(ok.length?('✓ '+ok.length+' mês(es) atualizado(s)'):'nenhum mês atualizado');
+    const mant=ok.reduce((t,x)=>t+(x.mantidos||0),0);
+    if(mant) l+='\n   '+mant+' registro(s) de pessoas desligadas mantidos da importação anterior';
     if(vaz.length) l+='\n   sem dados no Símix: '+vaz.map(x=>PONTO_MES_NOMES[x.m].slice(0,3)).join(', ');
     if(err.length) l+='\n   ⚠️ '+err.map(x=>PONTO_MES_NOMES[x.m].slice(0,3)+': '+x.msg).join('\n   ⚠️ ');
     return l;
@@ -25305,6 +25340,8 @@ function _simixMontar(equipe, ponto, anoMes){
       cargo:String(campo(e,'CargoNome','Cargo','CargoDesc')||'').trim(),
       setor:String(campo(e,'SetorNome','Setor','SetorDesc','DepaNome','Departamento')||'').trim(),
       admissao:_simixData(campo(e,'dtAdmissao','FuncAdmissao','Admissao','DataAdmissao')),
+      demissao:(()=>{ const t=String(campo(e,'dtDemissao','Demissao','DataDemissao')||'').slice(0,10);
+        return /^\d{4}-\d{2}-\d{2}$/.test(t)&&t>'1900'?t.split('-').reverse().join('/'):''; })(),
       horario:String(campo(e,'horarioDescricao','HorarioNome','Horario','EscalaNome')||'').trim()
     };
     if(cod) porCod[cod]=reg;
@@ -25325,7 +25362,7 @@ function _simixMontar(equipe, ponto, anoMes){
         codigo:cod||cad.codigo||'', nome:nome||cad.nome||'',
         cargo:cad.cargo||'',
         setor:cad.setor||String(campo(r,'setorNome')||'').trim(),
-        admissao:cad.admissao||'', horario:cad.horario||'',
+        admissao:cad.admissao||'', demissao:cad.demissao||'', horario:cad.horario||'',
         periodo:anoMes, emissao:null, dias:[],
         horasTrab:0, horasPrev:0, horasSaldo:0, horasFaltas:0, diasFaltas:0
       };
@@ -26269,7 +26306,7 @@ function _ptCss(){
 .pt-busca input{padding-left:36px;padding-right:34px;width:270px;}
 .pt-busca .lupa{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;opacity:.5;pointer-events:none;}
 .pt-busca .x{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:26px;height:26px;border:none;border-radius:50%;background:#f1f5f9;color:var(--pt-sub);cursor:pointer;font-size:12px;align-items:center;justify-content:center;}
-.pt-sug{position:absolute;top:46px;left:0;right:0;min-width:300px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 40px rgba(15,23,42,.14);z-index:30;padding:6px;max-height:360px;overflow:auto;}
+.pt-sug{position:absolute;top:46px;left:auto;right:0;width:400px;max-width:calc(100vw - 32px);background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 40px rgba(15,23,42,.14);z-index:30;padding:6px;max-height:360px;overflow:auto;}
 .pt-sug:empty{display:none;}
 .pt-sug button{display:flex;align-items:center;gap:10px;width:100%;border:none;background:transparent;padding:8px 9px;border-radius:9px;cursor:pointer;font-family:inherit;text-align:left;color:inherit;}
 .pt-sug button:hover{background:#f1f5f9;}
@@ -26318,6 +26355,8 @@ function _ptCss(){
 .pt-seg button.on{background:#fff;color:var(--pt-txt);box-shadow:0 1px 3px rgba(15,23,42,.1);}
 .pt-alerta{display:flex;align-items:center;gap:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:14px;padding:12px 16px;margin-bottom:16px;cursor:pointer;font-family:inherit;width:100%;text-align:left;color:#78350f;}
 .pt-vazio{text-align:center;padding:40px 16px;color:var(--pt-sub);}
+.pt-spin{width:46px;height:46px;margin:0 auto;border-radius:50%;border:4px solid #dbe3f1;border-top-color:#1e40af;animation:ptGira .8s linear infinite;}
+@keyframes ptGira{to{transform:rotate(360deg);}}
 .pt-nota{font-size:11.5px;color:var(--pt-mut);line-height:1.6;margin-top:12px;}
 .pt-barra{height:7px;background:#f1f5f9;border-radius:99px;overflow:hidden;}
 .pt-barra>div{height:100%;border-radius:99px;}
@@ -26395,9 +26434,29 @@ function renderPonto(){
   const el=document.getElementById('ponto-content'); if(!el) return;
   _ptCss();
   el.style.padding='0'; el.style.background='#f5f7fb';
-  if(_pontoCarregando && !Object.keys(pontoMeses).length){
-    el.innerHTML='<div class="pt"><div class="pt-main"><div class="pt-card pt-vazio"><div style="font-size:30px;">🕐</div>'+
-      '<div style="font-size:15px;font-weight:700;margin-top:8px;color:var(--pt-txt);">Carregando os meses…</div></div></div></div>';
+  /* Enquanto os meses não chegam, mostra só o "carregando" — antes a
+     tela abria vazia ("nenhum mês com dados") e só depois se enchia.
+     A própria tela pede os dados, venha de onde vier a navegação.
+     Em erro NÃO tenta de novo sozinha (evita o ciclo
+     desenhar → carregar → desenhar); espera o botão. */
+  if(!_pontoCarregado){
+    if(_pontoErro){
+      el.innerHTML='<div class="pt" style="min-height:70vh;align-items:center;justify-content:center;"><div class="pt-card" style="max-width:420px;text-align:center;padding:30px 26px;">'+
+        '<div style="font-size:34px;">⚠️</div>'+
+        '<div style="font-size:17px;font-weight:800;margin-top:10px;">Não consegui carregar o ponto</div>'+
+        '<div style="font-size:13px;color:var(--pt-sub);margin-top:6px;line-height:1.5;">'+_pontoEsc(_pontoErro)+'<br>Confira a internet e tente de novo.</div>'+
+        '<button class="pt-btn pri" style="margin-top:16px;height:40px;padding:0 22px;" onclick="pontoTentarDeNovo()">Tentar de novo</button></div></div>';
+      return;
+    }
+    if(!_pontoCarregando) pontoCarregarMeses();
+    if(!document.getElementById('pt-carregando')){
+      el.innerHTML='<div class="pt" id="pt-carregando" style="min-height:70vh;align-items:center;justify-content:center;">'+
+        '<div style="text-align:center;">'+
+          '<div class="pt-spin"></div>'+
+          '<div style="font-size:16px;font-weight:800;margin-top:18px;color:var(--pt-txt);">Carregando o controle de ponto…</div>'+
+          '<div style="font-size:13px;color:var(--pt-sub);margin-top:5px;">Buscando os meses gravados. Leva alguns segundos.</div>'+
+        '</div></div>';
+    }
     return;
   }
   const meses=_pontoMesesComDados();
@@ -26545,14 +26604,21 @@ function _pontoSugestoes(){
   const q=_normNome(_pontoBusca||'');
   if(q.length<2) return '';
   const todas={};
-  Object.keys(pontoMeses).sort().forEach(ch=>((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{ todas[String(p.codigo||p.nome)]={...p, setor:_pmesSetorDe(p,ch)||p.setor||''}; }));
+  Object.keys(pontoMeses).sort().forEach(ch=>((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+    const k=String(p.codigo||p.nome), ant=todas[k];
+    const dias=((ant&&ant._dias)||0)+(p.dias||[]).filter(d=>!d.foraDoPeriodo&&!d.folga).length;
+    todas[k]={...p, setor:_pmesSetorDe(p,ch)||p.setor||'', demissao:p.demissao||(ant&&ant.demissao)||'', _dias:dias};
+  }));
   const achados=Object.values(todas).filter(p=>
     (!_pontoSetor || p.setor===_pontoSetor) &&
     (_normNome(p.nome).includes(q) || _normNome(p.cargo||'').includes(q) || String(p.codigo).includes(_pontoBusca.trim()))
   ).sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome),'pt-BR')).slice(0,8);
   if(!achados.length) return '<div style="padding:12px;font-size:12.5px;color:#b45309;">Ninguém encontrado com “'+_pontoEsc(_pontoBusca)+'”.</div>';
   return achados.map(p=>'<button onclick="pontoVerPessoa(\''+escapeJsStr(p.codigo)+'\')">'+_ptQuem(p,32)+
-    '<span style="margin-left:auto;font-size:11.5px;color:var(--pt-brand);font-weight:700;white-space:nowrap;">ver ›</span></button>').join('');
+    '<span style="margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:3px;">'+
+      (p.demissao?_ptPill('desligado '+_pontoEsc(p.demissao.slice(0,5)),'gray',true):'')+
+      (!p._dias?_ptPill('sem ponto','amber',true):'<span style="font-size:11.5px;color:var(--pt-brand);font-weight:700;white-space:nowrap;">ver ›</span>')+
+    '</span></button>').join('');
 }
 window._pontoSugestoes=_pontoSugestoes;
 
@@ -27133,7 +27199,7 @@ function _pontoListaPessoas(){
         '<td class="c" style="color:#6d28d9;">'+(p._jorn.extra?_ptHh(p._jorn.extra):'—')+'</td>'+
         '<td class="c"><div style="display:flex;align-items:center;gap:8px;justify-content:center;"><div class="pt-barra" style="width:60px;"><div style="width:'+Math.max(0,Math.min(100,pc))+'%;background:'+tom+';"></div></div>'+
           '<b style="font-size:12px;color:'+tom+';min-width:44px;text-align:right;">'+_pontoPct(pc)+'%</b></div></td>'+
-        '<td>'+_ptStatus(p)+'</td>'+
+        '<td>'+_ptStatus(p)+(p.demissao?' '+_ptPill('desligado '+_pontoEsc(p.demissao.slice(0,5)),'gray',true):'')+'</td>'+
       '</tr>';
     }).join('')+'</tbody></table></div>';
   return _ptCard('Equipe', ps.length+' pessoa(s) · clique para ver o histórico', tab, dir);
@@ -27228,10 +27294,47 @@ function _pontoPorSetor(){
   return h;
 }
 
+/* Pessoa sem dias no período: explica o motivo e mostra onde há dados */
+function pontoVerTudo(){ _pontoAplicarPer('tudo'); renderPonto(); }
+window.pontoVerTudo=pontoVerTudo;
+function _ptSemDados(cod){
+  let info=null; const meses=[];
+  Object.keys(pontoMeses).sort().forEach(ch=>((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+    if(String(p.codigo)!==String(cod)) return;
+    info={...(info||{}), ...p, setor:_pmesSetorDe(p,ch)||p.setor||'', demissao:p.demissao||(info&&info.demissao)||''};
+    const n=(p.dias||[]).filter(d=>!d.foraDoPeriodo&&!d.folga).length;
+    if(n){ const [a,m]=ch.split('-'); meses.push(PONTO_MES_NOMES[+m].slice(0,3)+'/'+a+' ('+n+')'); }
+  }));
+  if(!info) info={nome:'Pessoa', codigo:cod};
+  let msg;
+  if(meses.length){
+    msg='<div style="font-size:15px;font-weight:700;">Sem marcações no período escolhido</div>'+
+      '<div style="font-size:13px;color:var(--pt-sub);margin-top:6px;line-height:1.6;">Há dados em: <b>'+meses.join(', ')+'</b></div>'+
+      '<button class="pt-btn pri" style="margin-top:14px;" onclick="pontoVerTudo()">Ver todo o histórico</button>';
+  } else {
+    msg='<div style="font-size:15px;font-weight:700;">Nenhuma marcação de ponto gravada</div>'+
+      '<div style="font-size:13px;color:var(--pt-sub);margin-top:6px;line-height:1.6;max-width:560px;">'+
+      (info.demissao
+        ? 'Esta pessoa está no <b>cadastro</b> do Símix, mas foi desligada em <b>'+_pontoEsc(info.demissao)+'</b>, e o Símix não envia o ponto de quem já saiu — nem dos meses em que ainda trabalhava. O pedido para incluir os desligados está com o suporte do Símix.'
+        : 'Esta pessoa está no <b>cadastro</b> do Símix, mas não veio nenhuma linha de ponto dela nos meses importados.')+
+      '</div>';
+  }
+  return '<div style="margin-bottom:14px;"><button class="pt-btn" onclick="pontoVoltar()">‹ Voltar</button></div>'+
+    '<div class="pt-card"><div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;">'+_ptAv(info.nome,68)+
+      '<div style="flex:1;min-width:200px;"><div style="font-size:22px;font-weight:800;">'+_pontoEsc(info.nome)+'</div>'+
+      '<div style="font-size:13.5px;color:#1d4ed8;font-weight:600;margin-top:2px;">'+_pontoEsc([info.cargo,info.setor].filter(Boolean).join(' · '))+'</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;">'+
+        '<span class="pt-pill t-gray np">código '+_pontoEsc(info.codigo)+'</span>'+
+        (info.admissao?'<span class="pt-pill t-gray np">admissão '+_pontoEsc(info.admissao)+'</span>':'')+
+        (info.demissao?'<span class="pt-pill t-red np">desligado em '+_pontoEsc(info.demissao)+'</span>':'')+
+      '</div></div></div>'+
+    '<div style="margin-top:18px;padding:16px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;">'+msg+'</div></div>';
+}
+
 /* ── UMA PESSOA ────────────────────────────────────────────────── */
 function _pontoDetalhe(){
   const p=pontoPessoas().find(x=>String(x.codigo)===String(_pontoPessoa));
-  if(!p){ _pontoPessoa=''; setTimeout(renderPonto,0); return ''; }
+  if(!p) return _ptSemDados(_pontoPessoa);
   const J=_pontoJornada(p);
   const dias=p.dias.slice().sort((a,b)=>_pontoDataNum(a.data,a._ano)-_pontoDataNum(b.data,b._ano));
   const chip=t=>'<span class="pt-pill t-gray np" style="font-weight:600;">'+t+'</span>';
@@ -27241,7 +27344,7 @@ function _pontoDetalhe(){
       _ptAv(p.nome,68)+
       '<div style="flex:1;min-width:200px;"><div style="font-size:22px;font-weight:800;letter-spacing:-.01em;">'+_pontoEsc(p.nome)+'</div>'+
         '<div style="font-size:13.5px;color:#1d4ed8;font-weight:600;margin-top:2px;">'+_pontoEsc([p.cargo,p.setor].filter(Boolean).join(' · '))+'</div>'+
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;">'+chip('código '+_pontoEsc(p.codigo))+(p.admissao?chip('admissão '+_pontoEsc(p.admissao)):'')+(p.horario?chip('🕐 '+_pontoEsc(p.horario)):'')+'</div></div>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;">'+chip('código '+_pontoEsc(p.codigo))+(p.admissao?chip('admissão '+_pontoEsc(p.admissao)):'')+(p.demissao?'<span class="pt-pill t-red np" style="font-weight:600;">desligado em '+_pontoEsc(p.demissao)+'</span>':'')+(p.horario?chip('🕐 '+_pontoEsc(p.horario)):'')+'</div></div>'+
       '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">'+_ptStatus({...p,_jorn:J})+
         '<button class="pt-btn" onclick="pontoDefinirSetor(\''+escapeJsStr(p.codigo)+'\')">🏭 '+(p.setor?'Trocar setor':'Definir setor')+'</button></div>'+
     '</div></div>';
