@@ -160,7 +160,7 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
   <button class="btn btn-primary" onclick="abrirProducoesAnteriores()" style="background:#9333ea">📅 Produções Anteriores</button>
   <button class="btn btn-primary" onclick="abrirDescontarVenda()" style="background:#ea580c">📉 Descontar Venda</button>
   <button class="btn btn-primary" onclick="abrirIncluirCF()" style="background:#7c3aed" title="Puxar um pedido C&amp;F para a coluna C&amp;F">🤝 Incluir C&amp;F</button>
-  <button class="btn btn-primary" onclick="abrirModalVendas()">📥 Importar Vendas</button>
+  <button class="btn btn-primary" id="btn-importar-vendas" onclick="abrirModalVendas()">📥 Importar Vendas</button>
   <button class="btn btn-success" onclick="abrirModalEstoque()">📦 Importar Estoque</button>
   <button class="btn btn-primary" onclick="gerarRelatorio()" style="background:var(--mc-roxo)">📄 Gerar Plano de Produção</button>
   <button class="btn btn-success" onclick="salvarPlano()">💾 Salvar Plano</button>
@@ -169,6 +169,8 @@ textarea{width:100%;height:300px;padding:12px;border:1px solid var(--border);bor
   <button class="btn btn-primary" onclick="abrirHistorico()">📚 Histórico</button>
   <button class="btn btn-danger" onclick="limparTudo()">🗑️ Limpar Tudo</button>
 </div>
+
+<div class="controls" id="base-venda" style="border-top:1px dashed #e5e7eb;"></div>
 
 <div class="table-wrap">
   <div class="table-scroll">
@@ -416,19 +418,18 @@ const diasSimulIgnorar = new Set(); // NOVO: dias da semana a DESCONSIDERAR na s
 const DIAS = ['Seg','Ter','Qua','Qui','Sex','Sáb','C&F'];
 const DIAS_VENDA = ['Seg','Ter','Qua','Qui','Sex','Sáb'];
 function mult(){ return parseFloat(document.getElementById('mult').value)||2; }
-function calcIdeal(p){ return Math.round((p.totalPeriodo||0)/4 * mult()); }
+function calcIdeal(p){ return Math.round(vendaSemanal(p) * mult()); }
 function calcPlanoTotal(cod){ 
   const pl = plano[cod] || {}; 
   const diasTotal = DIAS.reduce((s,d) => s + (parseInt(pl[d]) || 0), 0);
   const prodAntTotal = (parseInt(prodAntManual[cod]) || 0); // NOVO: incluir manual
   return diasTotal + prodAntTotal;
 }
-// NOVO: soma da venda média (das 4 semanas) dos dias selecionados para descontar
+// soma da venda média (da base escolhida) dos dias selecionados para descontar
 function calcDescontoVenda(p){
   if(!p || diasDescontar.size === 0) return 0;
-  const porDia = p.porDia || {};
   let soma = 0;
-  diasDescontar.forEach(d => { soma += (porDia[d] || 0) / 4; });
+  diasDescontar.forEach(d => { soma += vendaDiaMedia(p, d); });
   return Math.round(soma);
 }
 function calcSaldo(p){ return Math.round(p.estoque - calcDescontoVenda(p) + calcPlanoTotal(p.cod) + (parseInt(prodAntAutoMap[p.cod])||0) - calcIdeal(p)); }
@@ -437,6 +438,317 @@ function badgeCob(pct){
   if(pct>=100) return '<span class="badge b-verde">'+pct+'%</span>';
   if(pct>=70) return '<span class="badge b-laranja">'+pct+'%</span>';
   return '<span class="badge b-vermelho">'+pct+'%</span>';
+}
+
+
+/* ══ VENDAS A PARTIR DOS CARREGAMENTOS ══════════════════════════════
+   A venda não precisa mais ser importada: todo pedido passa pelo
+   Carregamento do ProduLog. Conta como venda o que foi LANÇADO no
+   carregamento (qtdSolicitada), dos carregamentos concluídos, no dia
+   em que foram concluídos (sem essa data, a data do carregamento).
+
+   A base da média é escolhida na tela: últimas N semanas fechadas
+   (segunda a domingo, antes da semana atual) ou datas à escolha.
+   A média semanal e a média de cada dia da semana saem dessa base —
+   antes era tudo dividido por 4, fixo.
+
+   O relatório importado continua disponível como reserva ("Fonte"). */
+const DIAS_JS=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+let _produtosBase=[];
+let _carregCache=null, _carregErro='', _carregCarregando=false;
+function _lsLer(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } }
+function _lsGravar(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+let _vendaFonte=_lsLer('plan_vendaFonte','carreg');
+let _vendaBase=(()=>{ try{ return JSON.parse(_lsLer('plan_vendaBase',''))||{tipo:'sem',n:4}; }catch(e){ return {tipo:'sem',n:4}; } })();
+let _baseInfo={de:null, ate:null, dias:28, ocorr:{}, label:'', nCarreg:0};
+/* Plano aberto do Histórico: os produtos e a base da média são os de
+   quando ele foi salvo. Sem isso, um plano salvo com 4 semanas,
+   reaberto com a base em 1 semana, teria o Ideal multiplicado por 4. */
+let _vendoHistorico=null;
+
+/* Base da média de um plano salvo (planos antigos: relatório, 4 semanas) */
+function _baseDoSalvo(b){
+  const quatro={de:null, ate:null, dias:28, ocorr:{Dom:0,Seg:4,Ter:4,Qua:4,Qui:4,Sex:4,'Sáb':4}, nCarreg:0};
+  if(!b || b.fonte!=='carreg') return {...quatro, label:(b&&b.descricao)||'relatório importado (4 semanas)'};
+  if(b.tipo==='datas'){
+    const de=_deIso(b.de), ate=_deIso(b.ate);
+    if(de && ate){
+      const dias=Math.round((ate-de)/864e5)+1, ocorr={}; DIAS_JS.forEach(d=>ocorr[d]=0);
+      for(let i=0;i<dias;i++){ const d=new Date(de); d.setDate(de.getDate()+i); ocorr[DIAS_JS[d.getDay()]]++; }
+      return {de, ate, dias, ocorr, nCarreg:0, label:b.descricao||''};
+    }
+  }
+  const n=parseInt(b.n)||Math.round(b.semanas)||4, ocorr={};
+  DIAS_JS.forEach(d=>ocorr[d]=n);
+  return {de:null, ate:null, dias:7*n, ocorr, nCarreg:0, label:b.descricao||(n+' semana(s)')};
+}
+
+function _codChave(c){
+  const s=String(c==null?'':c).trim();
+  return /^\d+$/.test(s) ? String(parseInt(s,10)) : s.toUpperCase();
+}
+function _dataCarreg(c){
+  const t=String(c.concluidoEm||c.data||'').trim();
+  const m=t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? new Date(+m[3], +m[2]-1, +m[1]) : null;
+}
+function _br(d){ return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'); }
+function _brAno(d){ return _br(d)+'/'+d.getFullYear(); }
+function _isoD(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _deIso(s){ const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m?new Date(+m[1],+m[2]-1,+m[3]):null; }
+
+/* Intervalo da base: [de, ate] em datas locais (ate inclusive) */
+function _baseIntervalo(){
+  if(_vendaBase.tipo==='datas'){
+    const de=_deIso(_vendaBase.de), ate=_deIso(_vendaBase.ate);
+    if(de && ate && de<=ate) return {de, ate};
+  }
+  const n=Math.max(1, parseInt(_vendaBase.n)||4);
+  const h=new Date(); h.setHours(0,0,0,0);
+  const seg=new Date(h); seg.setDate(h.getDate()-((h.getDay()+6)%7));   // segunda desta semana
+  const de=new Date(seg); de.setDate(seg.getDate()-7*n);
+  const ate=new Date(seg); ate.setDate(seg.getDate()-1);                // domingo passado
+  return {de, ate};
+}
+
+/* Soma os carregamentos concluídos entre de e ate, por produto */
+function _vendasCarreg(de, ate){
+  const porCod={}; let n=0;
+  const fim=new Date(ate); fim.setHours(23,59,59,999);
+  (_carregCache||[]).forEach(c=>{
+    if(c.status!=='concluido') return;
+    const d=_dataCarreg(c); if(!d || d<de || d>fim) return;
+    n++;
+    const dia=DIAS_JS[d.getDay()];
+    (c.itens||[]).forEach(it=>{
+      const q=parseFloat(String(it.qtdSolicitada).replace(',','.'))||0; if(q<=0) return;
+      const k=_codChave(it.codigo); if(!k) return;
+      const x=porCod[k]||(porCod[k]={totalPeriodo:0, porDia:{Seg:0,Ter:0,Qua:0,Qui:0,Sex:0,'Sáb':0}, _c:{}, nome:it.nome||'', codOrig:String(it.codigo).trim()});
+      x.totalPeriodo+=q;
+      if(x.porDia[dia]!==undefined) x.porDia[dia]+=q;
+      const rot=(c.nome||'Carregamento')+'|'+_br(d);
+      x._c[rot]=(x._c[rot]||0)+q;
+    });
+  });
+  Object.values(porCod).forEach(x=>{
+    x.topCarreg=Object.entries(x._c).map(([r,qtd])=>{ const i=r.lastIndexOf('|'); return {nome:r.slice(0,i), data:r.slice(i+1), qtd}; })
+      .sort((a,b)=>b.qtd-a.qtd).slice(0,5);
+    delete x._c;
+  });
+  return {porCod, n};
+}
+
+/* Monta a lista de produtos com a venda da fonte escolhida */
+function _montarProdutos(){
+  if(_vendoHistorico) return;      // mantém o plano do histórico como foi salvo
+  if(_vendaFonte!=='carreg'){
+    produtos=_produtosBase.map(p=>({...p}));
+    _baseInfo={de:null, ate:null, dias:28, ocorr:{Seg:4,Ter:4,Qua:4,Qui:4,Sex:4,'Sáb':4}, label:'relatório importado (4 semanas)', nCarreg:0};
+    return;
+  }
+  const {de, ate}=_baseIntervalo();
+  const dias=Math.round((ate-de)/864e5)+1;
+  const ocorr={}; DIAS_JS.forEach(d=>ocorr[d]=0);
+  for(let i=0;i<dias;i++){ const d=new Date(de); d.setDate(de.getDate()+i); ocorr[DIAS_JS[d.getDay()]]++; }
+  const {porCod, n}=_vendasCarreg(de, ate);
+  const sem=dias/7;
+  _baseInfo={de, ate, dias, ocorr, nCarreg:n,
+    label:_vendaBase.tipo==='datas'
+      ? (_brAno(de)+' a '+_brAno(ate)+' · '+(Number.isInteger(sem)?sem:sem.toFixed(1).replace('.',','))+' semana(s)')
+      : (((parseInt(_vendaBase.n)||4)===1?'última semana':'últimas '+(parseInt(_vendaBase.n)||4)+' semanas')+' · '+_brAno(de)+' a '+_brAno(ate))};
+  const vazio=()=>({Seg:0,Ter:0,Qua:0,Qui:0,Sex:0,'Sáb':0});
+  const usados=new Set();
+  produtos=_produtosBase.map(p=>{
+    const k=_codChave(p.cod), v=porCod[k]; usados.add(k);
+    return {...p, desc:p.desc||(v&&v.nome)||'', totalPeriodo:v?v.totalPeriodo:0, porDia:v?{...v.porDia}:vazio(), topCarreg:v?v.topCarreg:[]};
+  });
+  // produto que saiu em carregamento mas nunca foi importado no planejamento
+  Object.keys(porCod).forEach(k=>{
+    if(usados.has(k)) return;
+    const v=porCod[k];
+    const cod=/^\d+$/.test(v.codOrig) ? String(parseInt(v.codOrig,10)).padStart(2,'0') : v.codOrig;
+    produtos.push({id:cod, cod, desc:v.nome, setor:(parseInt(cod)<200?'quadra':'conf'), estoque:0,
+      totalPeriodo:v.totalPeriodo, porDia:{...v.porDia}, topCarreg:v.topCarreg, _soCarreg:true});
+  });
+}
+
+/* As médias usadas em todo o planejamento */
+function semanasBase(){ return Math.max((_baseInfo.dias||28)/7, 1/7); }
+function vendaSemanal(p){ return (p.totalPeriodo||0)/semanasBase(); }
+function vendaDiaMedia(p, dia){ const o=(_baseInfo.ocorr||{})[dia]||0; return o ? ((p.porDia||{})[dia]||0)/o : 0; }
+
+async function carregarCarregamentos(){
+  _carregCarregando=true; _carregErro=''; _renderBaseBar();
+  try{
+    const snap=await getDocs(collection(db,'carregamentos'));
+    _carregCache=snap.docs.map(d=>({id:d.id, ...d.data()}));
+  }catch(e){ console.error('carregamentos:',e); _carregErro=(e&&e.message)||'falha'; if(!_carregCache) _carregCache=[]; }
+  _carregCarregando=false;
+}
+window.planAtualizarVendas=async()=>{ _vendoHistorico=null; await carregarCarregamentos(); _montarProdutos(); render(); };
+window.planSairHistorico=()=>{ _vendoHistorico=null; _montarProdutos(); render(); };
+
+/* ── barra da base da média ── */
+function _renderBaseBar(){
+  const el=document.getElementById('base-venda'); if(!el) return;
+  const bVendas=document.getElementById('btn-importar-vendas');
+  if(bVendas) bVendas.style.display=_vendaFonte==='carreg'?'none':'';
+  if(_vendoHistorico){
+    el.innerHTML='<span style="font-size:12px;font-weight:700;">📚 Plano do histórico:</span>'+
+      '<span style="font-size:12px;">'+(_vendoHistorico.nome||'')+' · '+(_vendoHistorico.dataHora||'')+'</span>'+
+      '<span style="font-size:12px;color:var(--text-sec);">média de venda de quando foi salvo: '+(_baseInfo.label||'—')+'</span>'+
+      '<button class="btn btn-secondary" onclick="planSairHistorico()">↩ Voltar aos dados atuais</button>';
+    if(bVendas) bVendas.style.display='none';
+    return;
+  }
+  const opt=(v,t,sel)=>'<option value="'+v+'"'+(sel?' selected':'')+'>'+t+'</option>';
+  const nSel=_vendaBase.tipo==='sem'?String(parseInt(_vendaBase.n)||4):'datas';
+  let h='<span style="font-size:12px;font-weight:700;">🚚 Venda:</span>'+
+    '<select class="control-input" onchange="planFonte(this.value)" title="De onde vem a venda">'+
+      opt('carreg','Carregamentos do ProduLog',_vendaFonte==='carreg')+opt('relatorio','Relatório importado (antigo)',_vendaFonte!=='carreg')+'</select>';
+  if(_vendaFonte==='carreg'){
+    h+='<span style="font-size:12px;font-weight:700;margin-left:6px;">Base da média:</span>'+
+      '<select class="control-input" onchange="planBase(this.value)">'+
+        opt('1','Última semana',nSel==='1')+opt('2','Últimas 2 semanas',nSel==='2')+opt('3','Últimas 3 semanas',nSel==='3')+
+        opt('4','Últimas 4 semanas',nSel==='4')+opt('6','Últimas 6 semanas',nSel==='6')+opt('8','Últimas 8 semanas',nSel==='8')+
+        opt('datas','📅 Escolher as datas…',nSel==='datas')+'</select>';
+    if(_vendaBase.tipo==='datas'){
+      h+='<input type="date" id="base-de" class="control-input" value="'+(_vendaBase.de||'')+'">'+
+        '<span style="font-size:12px;">até</span><input type="date" id="base-ate" class="control-input" value="'+(_vendaBase.ate||'')+'">'+
+        '<button class="btn btn-primary" onclick="planBaseDatas()">Aplicar</button>';
+    }
+    const info=_carregCarregando?'buscando carregamentos…':
+      (_carregErro?('⚠️ não consegui ler os carregamentos: '+_carregErro):
+        (_baseInfo.label+' · '+_baseInfo.nCarreg+' carregamento(s)'));
+    h+='<span id="base-info" style="font-size:12px;color:'+(_carregErro?'#dc2626':(_baseInfo.nCarreg?'var(--text-sec)':'#b45309'))+';">'+info+
+        (!_carregCarregando && !_carregErro && !_baseInfo.nCarreg?' — nenhum carregamento concluído nesse período':'')+'</span>'+
+      '<button class="btn btn-secondary" onclick="planAtualizarVendas()" title="Buscar os carregamentos de novo">🔄</button>'+
+      '<button class="btn btn-primary" style="background:#0f766e" onclick="abrirForaPadrao()">📈 Vendas fora do padrão</button>';
+  } else {
+    h+='<span style="font-size:12px;color:var(--text-sec);">usa o relatório colado em "Importar Vendas", dividido por 4 semanas</span>';
+  }
+  el.innerHTML=h;
+}
+window.planFonte=v=>{ _vendoHistorico=null; _vendaFonte=v==='relatorio'?'relatorio':'carreg'; _lsGravar('plan_vendaFonte',_vendaFonte); _montarProdutos(); render(); };
+window.planBase=v=>{
+  _vendoHistorico=null;
+  if(v==='datas'){
+    const {de,ate}=_baseIntervalo();
+    _vendaBase={tipo:'datas', de:_vendaBase.de||_isoD(de), ate:_vendaBase.ate||_isoD(ate)};
+  } else _vendaBase={tipo:'sem', n:parseInt(v)||4};
+  _lsGravar('plan_vendaBase', JSON.stringify(_vendaBase));
+  _montarProdutos(); render();
+};
+window.planBaseDatas=()=>{
+  const de=(document.getElementById('base-de')||{}).value, ate=(document.getElementById('base-ate')||{}).value;
+  if(!_deIso(de)||!_deIso(ate)){ alert('Escolha as duas datas.'); return; }
+  if(de>ate){ alert('A data inicial é depois da final.'); return; }
+  _vendaBase={tipo:'datas', de, ate};
+  _vendoHistorico=null;
+  _lsGravar('plan_vendaBase', JSON.stringify(_vendaBase));
+  _montarProdutos(); render();
+};
+
+/* ── VENDAS FORA DO PADRÃO ─────────────────────────────────────────
+   Para cada produto e cada dia do período, compara a venda com a
+   média do MESMO dia da semana (sem contar o próprio dia). Comparar
+   com a média geral marcaria todo sábado forte como pico.
+   Só entram dias em que houve carregamento (feriado não vira "zero"). */
+let _fpCfg=(()=>{ try{ return JSON.parse(_lsLer('plan_foraPadrao',''))||null; }catch(e){ return null; } })()||{pct:30, min:20};
+window.abrirForaPadrao=()=>{
+  const {de,ate}=_baseIntervalo();
+  _fpCfg.de=_fpCfg.de||_isoD(de); _fpCfg.ate=_fpCfg.ate||_isoD(ate);
+  _fpCfg.setor=setorAtivo;
+  let ov=document.getElementById('fp-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='fp-ov'; ov.className='modal show'; document.body.appendChild(ov); }
+  ov.className='modal show';
+  _renderForaPadrao();
+};
+window.fecharForaPadrao=()=>{ document.getElementById('fp-ov')?.remove(); };
+window.fpAplicar=()=>{
+  const g=id=>(document.getElementById(id)||{}).value;
+  const de=g('fp-de'), ate=g('fp-ate');
+  if(!_deIso(de)||!_deIso(ate)||de>ate){ alert('Confira as datas.'); return; }
+  _fpCfg={de, ate, pct:Math.max(1,parseFloat(g('fp-pct'))||30), min:Math.max(0,parseFloat(g('fp-min'))||0), setor:g('fp-setor')||'todos'};
+  _lsGravar('plan_foraPadrao', JSON.stringify({pct:_fpCfg.pct, min:_fpCfg.min}));
+  _renderForaPadrao();
+};
+function _foraPadraoCalc(cfg){
+  const de=_deIso(cfg.de), ate=_deIso(cfg.ate); const fim=new Date(ate); fim.setHours(23,59,59,999);
+  const diasCom=new Set();            // dias em que houve carregamento
+  const porCod={};                    // k → {nome, dias:{iso:{q, c:{nome:q}}}}
+  (_carregCache||[]).forEach(c=>{
+    if(c.status!=='concluido') return;
+    const d=_dataCarreg(c); if(!d||d<de||d>fim) return;
+    const iso=_isoD(d); diasCom.add(iso);
+    (c.itens||[]).forEach(it=>{
+      const q=parseFloat(String(it.qtdSolicitada).replace(',','.'))||0; if(q<=0) return;
+      const k=_codChave(it.codigo);
+      const x=porCod[k]||(porCod[k]={nome:it.nome||'', dias:{}});
+      const dd=x.dias[iso]||(x.dias[iso]={q:0,c:{}});
+      dd.q+=q; const nm=c.nome||'Carregamento'; dd.c[nm]=(dd.c[nm]||0)+q;
+    });
+  });
+  // dias com carregamento, agrupados pelo dia da semana
+  const porSemana={}; [...diasCom].forEach(iso=>{ const w=DIAS_JS[_deIso(iso).getDay()]; (porSemana[w]=porSemana[w]||[]).push(iso); });
+  const setorDe={}, descDe={}; produtos.forEach(p=>{ setorDe[_codChave(p.cod)]=p.setor; descDe[_codChave(p.cod)]=p; });
+  const achados=[];
+  Object.keys(porCod).forEach(k=>{
+    const prod=descDe[k];
+    if(cfg.setor!=='todos' && (prod?prod.setor:'')!==cfg.setor) return;
+    const x=porCod[k];
+    Object.keys(x.dias).forEach(iso=>{
+      const v=x.dias[iso].q; if(v<cfg.min) return;
+      const w=DIAS_JS[_deIso(iso).getDay()];
+      const outros=(porSemana[w]||[]).filter(o=>o!==iso);
+      if(!outros.length) return;                          // sem base de comparação
+      const media=outros.reduce((t,o)=>t+((x.dias[o]||{}).q||0),0)/outros.length;
+      if(media>0 && v<media*(1+cfg.pct/100)) return;
+      const top=Object.entries(x.dias[iso].c).sort((a,b)=>b[1]-a[1]).slice(0,2);
+      achados.push({iso, w, cod:prod?prod.cod:k, nome:prod?(prod.desc||x.nome):x.nome, v, media, n:outros.length,
+        pct:media>0?Math.round((v/media-1)*100):null, top});
+    });
+  });
+  achados.sort((a,b)=>b.iso.localeCompare(a.iso) || (b.pct===null?1e9:b.pct)-(a.pct===null?1e9:a.pct));
+  return {achados, dias:diasCom.size};
+}
+function _renderForaPadrao(){
+  const ov=document.getElementById('fp-ov'); if(!ov) return;
+  const cfg=_fpCfg;
+  const {achados, dias}=_foraPadraoCalc(cfg);
+  const prods=new Set(achados.map(a=>a.cod)).size;
+  const so=(v,t)=>'<option value="'+v+'"'+(cfg.setor===v?' selected':'')+'>'+t+'</option>';
+  const lin=achados.map(a=>{
+    const d=_deIso(a.iso);
+    return '<tr>'+
+      '<td style="padding:8px;border-bottom:1px solid #eee;white-space:nowrap;"><b>'+_br(d)+'</b> <span style="color:#6b7280;font-size:12px;">'+a.w+'</span></td>'+
+      '<td style="padding:8px;border-bottom:1px solid #eee;"><span style="color:#6b7280;font-size:12px;">'+a.cod+'</span> '+a.nome+'</td>'+
+      '<td style="padding:8px;border-bottom:1px solid #eee;text-align:right;font-weight:800;">'+Math.round(a.v)+'</td>'+
+      '<td style="padding:8px;border-bottom:1px solid #eee;text-align:right;color:#6b7280;">'+Math.round(a.media)+' <span style="font-size:11px;">('+a.n+' '+a.w+')</span></td>'+
+      '<td style="padding:8px;border-bottom:1px solid #eee;text-align:right;"><span style="background:#fee2e2;color:#b91c1c;font-weight:800;border-radius:99px;padding:2px 9px;font-size:12px;">'+
+        (a.pct===null?'novo':'+'+a.pct+'%')+'</span><div style="font-size:11px;color:#6b7280;margin-top:2px;">+'+Math.round(a.v-a.media)+' pct</div></td>'+
+      '<td style="padding:8px;border-bottom:1px solid #eee;font-size:12px;color:#374151;">'+a.top.map(t=>t[0]+' <b>('+Math.round(t[1])+')</b>').join('<br>')+'</td>'+
+    '</tr>';
+  }).join('');
+  ov.innerHTML='<div style="background:#fff;border-radius:14px;max-width:1000px;width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;">'+
+    '<div style="padding:16px 18px;border-bottom:1px solid #eee;display:flex;align-items:center;gap:10px;">'+
+      '<div style="font-size:18px;font-weight:800;flex:1;">📈 Vendas fora do padrão</div>'+
+      '<button class="btn btn-secondary" onclick="fecharForaPadrao()">Fechar</button></div>'+
+    '<div style="padding:12px 18px;background:#f8fafc;border-bottom:1px solid #eee;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;">'+
+      '<b>Período</b><input type="date" id="fp-de" class="control-input" value="'+cfg.de+'"> até <input type="date" id="fp-ate" class="control-input" value="'+cfg.ate+'">'+
+      '<b style="margin-left:6px;">Avisar acima de</b><input type="number" id="fp-pct" class="control-input small" value="'+cfg.pct+'" min="1" step="5">% da média'+
+      '<b style="margin-left:6px;">Mínimo</b><input type="number" id="fp-min" class="control-input small" value="'+cfg.min+'" min="0" step="5"> pct'+
+      '<select id="fp-setor" class="control-input">'+so('quadra','🍞 Quadra')+so('conf','🥐 Confeitaria')+so('todos','Todos')+'</select>'+
+      '<button class="btn btn-primary" onclick="fpAplicar()">Aplicar</button></div>'+
+    '<div style="padding:10px 18px;font-size:13px;color:#374151;">'+
+      (achados.length?('<b>'+achados.length+'</b> venda(s) acima do padrão em <b>'+prods+'</b> produto(s)'):'Nenhuma venda acima do padrão nesse período 👍')+
+      ' · '+dias+' dia(s) com carregamento. Cada dia é comparado com a média do mesmo dia da semana no período.</div>'+
+    '<div style="overflow:auto;flex:1;padding:0 18px 16px;">'+
+      (achados.length?'<table class="fp-tab" style="width:100%;border-collapse:collapse;font-size:13px;"><style>.fp-tab th{color:#334155!important;background:#f1f5f9!important;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}</style><thead><tr style="background:#f1f5f9;text-align:left;">'+
+        '<th style="padding:8px;">Dia</th><th style="padding:8px;">Produto</th><th style="padding:8px;text-align:right;">Vendeu</th>'+
+        '<th style="padding:8px;text-align:right;">Média do dia</th><th style="padding:8px;text-align:right;">Acima</th><th style="padding:8px;">Principais carregamentos</th>'+
+      '</tr></thead><tbody>'+lin+'</tbody></table>':'')+
+    '</div></div>';
 }
 
 // NOVO: Simular estoque dia a dia
@@ -457,7 +769,7 @@ function simularEstoque(cod){
     // NOVO: dia desconsiderado = ignora SÓ a venda; a produção planejada continua contando
     const ignorarVenda = diasSimulIgnorar.has(dia);
     const producao = (plano[cod] || {})[dia] || 0;
-    const vendaMedia = ignorarVenda ? 0 : (porDia[dia] || 0) / 4;
+    const vendaMedia = ignorarVenda ? 0 : vendaDiaMedia(p, dia);
     const saldoAntigo = estoqueAtual;
     estoqueAtual = estoqueAtual + producao - vendaMedia;
     
@@ -485,7 +797,8 @@ function temFaltaEstoque(cod){
 
 // Listener Firebase
 onSnapshot(collection(db, 'planejProdutos'), snap => {
-  produtos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+  _produtosBase = snap.docs.map(d => ({id: d.id, ...d.data()}));
+  _montarProdutos();
   console.log('📊 Produtos carregados:', produtos.length);
   render();
 });
@@ -581,6 +894,7 @@ async function render(){
   
   // Prod. Ant. (AUTO) calculada do cache — instantânea, sem delay nem race condition
   atualizarProdAntAutoMap();
+  _renderBaseBar();
   
   let lista = produtos.filter(p => p.setor === setorAtivo);
   if(filtro==='ativos') lista = lista.filter(p => (p.totalPeriodo||0) > 0);
@@ -643,7 +957,7 @@ async function render(){
       '<td><span class="prod-name" onclick="abrirDetalhe(\''+p.cod+'\')">'+p.desc+'</span>'+(classeDe(p.cod)?' <span class="badge b-azul">'+classeDe(p.cod)+'</span>':'')+' <button class="btn-mover" title="Mover para '+(setorAtivo==='quadra'?'Confeitaria':'Quadra')+'" onclick="moverProduto(\''+p.cod+'\')">→ '+(setorAtivo==='quadra'?'Conf':'Quadra')+'</button></td>'+
       '<td class="num">'+p.estoque+'</td>'+
       '<td class="num" id="desc-venda-'+p.cod+'" style="font-weight:700;color:'+(calcDescontoVenda(p)>0?'var(--mc-vermelho)':'var(--text-mut)')+'">'+(calcDescontoVenda(p)>0?'-'+calcDescontoVenda(p):'0')+'</td>'+
-      '<td class="num">'+Math.round((p.totalPeriodo||0)/4)+'</td>'+
+      '<td class="num">'+Math.round(vendaSemanal(p))+'</td>'+
       '<td class="num"><strong>'+ideal+'</strong></td>'+
       '<td>'+(maxDia?'<span class="badge '+(picoPct>=40?'b-laranja':'b-azul')+'">'+maxDia+' '+picoPct+'%</span>':'-')+'</td>'+
       '<td class="num" id="prodant-auto-'+p.cod+'" style="background:#e0f2fe;font-weight:700;color:var(--mc-azul)">-</td>'+
@@ -889,7 +1203,7 @@ window.abrirDescontarVenda = () => {
     // venda média total daquele dia somando todos os produtos do setor ativo (referência)
     const totalDiaSetor = produtos
       .filter(p => p.setor === setorAtivo)
-      .reduce((s,p) => s + ((p.porDia && p.porDia[dia]) ? p.porDia[dia] : 0), 0) / 4;
+      .reduce((s,p) => s + vendaDiaMedia(p, dia), 0);
     html += '<label style="display:flex;align-items:center;padding:10px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:'+(isSelected?'#fed7aa':'#f9fafb')+'">';
     html += '<input type="checkbox" id="diadesc-'+dia+'" '+(isSelected?'checked':'')+' onchange="selecionarDiaDesconto(\''+dia+'\')" style="margin-right:10px;width:18px;height:18px;cursor:pointer">';
     html += '<div style="flex:1"><strong>'+(NOMES[dia]||dia)+'</strong> <span style="color:#666;font-size:12px">(venda média '+setorAtivo+': '+Math.round(totalDiaSetor)+' pcts/dia no total)</span></div>';
@@ -1327,7 +1641,7 @@ window.exportarParaExcel = async () => {
       const descVenda = calcDescontoVenda(p);
 
       // Usar as MESMAS fórmulas da tela para o Excel bater 100%
-      const medSem = Math.round((p.totalPeriodo || 0) / 4);
+      const medSem = Math.round(vendaSemanal(p));
       const ideal = calcIdeal(p);
       const totalPlano = calcPlanoTotal(p.cod); // dias + prod. ant. manual (igual à coluna "Total" da tela)
       const saldo = calcSaldo(p);   // inclui auto, manual, desconto de venda e ideal
@@ -1448,7 +1762,8 @@ window.salvarPlano = async () => {
     estoque: p.estoque || 0,
     totalPeriodo: p.totalPeriodo || 0,
     porDia: p.porDia || {Seg:0, Ter:0, Qua:0, Qui:0, Sex:0, Sáb:0},
-    topClientes: p.topClientes || []
+    topClientes: p.topClientes || [],
+    topCarreg: p.topCarreg || []
   }));
   
   console.log('Snapshot:', produtosSnapshot.length, 'produtos');
@@ -1465,6 +1780,7 @@ window.salvarPlano = async () => {
     diasDescontar: [...diasDescontar],
     diasSimulIgnorar: [...diasSimulIgnorar],
     producoesAnteriores: {...producoesAnteriores},
+    baseVenda: {fonte:_vendaFonte, ...(_vendaBase||{}), descricao:_baseInfo.label||'', semanas:semanasBase()},
     produtos: produtosSnapshot
   };
   
@@ -1571,6 +1887,8 @@ window.carregarPlano = async (id) => {
     // NOVO: Restaurar produtos (snapshot completo)
     if(data.produtos && data.produtos.length > 0){
       produtos = [...data.produtos];
+      _baseInfo = _baseDoSalvo(data.baseVenda);
+      _vendoHistorico = {nome:data.nome||'', dataHora:data.dataHora||''};
       console.log('✅ Produtos restaurados do snapshot:', produtos.length);
     }
     
@@ -1611,10 +1929,8 @@ window.abrirDetalhe = (cod) => {
   
   const ideal = calcIdeal(p);
   const porDia = p.porDia || {};
+  const topCarreg = p.topCarreg || [];
   const topClientes = p.topClientes || [];
-  
-  // Calcular número de semanas (assumir 4 por padrão)
-  const numSemanas = 4;
   
   // Calcular max para os gráficos
   const dias = ['Seg','Ter','Qua','Qui','Sex'];
@@ -1622,7 +1938,7 @@ window.abrirDetalhe = (cod) => {
   const maxVenda = Math.max(...valores, 1);
   
   // NOVO: Calcular médias por dia
-  const medias = dias.map(d => Math.round((porDia[d] || 0) / numSemanas));
+  const medias = dias.map(d => Math.round(vendaDiaMedia(p, d)));
   const maxMedia = Math.max(...medias, 1);
   
   // Montar barras de TOTAL por dia
@@ -1650,10 +1966,15 @@ window.abrirDetalhe = (cod) => {
     '</div>';
   }).join('');
   
-  // Montar lista de clientes
-  const clientesHtml = topClientes.length > 0
-    ? topClientes.map(c => '<div class="cliente-row"><div>'+c.nome+'</div><div style="font-weight:700;color:var(--mc-azul)">'+Math.round(c.qtd)+'</div></div>').join('')
-    : '<div style="color:var(--text-sec);font-style:italic;padding:8px">Sem dados de clientes</div>';
+  // Top carregamentos (antes: top clientes, que vinham do relatório importado)
+  const usaCarreg = _vendaFonte === 'carreg';
+  const clientesHtml = usaCarreg
+    ? (topCarreg.length > 0
+        ? topCarreg.map(c => '<div class="cliente-row"><div>'+c.nome+' <span style="color:var(--text-sec);font-size:11px">'+(c.data||'')+'</span></div><div style="font-weight:700;color:var(--mc-azul)">'+Math.round(c.qtd)+'</div></div>').join('')
+        : '<div style="color:var(--text-sec);font-style:italic;padding:8px">Nenhum carregamento com este produto no período</div>')
+    : (topClientes.length > 0
+        ? topClientes.map(c => '<div class="cliente-row"><div>'+c.nome+'</div><div style="font-weight:700;color:var(--mc-azul)">'+Math.round(c.qtd)+'</div></div>').join('')
+        : '<div style="color:var(--text-sec);font-style:italic;padding:8px">Sem dados de clientes</div>');
   
   const destinoLabel = p.setor === 'quadra' ? '🥐 Confeitaria' : '🍞 Quadra';
   document.getElementById('modal-detalhe-title').textContent = '['+p.cod+'] '+p.desc;
@@ -1663,12 +1984,13 @@ window.abrirDetalhe = (cod) => {
     '</div>'+
     '<div class="stat-grid">'+
       '<div class="stat-card"><div class="stat-label">Estoque atual</div><div class="stat-value">'+p.estoque+'</div></div>'+
-      '<div class="stat-card"><div class="stat-label">Média semanal</div><div class="stat-value">'+Math.round((p.totalPeriodo||0)/4)+'</div></div>'+
+      '<div class="stat-card"><div class="stat-label">Média semanal</div><div class="stat-value">'+Math.round(vendaSemanal(p))+'</div></div>'+
       '<div class="stat-card"><div class="stat-label">Ideal (×'+mult()+')</div><div class="stat-value">'+ideal+'</div></div>'+
     '</div>'+
-    '<div class="modal-section"><h3>📊 Total acumulado por dia da semana ('+numSemanas+' semanas)</h3>'+barsTotalDias+'</div>'+
+    '<div style="font-size:12px;color:var(--text-sec);margin:-4px 0 10px;">Base da média: '+_baseInfo.label+'</div>'+
+    '<div class="modal-section"><h3>📊 Total acumulado por dia da semana</h3>'+barsTotalDias+'</div>'+
     '<div class="modal-section"><h3>📈 Média por dia da semana</h3>'+barsMediaDias+'</div>'+
-    '<div class="modal-section"><h3>👥 Top clientes do produto</h3><div class="cliente-list">'+clientesHtml+'</div></div>';
+    '<div class="modal-section"><h3>'+(usaCarreg?'🚚 Top carregamentos do produto':'👥 Top clientes do produto')+'</h3><div class="cliente-list">'+clientesHtml+'</div></div>';
   
   document.getElementById('modal-detalhe').classList.add('show');
 };
@@ -1949,7 +2271,11 @@ window.plDiag = async () => {
   document.body.appendChild(ov);
 };
 
-function iniciar(){ carregarRegistros().then(render).catch(e=>console.error('carregar:',e)); }
+function iniciar(){
+  Promise.all([carregarRegistros(), carregarCarregamentos()])
+    .then(()=>{ _montarProdutos(); render(); })
+    .catch(e=>console.error('carregar:',e));
+}
 window.iniciar=iniciar;
 </script>
 
