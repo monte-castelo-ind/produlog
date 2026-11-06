@@ -5599,6 +5599,17 @@ function _plAplicarConta(){
     const m=(b.getAttribute('onclick')||'').match(/abrirPin\('([^']+)'\)/); if(!m) return;
     b.style.display=_plSetorPermitido(m[1])?'':'none';
   });
+  /* Prioridades não tem senha, então não passa pela lista acima e
+     aparecia para todas as contas (até para o RH). Fica visível para
+     quem vê todos os setores e para quem trabalha com ela: embalagem,
+     Patrick e admin — os mesmos que recebem o aviso de prioridade. */
+  const prio=document.querySelector('#s-inicio [onclick="goTo(\'s-prioridades\')"]');
+  if(prio){
+    const l=(_plConta && Array.isArray(_plConta.produlogSetores)) ? _plConta.produlogSetores : [];
+    const ve=(_plConta && _plConta.role==='admin') || !l.length ||
+      ['embalagem','patrick','admin','prioridades'].some(x=>l.indexOf(x)>=0);
+    prio.style.display=ve?'':'none';
+  }
   const card=document.getElementById('pl-card-acessos');
   if(card) card.style.display=(_plConta && _plConta.role==='admin')?'':'none';
   const conta=document.getElementById('pl-conta');
