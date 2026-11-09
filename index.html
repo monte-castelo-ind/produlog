@@ -7820,7 +7820,7 @@ function _pprMetricas(setor, dias){
 }
 
 /* ── navegação ── */
-function pprIr(s){ _pprSetor=s; renderPpr(); document.getElementById('ppr-content')?.scrollTo?.(0,0); }
+function pprIr(s){ _pprSetor=s; if(typeof _pprVProd!=='undefined') _pprVProd=''; renderPpr(); document.getElementById('ppr-content')?.scrollTo?.(0,0); }
 window.pprIr=pprIr;
 function pprPeriodo(v){ _pprPer=v; renderPpr(); }
 window.pprPeriodo=pprPeriodo;
@@ -8028,6 +8028,144 @@ async function pprSalvarMapa(){
 }
 window.pprSalvarMapa=pprSalvarMapa;
 
+
+/* ── UM PRODUTO, A FUNDO ─────────────────────────────────────────────
+   Ao tocar num produto das vendas fora do padrão: a venda dele ao longo
+   do tempo, contra a média que o app usa para comparar, e o quanto
+   oscila. Só contam dias em que houve carregamento (dia sem nenhum
+   carregamento é folga/feriado, não "venda zero"). */
+let _pprVProd='', _pprPPer='60', _pprPAgr='dia', _pprPSem='todos', _pprPDe='', _pprPAte='';
+function pprVProd(k){ _pprVProd=k; renderPpr(); document.getElementById('ppr-content')?.scrollTo?.(0,0); }
+window.pprVProd=pprVProd;
+function pprPOpc(campo, v){
+  if(campo==='per') _pprPPer=v; else if(campo==='agr') _pprPAgr=v; else if(campo==='sem') _pprPSem=v;
+  renderPpr();
+}
+window.pprPOpc=pprPOpc;
+function pprPDatas(){
+  const de=(document.getElementById('pprp-de')||{}).value, ate=(document.getElementById('pprp-ate')||{}).value;
+  if(!de||!ate||de>ate){ alert('Confira as datas.'); return; }
+  _pprPDe=de; _pprPAte=ate; _pprPPer='datas'; renderPpr();
+}
+window.pprPDatas=pprPDatas;
+
+function _pprProdutoTela(mapa){
+  const k=_pprVProd;
+  const N=Math.max(1,parseInt(_pprCfg.semanas)||4), pct=Number(_pprCfg.pct)||30, min=Number(_pprCfg.min)||0;
+  // período
+  const h=new Date(); h.setHours(12,0,0,0);
+  let de, ate=new Date(h);
+  if(_pprPPer==='datas' && _pprPDe && _pprPAte){ de=new Date(_pprPDe+'T12:00:00'); ate=new Date(_pprPAte+'T12:00:00'); }
+  else { de=new Date(h); de.setDate(h.getDate()-((parseInt(_pprPPer)||60)-1)); }
+  const dias=[]; for(let d=new Date(de); d<=ate; d.setDate(d.getDate()+1)){ const s=_pprBR(d); if(mapa[s]) dias.push({s, d:new Date(d)}); }
+
+  // nome e código: do primeiro dia em que aparece
+  let nome='', cod='';
+  Object.keys(mapa).some(s=>{ const x=mapa[s][k]; if(x){ nome=x.nome; cod=x.cod; return true; } return false; });
+  const venda=s=>((mapa[s]||{})[k]||{q:0}).q;
+  // a média que o relatório usa naquele dia: mesmo dia da semana, N semanas antes
+  const mediaRef=d=>{ const b=[]; for(let i=1;i<=N;i++){ const x=new Date(d); x.setDate(d.getDate()-7*i); const s=_pprBR(x); if(mapa[s]) b.push(venda(s)); } return b.length?b.reduce((t,v)=>t+v,0)/b.length:null; };
+
+  const linhasDia=dias.map(x=>{ const v=venda(x.s), m=mediaRef(x.d);
+    const acima=v>=min && m!==null && (m>0 ? v>=m*(1+pct/100) : v>=min);
+    return {...x, v, m, acima, w:_PPR_SEM[x.d.getDay()]}; });
+  const filtrados=_pprPSem==='todos'?linhasDia:linhasDia.filter(x=>x.w===_pprPSem);
+  const vals=filtrados.map(x=>x.v);
+  const tot=vals.reduce((t,v)=>t+v,0);
+  const med=vals.length?tot/vals.length:0;
+  /* Oscilação: quanto cada dia foge da média do SEU dia da semana. Sábado
+     sempre forte não é oscilação — é o padrão; o que conta é o sábado
+     que foge dos outros sábados. */
+  const mSem={}; ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].forEach(w=>{ const l=linhasDia.filter(x=>x.w===w); if(l.length) mSem[w]=l.reduce((t,x)=>t+x.v,0)/l.length; });
+  const dp=filtrados.length>1?Math.sqrt(filtrados.reduce((t,x)=>t+Math.pow(x.v-(mSem[x.w]||0),2),0)/(filtrados.length-1)):0;
+  const osc=med?dp/med*100:0;
+  const maior=filtrados.slice().sort((a,b)=>b.v-a.v)[0];
+  const nAcima=filtrados.filter(x=>x.acima).length;
+  const fmt=v=>Math.round(v).toLocaleString('pt-BR');
+
+  // cabeçalho e filtros
+  const segP=[['30','30 dias'],['60','60 dias'],['90','90 dias'],['180','6 meses'],['datas','📅 Datas']];
+  const segA=[['dia','Dia'],['semana','Semana'],['mes','Mês'],['dsem','Dia da semana']];
+  let html='<div style="margin-bottom:14px;"><button class="pt-btn" onclick="pprVProd(\'\')">‹ Voltar às vendas fora do padrão</button></div>'+
+    '<div class="pt-head"><div><h1>'+(cod?'<span style="color:#94a3b8;font-weight:600;font-size:18px;">'+cod+'</span> ':'')+(nome||'Produto')+'</h1>'+
+      '<p>'+(dias.length?(dias[0].s+' a '+dias[dias.length-1].s+' · '+dias.length+' dia(s) com carregamento'):'sem carregamentos no período')+'</p></div>'+
+    '<div class="pt-filtros"><div class="pt-seg">'+segP.map(([v,t])=>'<button class="'+(_pprPPer===v?'on':'')+'" onclick="pprPOpc(\'per\',\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
+  if(_pprPPer==='datas') html+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="pprp-de" value="'+_pprPDe+'"><label>até</label><input class="pt-ctl" type="date" id="pprp-ate" value="'+_pprPAte+'">'+
+    '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="pprPDatas()">Aplicar</button></div>';
+
+  html+='<div class="pt-grid pt-g4">'+
+    _ptKpi('🚚','blue', fmt(tot), 'Vendido no período', _pprPSem==='todos'?(filtrados.length+' dia(s)'):('só '+_pprPSem.toLowerCase()+' · '+filtrados.length+' dia(s)'))+
+    _ptKpi('📊','violet', fmt(med), 'Média por dia', 'dias com carregamento, contando os de venda zero')+
+    _ptKpi('〰️', osc>60?'red':(osc>30?'amber':'green'), Math.round(osc)+'%', 'Oscilação', (osc>60?'muito irregular':(osc>30?'oscila bastante':'venda estável'))+' · desvio de '+fmt(dp)+' pct')+
+    _ptKpi('📈', nAcima?'red':'green', nAcima, 'Dias fora do padrão', maior?('maior venda: '+fmt(maior.v)+' em '+maior.s.slice(0,5)+' '+maior.w.toLowerCase()):'')+
+  '</div>';
+
+  // gráfico
+  let rot=[], vV=[], vM=[], tituloG='';
+  if(_pprPAgr==='dia'){
+    rot=filtrados.map(x=>x.s.slice(0,5)); vV=filtrados.map(x=>x.v); vM=filtrados.map(x=>x.m);
+    tituloG='Venda de cada dia contra a média das '+N+' semanas anteriores (a régua do relatório)';
+  } else if(_pprPAgr==='dsem'){
+    const ord=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+    ord.forEach(w=>{ const l=linhasDia.filter(x=>x.w===w); if(!l.length) return;
+      rot.push(w); vV.push(l.reduce((t,x)=>t+x.v,0)/l.length); vM.push(Math.max(...l.map(x=>x.v))); });
+    tituloG='Média por dia da semana (linha) e a maior venda de cada dia da semana (tracejado)';
+  } else {
+    const g=[], idx={};
+    filtrados.forEach(x=>{
+      let kk, r;
+      if(_pprPAgr==='mes'){ kk=x.d.getFullYear()+'-'+x.d.getMonth(); r=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][x.d.getMonth()]+'/'+String(x.d.getFullYear()).slice(2); }
+      else { const s=new Date(x.d); s.setDate(x.d.getDate()-((x.d.getDay()+6)%7)); kk=_pprISO(s); r='sem '+_pprBR(s).slice(0,5); }
+      if(idx[kk]===undefined){ idx[kk]=g.length; g.push({r, t:0, n:0}); }
+      g[idx[kk]].t+=x.v; g[idx[kk]].n++;
+    });
+    rot=g.map(x=>x.r); vV=g.map(x=>x.t);
+    const mg=g.length?g.reduce((t,x)=>t+x.t,0)/g.length:0; vM=g.map(()=>mg);
+    tituloG='Total vendido por '+(_pprPAgr==='mes'?'mês':'semana')+' · tracejado = média do período';
+  }
+  const segAg='<div class="pt-seg">'+segA.map(([v,t])=>'<button class="'+(_pprPAgr===v?'on':'')+'" onclick="pprPOpc(\'agr\',\''+v+'\')">'+t+'</button>').join('')+'</div>';
+  const semanas=['todos','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const segS=(_pprPAgr==='dia'||_pprPAgr==='semana'||_pprPAgr==='mes')?'<div class="pt-seg">'+semanas.map(w=>'<button class="'+(_pprPSem===w?'on':'')+'" onclick="pprPOpc(\'sem\',\''+w+'\')">'+(w==='todos'?'Todos os dias':w)+'</button>').join('')+'</div>':'';
+  const leg='<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#334155;margin:-4px 0 8px;">'+
+    '<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:20px;height:3px;border-radius:2px;background:#2563eb;"></span>'+(_pprPAgr==='dsem'?'média do dia da semana':'vendido')+'</span>'+
+    '<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:20px;border-top:2.5px dashed #ea8a0c;"></span>'+(_pprPAgr==='dia'?'média de referência ('+N+' semanas)':(_pprPAgr==='dsem'?'maior venda':'média do período'))+'</span>'+
+    (_pprPAgr==='dia'?'<span style="color:#94a3b8;">· acima de '+pct+'% da média e de '+min+' pct vira alerta</span>':'')+'</div>';
+  html+='<div class="pt-grid">'+_ptCard('Evolução da venda', tituloG,
+    rot.length?leg+_ptGrafico([{nome:'Vendido', cor:'#2563eb', vals:vV},{nome:'Média', cor:'#ea8a0c', vals:vM, tracejado:true}], rot, v=>fmt(v), {valores:rot.length<=31?'todos':'fim', id:'pprp', largo:1100, alto:280})
+      :'<div class="pt-vazio">Sem dados no período.</div>', segAg+segS)+'</div>';
+
+  // por dia da semana + carregamentos
+  const ord=['Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const porSem=ord.map(w=>{ const l=linhasDia.filter(x=>x.w===w).map(x=>x.v); if(!l.length) return null;
+    const m=l.reduce((t,v)=>t+v,0)/l.length; return {w, n:l.length, m, mi:Math.min(...l), ma:Math.max(...l)}; }).filter(Boolean);
+  const maxM=Math.max(1,...porSem.map(x=>x.ma));
+  const semH=porSem.length?'<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Dia</th><th class="c">Média</th><th>Faixa (menor → maior)</th><th class="c">Dias</th></tr></thead><tbody>'+
+    porSem.map(x=>'<tr><td><b>'+x.w+'</b></td><td class="c" style="font-weight:800;">'+fmt(x.m)+'</td>'+
+      '<td><div style="position:relative;height:10px;width:180px;background:#f1f5f9;border-radius:99px;">'+
+        '<div style="position:absolute;left:'+(x.mi/maxM*100)+'%;width:'+Math.max(2,(x.ma-x.mi)/maxM*100)+'%;top:0;bottom:0;background:#bfdbfe;border-radius:99px;"></div>'+
+        '<div style="position:absolute;left:calc('+(x.m/maxM*100)+'% - 4px);top:-2px;width:8px;height:14px;border-radius:3px;background:#2563eb;"></div></div>'+
+        '<div style="font-size:11px;color:#94a3b8;margin-top:3px;">'+fmt(x.mi)+' → '+fmt(x.ma)+'</div></td>'+
+      '<td class="c" style="color:#64748b;">'+x.n+'</td></tr>').join('')+'</tbody></table></div>'
+    :'<div class="pt-vazio" style="padding:16px;">Sem dados.</div>';
+  const carr={}; filtrados.forEach(x=>{ const it=(mapa[x.s]||{})[k]; if(it) Object.entries(it.c).forEach(([n,q])=>{ carr[n]=(carr[n]||0)+q; }); });
+  const topC=Object.entries(carr).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const carrH=topC.length?'<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Carregamento</th><th class="c">Pacotes</th><th class="c">Parte</th></tr></thead><tbody>'+
+    topC.map(([n,q])=>'<tr><td style="font-weight:600;">'+n+'</td><td class="c" style="font-weight:800;">'+fmt(q)+'</td><td class="c" style="color:#64748b;">'+(tot?Math.round(q/tot*100):0)+'%</td></tr>').join('')+'</tbody></table></div>'
+    :'<div class="pt-vazio" style="padding:16px;">Nenhum carregamento com este produto.</div>';
+  html+='<div class="pt-grid pt-g21">'+_ptCard('Por dia da semana','média e a faixa entre o menor e o maior dia', semH)+_ptCard('Quem mais leva','carregamentos no período', carrH)+'</div>';
+
+  // dias fora do padrão
+  const fora=filtrados.filter(x=>x.acima).reverse();
+  html+='<div class="pt-grid">'+_ptCard('Dias fora do padrão', fora.length+' no período',
+    fora.length?'<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,520px);"><thead><tr><th>Dia</th><th class="c">Vendeu</th><th class="c">Média</th><th class="c">Acima</th></tr></thead><tbody>'+
+      fora.map(x=>'<tr><td style="padding-right:30px;"><b>'+x.s.slice(0,5)+'</b> <span style="color:#94a3b8;font-size:11.5px;">'+x.w.toLowerCase()+'</span></td><td class="c" style="font-weight:800;">'+fmt(x.v)+'</td>'+
+        '<td class="c" style="color:#64748b;">'+(x.m===null?'—':fmt(x.m))+'</td><td class="c">'+_ptPill(x.m?'+'+Math.round((x.v/x.m-1)*100)+'%':'novo','red',true)+'</td></tr>').join('')+'</tbody></table></div>'
+      :'<div class="pt-vazio" style="padding:16px;">Nenhum dia acima da média no período 👍</div>')+'</div>';
+  html+='<div class="pt-nota">Oscilação = o quanto cada dia foge da média do mesmo dia da semana (desvio ÷ média). Um sábado sempre forte não conta como oscilação; um sábado que foge dos outros sábados, sim. Abaixo de 30% a venda é estável; acima de 60%, muito irregular — a média sozinha engana. '+
+    'Dias sem nenhum carregamento (folga, feriado) não entram; dia com carregamento mas sem este produto conta como venda zero.</div>';
+  return html;
+}
+
 /* ══ VENDAS FORA DO PADRÃO ══ */
 const _PPR_SEM=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 function _pprVendasMapa(){
@@ -8075,7 +8213,7 @@ function _pprVendasDia(dia, mapa){
   return {achados, base, fechado, ehHoje, totDia, nProd:doGrupo.length};
 }
 
-function pprVAba(v){ _pprVAba=v; renderPpr(); }
+function pprVAba(v){ _pprVAba=v; _pprVProd=''; renderPpr(); }
 window.pprVAba=pprVAba;
 function pprVGrupo(v){ _pprVGrupo=v; renderPpr(); }
 window.pprVGrupo=pprVGrupo;
@@ -8098,6 +8236,7 @@ window.pprVSalvarCfg=pprVSalvarCfg;
 
 function _pprVendasTela(){
   const mapa=_pprVendasMapa();
+  if(_pprVProd) return _pprProdutoTela(mapa);
   const hojeS=_pprBR(new Date());
   const N=parseInt(_pprCfg.semanas)||4;
   let h='<div class="pt-head"><div><h1>📈 Vendas fora do padrão</h1><p>venda do dia comparada com a média dos mesmos dias da semana nas últimas '+N+' semana(s) · venda = lançado nos carregamentos</p></div>'+
@@ -8111,8 +8250,8 @@ function _pprVendasTela(){
     '<button class="pt-btn pri" style="height:40px;padding:0 18px;" onclick="pprVSalvarCfg()">Aplicar</button></div>';
 
   const linhas=(lista,mostraDia)=>'<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,760px);"><thead><tr>'+(mostraDia?'<th>Dia</th>':'')+'<th>Produto</th><th class="c">Vendeu</th><th class="c">Média</th><th class="c">Acima</th><th>Principais carregamentos</th></tr></thead><tbody>'+
-    lista.map(a=>'<tr>'+(mostraDia?'<td style="padding-right:24px;"><b>'+a.dia.slice(0,5)+'</b> <span style="color:#94a3b8;font-size:11.5px;">'+a.w+'</span></td>':'')+
-      '<td style="padding-right:30px;"><span style="color:#94a3b8;font-size:11.5px;">'+a.cod+'</span> <b style="font-weight:600;">'+a.nome+'</b></td>'+
+    lista.map(a=>'<tr class="cl" title="Ver este produto a fundo" onclick="pprVProd(\''+String(a.k).replace(/'/g,"\\'")+'\')">'+(mostraDia?'<td style="padding-right:24px;"><b>'+a.dia.slice(0,5)+'</b> <span style="color:#94a3b8;font-size:11.5px;">'+a.w+'</span></td>':'')+
+      '<td style="padding-right:30px;"><span style="color:#94a3b8;font-size:11.5px;">'+a.cod+'</span> <b style="font-weight:600;color:#1d4ed8;">'+a.nome+'</b> <span style="color:#94a3b8;">›</span></td>'+
       '<td class="c" style="font-weight:800;">'+Math.round(a.v)+'</td>'+
       '<td class="c" style="color:#64748b;">'+Math.round(a.media)+' <span style="font-size:11px;">('+a.n+' '+a.w+')</span></td>'+
       '<td class="c">'+_ptPill(a.pct===null?'novo':'+'+a.pct+'%','red',true)+'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">+'+Math.round(a.v-a.media)+' pct</div></td>'+
