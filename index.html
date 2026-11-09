@@ -1904,6 +1904,11 @@
         <div style="flex:1;"><div class="hb-title">Produtos a Embalar</div><div class="hb-desc" id="emb-produtos-badge">Selecionar o dia</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
+      <button class="home-btn" onclick="embRendAbrir()" style="border-left-color:#16a34a;margin-bottom:4px;">
+        <div class="hb-icon" style="background:#dcfce7;">📈</div>
+        <div style="flex:1;"><div class="hb-title">Rendimento da Embalagem</div><div class="hb-desc">O que foi embalado por dia e o que falta embalar</div></div>
+        <span style="color:var(--text-secondary);font-size:20px;">›</span>
+      </button>
       <button class="home-btn" onclick="goTo('s-emb-inconformidades')" style="border-left-color:var(--mc-vermelho);margin-bottom:4px;">
         <div class="hb-icon" style="background:var(--mc-vermelho-claro);">⚠️</div>
         <div style="flex:1;"><div class="hb-title">Produtos com Inconformidade</div><div class="hb-desc" id="inconf-badge">Produtos com problema</div></div>
@@ -2067,6 +2072,7 @@
         <button class="mc-act-btn-secondary" onclick="goTo('s-est-hub')" title="Estoque &amp; Contêiner">🏬</button>
         <button class="mc-act-btn-secondary" onclick="goTo('s-exp-manual')" title="Produto pego antes da embalagem">📥</button>
         <button class="mc-act-btn-secondary" onclick="cdcAbrir('setor')" title="Controle diário">📊</button>
+        <button class="mc-act-btn-secondary" onclick="embRendAbrir()" title="Rendimento: o que foi embalado por dia e o que falta">📈</button>
         <button class="mc-act-btn-primary" onclick="goTo('s-emb-manual')">+ Produto</button>
       </div>
     </div>
@@ -2075,6 +2081,26 @@
 
 
 
+
+  <!-- EMBALAGEM: RENDIMENTO -->
+  <div class="screen" id="s-emb-rend">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Embalagem</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">📈 Rendimento da Embalagem</div>
+        <div class="mc-page-sub">O que foi embalado por dia e o que falta</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:0;background:#f5f7fb;overflow-y:auto;" id="emb-rend-content"></div>
+  </div>
 
   <!-- EMBALAGEM: PRODUTO MANUAL -->
   <div class="screen" id="s-emb-manual">
@@ -5846,6 +5872,7 @@ function atualizarTela(){
   const tela=document.querySelector('.screen.active')?.id;
   if(!tela||tela==='loading'){ goTo('s-inicio'); return; }
   if(tela==='s-conf-home') renderConfHome();
+  if(tela==='s-emb-rend') renderEmbRend();
   if(tela==='s-estoque-coz') renderEstoqueCoz();
   if(tela==='s-estoque-conf') renderEstoqueConf();
   if(tela==='s-estoque-admin') renderEstoqueAdmin();
@@ -5878,6 +5905,8 @@ function atualizarTela(){
   if(tela==='s-coz-home') renderCozHome();
   if(tela==='s-emb-home') renderEmbalagem(); // embManual listener triggers this
   if(tela==='s-emb-sel-data') renderSelDataEmb();
+  // a lista de dias fica nesta tela: redesenha quando a embalagem muda
+  if(tela==='s-emb-produtos-pendentes') renderSelDataEmb();
   if(tela==='s-exp-home') renderExpedicao();
   if(tela==='s-exp-manual') renderExpManual();
   if(tela==='s-mp-home') renderMP();
@@ -6088,6 +6117,10 @@ function goTo(id, semHistorico){
   if(id==='s-massa-lanc') renderMassaList();
   if(id==='s-recheio-lanc') renderRecheioList();
   if(id==='s-emb-sel-data') renderSelDataEmb();
+  /* A lista de dias ("Produtos a Embalar") só era desenhada ao entrar
+     na tela de cima. Ao voltar de um dia, mostrava a contagem antiga:
+     dizia "5 pendentes" num dia já 100% embalado. */
+  if(id==='s-emb-produtos-pendentes') renderSelDataEmb();
 
   if(id==='s-exp-sel-data') renderSelDataExp();
   if(id==='s-meus-reg') renderMeusReg();
@@ -7067,22 +7100,29 @@ window.toggleCFEmb=toggleCFEmb; window.toggleCFAdmin=toggleCFAdmin; window.setCF
 /* O que falta embalar num dia. Antes cada tela contava do seu jeito:
    a lista de dias ignorava os lançamentos manuais e contava registros
    sem produção lançada, então o número não batia ao entrar no dia. */
+/* Só conta como pendente o que tem produção lançada (qtd > 0) e ainda
+   não foi finalizado. Registro com quantidade zero não tem o que
+   embalar — e nunca era fechado, nem pelo "embalar em lote", então o
+   dia ficava "pendente" para sempre. */
+function embPrecisaEmbalar(r){ return (Number(r.qtd)||0)>0 || !!(r.embalagem && r.embalagem.feito); }
+window.embPrecisaEmbalar=embPrecisaEmbalar;
 function embPendentesDoDia(data){
   return (registros||[]).filter(r=>
-    r.data===data && !(r.embalagem && r.embalagem.feito)
+    r.data===data && embPrecisaEmbalar(r) && !(r.embalagem && r.embalagem.feito)
   );
 }
 window.embPendentesDoDia=embPendentesDoDia;
 
 function embTotaisDoDia(data){
   const regs=(registros||[]).filter(r=>r.data===data);
+  const validos=regs.filter(embPrecisaEmbalar);
   const manuais=(typeof embManual!=='undefined'?embManual:[]).filter(r=>r.data===data);
-  const feitos=regs.filter(r=>r.embalagem && r.embalagem.feito).length;
+  const feitos=validos.filter(r=>r.embalagem && r.embalagem.feito).length;
   return {
     regs, manuais,
-    total: regs.length+manuais.length,
+    total: validos.length+manuais.length,
     feitos: feitos+manuais.length,       // manual já nasce embalado
-    pendentes: regs.length-feitos
+    pendentes: validos.length-feitos
   };
 }
 window.embTotaisDoDia=embTotaisDoDia;
@@ -7153,7 +7193,7 @@ function embLotePendentes(tipo){
     if(r.embalagem && r.embalagem.feito) return false;     // já fechado
     const qtd=Number(r.qtd)||0;
     if(qtd<=0) return false;                                // nada produzido
-    const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
+    const t=r.origem==='quadra' ? 'pao' : ((typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro');
     return t===tipo;
   });
 }
@@ -7163,6 +7203,9 @@ function embAbrirLote(){
   const data=dataSelEmb||hoje();
   const paes=embLotePendentes('pao');
   const salg=embLotePendentes('salgado');
+  // produto fora do cadastro de pães e de salgados: antes ficava de fora
+  // do lote e o dia continuava "pendente"
+  const outros=embLotePendentes('outro');
 
   const bloco=(tipo, lista, icone, nome, cor)=>{
     const tot=lista.reduce((t,r)=>t+(Number(r.qtd)||0),0);
@@ -7191,6 +7234,7 @@ function embAbrirLote(){
     '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
       bloco('pao', paes, '🍞', 'pães', '#b45309')+
       bloco('salgado', salg, '🥐', 'salgados', '#2563eb')+
+      (outros.length?bloco('outro', outros, '📦', 'demais produtos', '#475569'):'')+
       '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:11px 13px;margin-top:6px;">'+
         '<div style="font-size:12px;font-weight:700;color:#b45309;">⚠️ O que isso faz</div>'+
         '<div style="font-size:11px;color:#78350f;margin-top:3px;line-height:1.5;">'+
@@ -7208,7 +7252,7 @@ async function embConfirmarLote(tipo){
   const lista=embLotePendentes(tipo);
   if(!lista.length){ alert('Nada pendente neste grupo.'); return; }
   const data=dataSelEmb||hoje();
-  const nome=tipo==='pao'?'pães':'salgados';
+  const nome=tipo==='pao'?'pães':(tipo==='salgado'?'salgados':'demais produtos');
   const tot=lista.reduce((t,r)=>t+(Number(r.qtd)||0),0);
 
   const amostra=lista.slice(0,6).map(r=>'• '+r.produto+' — '+(Number(r.qtd)||0)+' pct').join('\n');
@@ -7245,6 +7289,267 @@ async function embConfirmarLote(tipo){
   if(typeof renderEmbalagem==='function') renderEmbalagem();
 }
 window.embConfirmarLote=embConfirmarLote;
+
+/* ══ RENDIMENTO DA EMBALAGEM ════════════════════════════════════════
+   O que a embalagem lançou em cada DIA — não importa de que dia era a
+   produção. Mede a capacidade real do setor.
+
+   Conta só o que foi lançado de verdade, produto a produto:
+   · parciais ("+ Adicionar" / "− Remover"), cada um com a sua hora
+   · produtos adicionados à mão
+   · o fechamento sem parciais de registros antigos, na hora em que
+     foi finalizado
+   NÃO conta o "embalar em lote": é um atalho do admin para fechar o
+   dia, sem conferência — não diz quanto a equipe embalou nem quando.
+   Ajuste depois de finalizar corrige o dia em que o produto foi
+   finalizado (é correção de contagem, não trabalho novo).
+
+   A embalagem conta em UNIDADES; aqui tudo vira PACOTES. */
+let _erPer='7', _erDia='', _erDe='', _erAte='';
+
+function _erDataDe(txt){
+  const m=String(txt||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? (m[1].padStart(2,'0')+'/'+m[2].padStart(2,'0')+'/'+m[3]) : '';
+}
+function _erNum(br){ const m=String(br||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m?+(m[3]+m[2]+m[1]):0; }
+function _erDate(br){ return new Date(br.split('/').reverse().join('-')+'T12:00:00'); }
+
+function _erGrupo(r){
+  if(r.origem==='quadra') return {tipo:'pao', classe:''};
+  const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
+  if(t==='pao') return {tipo:'pao', classe:''};
+  if(t!=='salgado') return {tipo:'outro', classe:''};
+  const c=String(r.cod||'').trim(), n=_normNome(r.produto||'');
+  const p=(produtosConfFirebase||[]).find(x=>String(x.cod||'').trim()===c) || (produtosConfFirebase||[]).find(x=>_normNome(x.nome||'')===n);
+  return {tipo:'salgado', classe:((p&&p.classe)||'').trim()||'Sem classe'};
+}
+function _erUnPorPct(r){
+  const q=Number(r.qtd)||0, u=Number(r.qtdUnidades)||0;
+  if(q>0 && u>0) return u/q;
+  return Number((r.prodData||{}).qtdPct)||1;
+}
+
+/* Lançamentos de embalagem, um por dia. Devolve também o que foi em lote. */
+function _erEventos(){
+  const ev=[], lote=[];
+  (registros||[]).forEach(r=>{
+    const e=r.embalagem; if(!e) return;
+    const k=_erUnPorPct(r);
+    let explicado=0;
+    (e.parciais||[]).forEach(p=>{
+      const q=Number(p.qtd)||0; if(!q) return;
+      explicado+=q;
+      const dia=_erDataDe(p.hora); if(dia) ev.push({dia, pct:q/k, r});
+    });
+    const ultParcial=(e.parciais||[]).map(p=>_erDataDe(p.hora)).filter(Boolean).pop();
+    const diaFim=_erDataDe(e.horaFeito)||(e.emLote&&_erDataDe(e.emLote.em))||ultParcial||r.data;
+    if(e.emLote){
+      // o que o lote fechou além dos parciais: fica de fora (só é mostrado à parte)
+      const finalUn=(Number(e.qtdEmbalada)||0)*k;      // o lote grava em pacotes
+      const resto=(finalUn-explicado)/k;
+      if(resto>0.001 && diaFim) lote.push({dia:diaFim, pct:resto, r});
+      return;
+    }
+    (e.alteracoes||[]).forEach(a=>{
+      const q=Number(a.diff)||0; if(!q) return;
+      explicado+=q;
+      if(diaFim) ev.push({dia:diaFim, pct:q/k, r});
+    });
+    if(e.feito){
+      const resto=(Number(e.qtdEmbalada)||0)-explicado;
+      if(Math.abs(resto)>0.001 && diaFim) ev.push({dia:diaFim, pct:resto/k, r});
+    }
+  });
+  (typeof embManual!=='undefined'?embManual:[]).forEach(m=>{
+    const q=Number(m.qtdEmbalada)||0; if(!q) return;
+    ev.push({dia:_erDataDe(m.hora)||m.data, pct:q, r:{produto:m.produto, data:m.data, cod:'', manual:true}});
+  });
+  return {ev, lote};
+}
+
+/* O que ainda falta embalar (produções dos últimos 30 dias) */
+function _erPendentes(){
+  const lim=new Date(); lim.setDate(lim.getDate()-30);
+  const limN=+(lim.getFullYear()+String(lim.getMonth()+1).padStart(2,'0')+String(lim.getDate()).padStart(2,'0'));
+  const out=[];
+  (registros||[]).forEach(r=>{
+    if(_erNum(r.data)<limN) return;
+    const e=r.embalagem||{};
+    if(e.feito) return;
+    const q=Number(r.qtd)||0; if(q<=0) return;
+    const k=_erUnPorPct(r);
+    const totalUn=Number(r.qtdUnidades)||q*k;
+    const feitoUn=(e.parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
+    const falta=Math.max(0,totalUn-feitoUn)/k;
+    if(falta>0.001) out.push({r, falta, ...(_erGrupo(r))});
+  });
+  return out;
+}
+
+function embRendAbrir(){ goTo('s-emb-rend'); renderEmbRend(); }
+window.embRendAbrir=embRendAbrir;
+function erPeriodo(v){ _erPer=v; _erDia=''; renderEmbRend(); }
+window.erPeriodo=erPeriodo;
+function erDatas(){
+  const de=(document.getElementById('er-de')||{}).value, ate=(document.getElementById('er-ate')||{}).value;
+  const err=document.getElementById('er-datas-erro');
+  if(!de||!ate){ if(err) err.textContent='Escolha as duas datas.'; return; }
+  if(de>ate){ if(err) err.textContent='A data inicial é depois da final.'; return; }
+  _erDe=de; _erAte=ate; _erDia=''; renderEmbRend();
+}
+window.erDatas=erDatas;
+function erVerDia(d){ _erDia=(_erDia===d?'':d); renderEmbRend(); if(_erDia) setTimeout(()=>document.getElementById('er-detalhe')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
+window.erVerDia=erVerDia;
+
+function renderEmbRend(){
+  const el=document.getElementById('emb-rend-content'); if(!el) return;
+  if(typeof _ptCss==='function') _ptCss();
+  el.style.padding='0'; el.style.background='#f5f7fb';
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const ordemCls=[...(typeof classesProducao!=='undefined'?classesProducao:[]),'Sem classe'];
+  const ordCls=(a,b)=>{ const ia=ordemCls.indexOf(a), ib=ordemCls.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); };
+  const semana=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
+
+  // ── período ──
+  const dias=[];
+  if(_erPer==='datas' && _erDe && _erAte){
+    const a=new Date(_erDe+'T12:00:00'), b=new Date(_erAte+'T12:00:00');
+    for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) dias.push(fmtData(d));
+  } else if(_erPer!=='datas'){
+    const n=parseInt(_erPer)||7;
+    for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); dias.push(fmtData(d)); }
+  }
+  const noPer=new Set(dias);
+
+  // ── embalado ──
+  const {ev:evTodos, lote:loteTodos}=_erEventos();
+  const ev=evTodos.filter(x=>noPer.has(x.dia));
+  const lotePer=loteTodos.filter(x=>noPer.has(x.dia)).reduce((t,x)=>t+x.pct,0);
+  const porDia={}; dias.forEach(d=>porDia[d]={tot:0, pao:0, salg:0, outro:0, cls:{}, prods:{}});
+  ev.forEach(x=>{
+    const g=x.r.manual?{tipo:'outro',classe:''}:_erGrupo(x.r);
+    const D=porDia[x.dia];
+    D.tot+=x.pct;
+    if(g.tipo==='pao') D.pao+=x.pct; else if(g.tipo==='salgado'){ D.salg+=x.pct; D.cls[g.classe]=(D.cls[g.classe]||0)+x.pct; } else D.outro+=x.pct;
+    const chave=(x.r.produto||'?')+'|'+(x.r.data||'');
+    const P=D.prods[chave]||(D.prods[chave]={produto:x.r.produto||'?', dataProd:x.r.data||'', pct:0, g});
+    P.pct+=x.pct;
+  });
+  const comTrabalho=dias.filter(d=>porDia[d].tot>0.5);
+  const totPer=dias.reduce((t,d)=>t+porDia[d].tot,0);
+  const media=comTrabalho.length?totPer/comTrabalho.length:0;
+  const melhor=comTrabalho.slice().sort((a,b)=>porDia[b].tot-porDia[a].tot)[0];
+  const pior=comTrabalho.slice().sort((a,b)=>porDia[a].tot-porDia[b].tot)[0];
+  const clsPer=[...new Set(dias.flatMap(d=>Object.keys(porDia[d].cls)))].sort(ordCls);
+  const temOutro=dias.some(d=>porDia[d].outro>0.5);
+
+  // ── pendente ──
+  const pend=_erPendentes();
+  const pTot=pend.reduce((t,x)=>t+x.falta,0);
+  const pPao=pend.filter(x=>x.tipo==='pao').reduce((t,x)=>t+x.falta,0);
+  const pSalg=pend.filter(x=>x.tipo==='salgado');
+  const pSalgTot=pSalg.reduce((t,x)=>t+x.falta,0);
+  const pCls={}; pSalg.forEach(x=>{ pCls[x.classe]=(pCls[x.classe]||0)+x.falta; });
+  const pOutro=pend.filter(x=>x.tipo==='outro').reduce((t,x)=>t+x.falta,0);
+  const maisAntigo=pend.map(x=>x.r.data).sort((a,b)=>_erNum(a)-_erNum(b))[0];
+  const diasPend=new Set(pend.map(x=>x.r.data)).size;
+  const diasParaZerar=media?pTot/media:null;
+
+  // ── cabeçalho ──
+  const seg=[['1','Hoje'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['datas','📅 Datas']];
+  const perTxt=dias.length?(dias.length===1?dias[0]:(dias[0]+' a '+dias[dias.length-1])):'escolha as datas';
+  let h='<div class="pt"><main class="pt-main">'+
+    '<div class="pt-head"><div><h1>Rendimento da Embalagem</h1><p>'+perTxt+' · lançamentos feitos produto a produto</p></div>'+
+      '<div class="pt-filtros"><div class="pt-seg">'+seg.map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
+  if(_erPer==='datas'){
+    h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="er-de" value="'+(_erDe||'')+'">'+
+      '<label>até</label><input class="pt-ctl" type="date" id="er-ate" value="'+(_erAte||'')+'">'+
+      '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="erDatas()">Aplicar</button>'+
+      '<span id="er-datas-erro" style="font-size:12px;color:#dc2626;font-weight:600;"></span></div>';
+    if(!dias.length){ el.innerHTML=h+'<div class="pt-card pt-vazio">Escolha o período e toque em Aplicar.</div></main></div>'; return; }
+  }
+
+  // ── indicadores ──
+  h+='<div class="pt-grid pt-g4">'+
+    _ptKpi('📦','green', fmt(totPer), 'Embalado no período', comTrabalho.length+' dia(s) com lançamento')+
+    _ptKpi('📊','blue', fmt(media), 'Média por dia', 'pacotes · só dias com lançamento')+
+    _ptKpi('🏆','violet', melhor?fmt(porDia[melhor].tot):'—', 'Melhor dia', melhor?(melhor.slice(0,5)+' · '+semana(melhor)+(pior&&pior!==melhor?(' · menor: '+fmt(porDia[pior].tot)+' em '+pior.slice(0,5)):'')):'sem lançamentos')+
+    _ptKpi('⏳', pTot?'amber':'green', fmt(pTot), 'Falta embalar', diasParaZerar?('≈ '+(diasParaZerar<1?'menos de 1 dia':(diasParaZerar.toFixed(1).replace('.',',')+' dia(s)'))+' no ritmo médio'):(pTot?'pacotes':'tudo embalado 🎉'))+
+  '</div>';
+
+  // ── gráfico + pendente ──
+  const max=Math.max(1,...dias.map(d=>porDia[d].tot));
+  const ALT=150;
+  const barras='<div style="display:flex;gap:16px;font-size:11.5px;color:var(--pt-sub);margin:-4px 0 12px;flex-wrap:wrap;">'+
+      '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#f59e0b;margin-right:6px;"></span>Pães</span>'+
+      '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#3b82f6;margin-right:6px;"></span>Salgados</span>'+
+      (temOutro?'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#94a3b8;margin-right:6px;"></span>Outros</span>':'')+
+      (media?'<span style="margin-left:auto;">┄ média '+fmt(media)+' pct</span>':'')+'</div>'+
+    '<div style="overflow-x:auto;"><div style="position:relative;display:flex;gap:'+(dias.length>20?4:8)+'px;align-items:flex-end;height:'+(ALT+44)+'px;min-width:'+(dias.length*(dias.length>20?26:40))+'px;">'+
+      (media?'<div style="position:absolute;left:0;right:0;bottom:'+(22+Math.round(media/max*ALT))+'px;border-top:1.5px dashed #94a3b8;pointer-events:none;"></div>':'')+
+      dias.map(d=>{
+        const D=porDia[d], hp=Math.round(D.pao/max*ALT), hs=Math.round(Math.max(0,D.salg)/max*ALT), ho=Math.round(Math.max(0,D.outro)/max*ALT), sel=_erDia===d;
+        const pilha=[[ho,'#94a3b8'],[hs,'#3b82f6'],[hp,'#f59e0b']].filter(x=>x[0]>0);
+        return '<button onclick="erVerDia(\''+d+'\')" title="'+d+': '+fmt(D.tot)+' pacotes" style="flex:1;min-width:22px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;background:'+(sel?'#eff6ff':'transparent')+';border:none;border-radius:10px;cursor:pointer;padding:0 0 2px;font-family:inherit;">'+
+          '<div style="font-size:10.5px;font-weight:700;color:'+(D.tot>0.5?'#334155':'#cbd5e1')+';margin-bottom:4px;">'+(D.tot>0.5?fmt(D.tot):'0')+'</div>'+
+          '<div style="width:68%;max-width:30px;display:flex;flex-direction:column;border-radius:6px 6px 3px 3px;overflow:hidden;">'+pilha.map(x=>'<div style="height:'+x[0]+'px;background:'+x[1]+';"></div>').join('')+'</div>'+
+          '<div style="font-size:10px;color:var(--pt-sub);margin-top:5px;white-space:nowrap;">'+d.slice(0,5)+'</div></button>';
+      }).join('')+
+    '</div></div>';
+  const linhaP=(rot,v,cor,tot)=>'<div style="margin-bottom:11px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="font-weight:600;color:#334155;">'+rot+'</span><b>'+fmt(v)+'</b></div>'+
+    '<div class="pt-barra"><div style="width:'+(tot?Math.max(2,v/tot*100):0)+'%;background:'+cor+';"></div></div></div>';
+  const clsPend=Object.keys(pCls).sort(ordCls);
+  const pendHtml=pTot<0.5
+    ? '<div class="pt-vazio" style="padding:26px 10px;"><div style="font-size:30px;">✅</div><div style="font-weight:700;color:var(--pt-txt);margin-top:6px;">Nada pendente</div></div>'
+    : '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px;"><span style="font-size:30px;font-weight:800;color:#b45309;">'+fmt(pTot)+'</span><span style="font-size:13px;color:var(--pt-sub);">pacotes · '+pend.length+' produto(s) · '+diasPend+' dia(s)</span></div>'+
+      linhaP('🍞 Pães',pPao,'#f59e0b',pTot)+
+      linhaP('🥐 Salgados',pSalgTot,'#3b82f6',pTot)+
+      (clsPend.length?'<div style="margin:2px 0 8px 14px;padding-left:12px;border-left:2px solid #dbeafe;">'+clsPend.map(c=>linhaP(c,pCls[c],'#93c5fd',pTot)).join('')+'</div>':'')+
+      (pOutro>0.5?linhaP('📦 Outros',pOutro,'#94a3b8',pTot):'')+
+      (maisAntigo?'<div style="font-size:11.5px;color:var(--pt-mut);margin-top:6px;">Mais antigo pendente: <b style="color:#b45309;">'+maisAntigo+'</b></div>':'');
+  h+='<div class="pt-grid pt-g21">'+_ptCard('Embalado por dia','toque num dia para ver o detalhe', barras)+_ptCard('Falta embalar','produções dos últimos 30 dias', pendHtml)+'</div>';
+
+  // ── tabela dia a dia ──
+  const linhas=dias.slice().reverse().map(d=>{
+    const D=porDia[d];
+    const vs=media&&D.tot>0.5?Math.round((D.tot/media-1)*100):null;
+    return '<tr class="cl" onclick="erVerDia(\''+d+'\')"'+(_erDia===d?' style="background:#eff6ff;"':'')+'>'+
+      '<td><b style="font-weight:650;">'+d.slice(0,5)+'</b> <span style="color:var(--pt-mut);font-size:11.5px;">'+semana(d)+'</span></td>'+
+      '<td class="c" style="color:#b45309;">'+(D.pao>0.5?fmt(D.pao):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+      clsPer.map(c=>'<td class="c" style="color:#1d4ed8;">'+(D.cls[c]>0.5?fmt(D.cls[c]):'<span style="color:#cbd5e1;">—</span>')+'</td>').join('')+
+      (temOutro?'<td class="c" style="color:#475569;">'+(D.outro>0.5?fmt(D.outro):'<span style="color:#cbd5e1;">—</span>')+'</td>':'')+
+      '<td class="c" style="font-weight:800;">'+(D.tot>0.5?fmt(D.tot):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+      '<td class="c">'+(vs===null?'<span style="color:#cbd5e1;">—</span>':_ptPill((vs>0?'+':'')+vs+'%', vs>=0?'green':'red', true))+'</td></tr>';
+  }).join('');
+  h+='<div class="pt-grid">'+_ptCard('Dia a dia','pacotes embalados', '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Dia</th><th class="c">🍞 Pães</th>'+
+    clsPer.map(c=>'<th class="c">🥐 '+c+'</th>').join('')+(temOutro?'<th class="c">Outros</th>':'')+'<th class="c">Total</th><th class="c">vs média</th></tr></thead><tbody>'+linhas+'</tbody></table></div>')+'</div>';
+
+  // ── detalhe do dia ──
+  const dSel=_erDia || (dias.length===1?dias[0]:'');
+  if(dSel && porDia[dSel]){
+    const D=porDia[dSel];
+    const prods=Object.values(D.prods).filter(p=>Math.abs(p.pct)>0.001).sort((a,b)=>b.pct-a.pct);
+    const deOutros=prods.filter(p=>p.dataProd && p.dataProd!==dSel).reduce((t,p)=>t+p.pct,0);
+    const ic=g=>g.tipo==='pao'?'🍞':(g.tipo==='salgado'?'🥐':'📦');
+    const corpo=prods.length
+      ? '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Produto</th><th>Produção de</th><th>Grupo</th><th class="c">Pacotes</th></tr></thead><tbody>'+
+          prods.map(p=>'<tr><td><span style="margin-right:6px;">'+ic(p.g)+'</span><b style="font-weight:600;">'+p.produto+'</b></td>'+
+            '<td style="color:'+(p.dataProd&&p.dataProd!==dSel?'#b45309':'var(--pt-sub)')+';">'+(p.dataProd?p.dataProd.slice(0,5):'—')+(p.dataProd&&p.dataProd!==dSel?' · outro dia':'')+'</td>'+
+            '<td>'+(p.g.tipo==='salgado'?_ptPill(p.g.classe,'blue',true):(p.g.tipo==='pao'?_ptPill('Pão','amber',true):_ptPill('Outro','gray',true)))+'</td>'+
+            '<td class="c" style="font-weight:800;">'+fmt(p.pct)+'</td></tr>').join('')+
+        '</tbody></table></div>'
+      : '<div class="pt-vazio" style="padding:18px;">Nada lançado neste dia.</div>';
+    h+='<div id="er-detalhe" class="pt-grid">'+_ptCard('Embalado em '+dSel, semana(dSel)+' · '+fmt(D.tot)+' pacotes'+(deOutros>0.5?(' · '+fmt(deOutros)+' de produções de outros dias'):''), corpo,
+      '<button class="pt-btn" onclick="erVerDia(\''+dSel+'\')">Fechar</button>')+'</div>';
+  }
+
+  h+='<div class="pt-nota">Cada pacote conta no dia em que foi <b>lançado</b> na embalagem, não no dia da produção. Lançamentos em unidades viram pacotes pelo número de unidades de cada pacote. '+
+    'Ajuste de quantidade depois de finalizar corrige o dia em que o produto foi finalizado. '+
+    '<b>Não entra o “Embalar em lote”</b>, que fecha o dia sem conferência'+(lotePer>0.5?(' — neste período foram '+fmt(lotePer)+' pacote(s) em lote, fora da conta'):'')+'.</div>';
+  h+='</main></div>';
+  el.innerHTML=h;
+}
+window.renderEmbRend=renderEmbRend;
 
 function renderEmbalagem(){
   document.getElementById('emb-data-topbar').textContent=dataSelEmb||hoje();
@@ -41758,7 +42063,7 @@ function atualizarBadgeProdutosEmb(){
   if(!badge) return;
   const ultimos14=[];
   for(let i=0;i<14;i++){const d=new Date();d.setDate(d.getDate()-i);ultimos14.push(fmtData(d));}
-  const naoEmb=registros.filter(r=>(!r.embalagem||!r.embalagem.feito)&&ultimos14.includes(r.data)).length;
+  const naoEmb=registros.filter(r=>embPrecisaEmbalar(r)&&(!r.embalagem||!r.embalagem.feito)&&ultimos14.includes(r.data)).length;
   if(naoEmb===0) badge.textContent='Tudo em dia ✓';
   else badge.textContent=naoEmb+' produto(s) pendente(s)';
 }
