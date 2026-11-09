@@ -2082,6 +2082,26 @@
 
 
 
+  <!-- PAINEL DA PRODUÇÃO (admin) -->
+  <div class="screen" id="s-ppr">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Administrativo</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">🧭 Painel da Produção</div>
+        <div class="mc-page-sub">Cozinha, Confeitaria, Quadra e Embalagem</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:0;background:#f5f7fb;overflow-y:auto;" id="ppr-content"></div>
+  </div>
+
   <!-- EMBALAGEM: RENDIMENTO -->
   <div class="screen" id="s-emb-rend">
     <div class="mc-header">
@@ -3432,6 +3452,14 @@
         <span class="mc-sector-arrow">›</span>
       </button>
       <div class="mc-section-header" style="margin-top:18px;">📊 Acompanhamento<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">conferir o que foi produzido e as diferenças</span></div>
+      <button class="mc-sector-card" style="border-left:4px solid #1e40af;margin-bottom:10px;" onclick="pprAbrir()">
+        <div class="mc-sector-icon" style="background:#e0e7ff;">🧭</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Painel da Produção <span id="ppr-hub-badge"></span></div>
+          <div class="mc-sector-desc">Cozinha, Confeitaria, Quadra e Embalagem · produtividade, horas e vendas fora do padrão</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
       <button class="mc-sector-card" onclick="qualAbrir()">
         <div class="mc-sector-icon" style="background:#cffafe;">🔬</div>
         <div class="mc-sector-info">
@@ -5876,6 +5904,8 @@ function atualizarTela(){
   if(!tela||tela==='loading'){ goTo('s-inicio'); return; }
   if(tela==='s-conf-home') renderConfHome();
   if(tela==='s-emb-rend') renderEmbRend();
+  if(tela==='s-ppr'){ const a=document.activeElement; if(!(a && a.closest && a.closest('#ppr-content') && /INPUT|SELECT/.test(a.tagName))) renderPpr(); }
+  if(tela==='s-adm-hub' && typeof _pprBadge==='function') _pprBadge();
   if(tela==='s-estoque-coz') renderEstoqueCoz();
   if(tela==='s-estoque-conf') renderEstoqueConf();
   if(tela==='s-estoque-admin') renderEstoqueAdmin();
@@ -7673,6 +7703,462 @@ function renderEmbRend(){
   el.innerHTML=h;
 }
 window.renderEmbRend=renderEmbRend;
+
+/* ══ PAINEL DA PRODUÇÃO (admin) ═════════════════════════════════════
+   Visão dos 4 setores que mais pesam na produção — Cozinha,
+   Confeitaria, Quadra e Embalagem — no mesmo formato do Controle de
+   Ponto. Para cada setor: volume produzido, pessoas, horas trabalhadas
+   (pelo ponto) e produtividade (volume por hora), por dia/semana/mês.
+
+   De onde vem o volume:
+   · Cozinha: recheios lançados (kg)
+   · Confeitaria: produção lançada, menos a da Quadra (pacotes)
+   · Quadra: produção lançada pela Quadra (pacotes) + kits e quebra
+   · Embalagem: o rendimento (pacotes lançados produto a produto, sem lote)
+
+   Vendas fora do padrão: a venda de cada produto num dia comparada com
+   a média dos MESMOS dias da semana nas últimas N semanas (padrão 4).
+   Venda = o que foi lançado nos carregamentos, no dia do carregamento. */
+const PPR_SETORES=[
+  {k:'cozinha',     nome:'Cozinha',     ic:'🍳', un:'kg',  cor:'#ea580c', ponto:['COZINHA']},
+  {k:'confeitaria', nome:'Confeitaria', ic:'🥐', un:'pct', cor:'#2563eb', ponto:['CONFEITARIA']},
+  {k:'quadra',      nome:'Quadra',      ic:'🍞', un:'pct', cor:'#d97706', ponto:['PANIFICA','QUADRA']},
+  {k:'embalagem',   nome:'Embalagem',   ic:'📦', un:'pct', cor:'#16a34a', ponto:['EMBALA']}
+];
+let _pprSetor='geral', _pprPer='7', _pprDe='', _pprAte='', _pprSerie='vol', _pprAgr='dia';
+let _pprVAba='hoje', _pprVDia='', _pprVDe='', _pprVAte='', _pprVGrupo='salgado';
+let _pprCfg={semanas:4, pct:30, min:20}, _pprCfgLido=false;
+let _pprPontoMapa=null;     // {cozinha:['Cozinha'], ...} escolhido à mão (configuracoes/painelProducao)
+
+async function pprAbrir(){
+  goTo('s-ppr');
+  if(!_pprCfgLido){
+    _pprCfgLido=true;
+    try{ const d=await getDoc(doc(db,'configuracoes','vendasForaPadrao')); if(d.exists()) _pprCfg={..._pprCfg, ...d.data()}; }catch(e){ console.warn('vendasForaPadrao',e); }
+    try{ const d=await getDoc(doc(db,'configuracoes','painelProducao')); if(d.exists() && d.data().setoresPonto) _pprPontoMapa=d.data().setoresPonto; }catch(e){ console.warn('painelProducao',e); }
+  }
+  renderPpr();
+}
+window.pprAbrir=pprAbrir;
+
+/* ── datas ── */
+const _pprBR=d=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+const _pprISO=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const _pprDeBR=s=>{ const m=String(s||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m?new Date(+m[3],+m[2]-1,+m[1],12):null; };
+function _pprDias(){
+  const h=new Date(); h.setHours(12,0,0,0);
+  let de, ate=new Date(h);
+  if(_pprPer==='datas' && _pprDe && _pprAte){ de=new Date(_pprDe+'T12:00:00'); ate=new Date(_pprAte+'T12:00:00'); }
+  else if(_pprPer==='mes'){ de=new Date(h.getFullYear(), h.getMonth(), 1, 12); }
+  else if(_pprPer==='mesant'){ de=new Date(h.getFullYear(), h.getMonth()-1, 1, 12); ate=new Date(h.getFullYear(), h.getMonth(), 0, 12); }
+  else { const n=parseInt(_pprPer)||7; de=new Date(h); de.setDate(h.getDate()-(n-1)); }
+  const out=[]; for(let d=new Date(de); d<=ate; d.setDate(d.getDate()+1)) out.push(_pprBR(d));
+  return out;
+}
+function _pprAnterior(dias){
+  if(!dias.length) return [];
+  const ini=_pprDeBR(dias[0]); const out=[];
+  for(let i=dias.length;i>=1;i--){ const d=new Date(ini); d.setDate(ini.getDate()-i); out.push(_pprBR(d)); }
+  return out;
+}
+
+/* ── volume de cada setor por dia: {dia:{vol, itens:{nome:qtd}}} ── */
+function _pprVolume(setor){
+  const out={};
+  const soma=(dia,nome,q)=>{ if(!dia||!q) return; const o=out[dia]||(out[dia]={vol:0,itens:{}}); o.vol+=q; o.itens[nome]=(o.itens[nome]||0)+q; };
+  if(setor==='cozinha') (regRecheios||[]).forEach(r=>soma(r.data, r.recheio||'Recheio', Number(r.qtdKg)||0));
+  else if(setor==='confeitaria') (registros||[]).forEach(r=>{ if(r.origem!=='quadra') soma(r.data, r.produto||'?', Math.max(0,Number(r.qtd)||0)); });
+  else if(setor==='quadra') (registros||[]).forEach(r=>{ if(r.origem==='quadra') soma(r.data, r.produto||'?', Math.max(0,Number(r.qtd)||0)); });
+  else if(setor==='embalagem' && typeof _erEventos==='function') _erEventos().ev.forEach(x=>soma(x.dia, x.r.produto||'?', x.pct));
+  return out;
+}
+
+/* ── equipe de cada setor por dia, pelo ponto ── */
+function _pprPontoCasa(setor, nomeSetorPonto){
+  const n=_normNome(nomeSetorPonto||''); if(!n) return false;
+  const m=_pprPontoMapa && _pprPontoMapa[setor];
+  if(Array.isArray(m) && m.length) return m.some(x=>_normNome(x)===n);
+  return (PPR_SETORES.find(s=>s.k===setor)||{ponto:[]}).ponto.some(p=>n.indexOf(p)>=0);
+}
+function _pprEquipe(setor){
+  const out={};
+  if(typeof pontoMeses==='undefined' || !_pontoCarregado) return null;
+  Object.keys(pontoMeses).forEach(ch=>{
+    const ano=ch.slice(0,4);
+    ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+      if(!_pprPontoCasa(setor, _pmesSetorDe(p,ch)||p.setor||'')) return;
+      (p.dias||[]).forEach(d=>{
+        if(!d.batidas || !d.batidas.length) return;
+        let min=Number(d.minTrab)||0;
+        if(!min && typeof _pjDia==='function'){ const j=_pjDia(d); if(j) min=j.trab; }
+        const o=out[d.data+'/'+ano]||(out[d.data+'/'+ano]={pessoas:new Set(), min:0});
+        o.pessoas.add(String(p.codigo||p.nome)); o.min+=min;
+      });
+    });
+  });
+  return out;
+}
+function _pprSetoresDoPonto(){
+  const s=new Set();
+  Object.keys(pontoMeses||{}).forEach(ch=>((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{ const x=_pmesSetorDe(p,ch)||p.setor; if(x) s.add(x); }));
+  return [...s].sort();
+}
+
+/* ── números de um setor num conjunto de dias ── */
+function _pprMetricas(setor, dias){
+  const vol=_pprVolume(setor), eq=_pprEquipe(setor);
+  let tot=0, diasProd=0, min=0, pesSoma=0, diasEq=0, volPH=0, minPH=0;
+  const itens={};
+  dias.forEach(d=>{
+    const v=vol[d], e=eq?eq[d]:null;
+    if(v && v.vol>0){ tot+=v.vol; diasProd++; Object.keys(v.itens).forEach(k=>itens[k]=(itens[k]||0)+v.itens[k]); }
+    if(e){ min+=e.min; pesSoma+=e.pessoas.size; diasEq++; }
+    if(v && v.vol>0 && e && e.min>0){ volPH+=v.vol; minPH+=e.min; }
+  });
+  return {tot, diasProd, media:diasProd?tot/diasProd:0, min, pessoas:diasEq?pesSoma/diasEq:0, diasEq,
+    porHora:minPH?volPH/(minPH/60):null, itens, vol, eq, temPonto:!!eq};
+}
+
+/* ── navegação ── */
+function pprIr(s){ _pprSetor=s; renderPpr(); document.getElementById('ppr-content')?.scrollTo?.(0,0); }
+window.pprIr=pprIr;
+function pprPeriodo(v){ _pprPer=v; renderPpr(); }
+window.pprPeriodo=pprPeriodo;
+function pprDatas(){
+  const de=(document.getElementById('ppr-de')||{}).value, ate=(document.getElementById('ppr-ate')||{}).value;
+  if(!de||!ate||de>ate){ alert('Confira as datas.'); return; }
+  _pprDe=de; _pprAte=ate; renderPpr();
+}
+window.pprDatas=pprDatas;
+function pprSerie(k){ _pprSerie=k; renderPpr(); }
+window.pprSerie=pprSerie;
+function pprAgr(k){ _pprAgr=k; renderPpr(); }
+window.pprAgr=pprAgr;
+
+const _pprFmt=(n,un)=>(un==='kg'||un==='x')?(Math.round(n*10)/10).toLocaleString('pt-BR'):Math.round(n).toLocaleString('pt-BR');
+const _pprUn=un=>un==='kg'?'kg':'pacotes';
+const _pprHh=m=>(typeof _pontoHhmm==='function')?_pontoHhmm(Math.round(m)):(Math.round(m/60)+'h');
+function _pprVar(a,b){
+  if(a===null||b===null||b===undefined||!b) return '';
+  const p=Math.round((a/b-1)*100);
+  return _ptPill((p>0?'+':'')+p+'% vs anterior', p>=0?'green':'red', true);
+}
+
+/* Agrupa dias em semanas (começando na segunda) ou meses */
+function _pprGrupos(dias){
+  if(_pprAgr==='dia') return dias.map(d=>({rot:d.slice(0,5), dias:[d]}));
+  const g=[], idx={};
+  dias.forEach(d=>{
+    const dt=_pprDeBR(d);
+    let k, rot;
+    if(_pprAgr==='mes'){ k=dt.getFullYear()+'-'+dt.getMonth(); rot=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][dt.getMonth()]+'/'+String(dt.getFullYear()).slice(2); }
+    else { const s=new Date(dt); s.setDate(dt.getDate()-((dt.getDay()+6)%7)); k=_pprISO(s); rot='sem '+_pprBR(s).slice(0,5); }
+    if(idx[k]===undefined){ idx[k]=g.length; g.push({rot, dias:[]}); }
+    g[idx[k]].dias.push(d);
+  });
+  return g;
+}
+
+function renderPpr(){
+  const el=document.getElementById('ppr-content'); if(!el) return;
+  _ptCss(); el.style.padding='0'; el.style.background='#f5f7fb';
+  if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado && !_pontoCarregando && !_pontoErro) pontoCarregarMeses();
+  const nav=(k,ic,nome,sub)=>'<button class="pt-nav'+(_pprSetor===k?' on':'')+'" onclick="pprIr(\''+k+'\')"'+(sub?' style="padding-left:30px;font-size:12.5px;"':'')+'><span class="ic">'+ic+'</span>'+nome+'</button>';
+  const vHoje=_pprVendasDia(_pprBR(new Date())).achados.length;
+  const menu='<aside class="pt-side"><div class="pt-side-in"><div class="pt-side-tit">PRODUÇÃO</div>'+
+    nav('geral','🧭','Visão geral')+
+    PPR_SETORES.map(s=>nav(s.k,s.ic,s.nome)+(s.k==='confeitaria'?nav('vendas','📈','Vendas fora do padrão'+(vHoje?' <span class="ct" style="background:#fee2e2;color:#b91c1c;">'+vHoje+'</span>':''),true):'')).join('')+
+    '<div class="pt-side-tit">AJUSTES</div>'+nav('config','⚙️','Setores do ponto')+'</div></aside>';
+  let main;
+  if(_pprSetor==='vendas') main=_pprVendasTela();
+  else if(_pprSetor==='config') main=_pprConfigTela();
+  else main=_pprCabecalho()+(_pprSetor==='geral'?_pprGeral():_pprSetorTela(_pprSetor));
+  el.innerHTML='<div class="pt">'+menu+'<main class="pt-main">'+main+'</main></div>';
+}
+window.renderPpr=renderPpr;
+function _pprBadge(){
+  const el=document.getElementById('ppr-hub-badge'); if(!el) return;
+  try{ const n=_pprVendasDia(_pprBR(new Date())).achados.length;
+    el.innerHTML=n?'<span style="background:#fee2e2;color:#b91c1c;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:800;margin-left:4px;">📈 '+n+' hoje</span>':''; }catch(e){}
+}
+
+function _pprCabecalho(){
+  const s=PPR_SETORES.find(x=>x.k===_pprSetor);
+  const dias=_pprDias();
+  const per=[['1','Hoje'],['7','7 dias'],['30','30 dias'],['mes','Este mês'],['mesant','Mês passado'],['datas','📅 Datas']];
+  let h='<div class="pt-head"><div><h1>'+(s?(s.ic+' '+s.nome):'Painel da Produção')+'</h1><p>'+(dias.length?(dias[0]+(dias.length>1?' a '+dias[dias.length-1]:'')):'')+
+      (typeof _pontoCarregado!=='undefined' && !_pontoCarregado?' · carregando o ponto…':'')+'</p></div>'+
+    '<div class="pt-filtros"><div class="pt-seg">'+per.map(([v,t])=>'<button class="'+(_pprPer===v?'on':'')+'" onclick="pprPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
+  if(_pprPer==='datas') h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="ppr-de" value="'+_pprDe+'"><label>até</label><input class="pt-ctl" type="date" id="ppr-ate" value="'+_pprAte+'">'+
+    '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="pprDatas()">Aplicar</button></div>';
+  return h;
+}
+
+/* ── VISÃO GERAL ── */
+function _pprGeral(){
+  const dias=_pprDias(), ant=_pprAnterior(dias);
+  const M={}, A={}; PPR_SETORES.forEach(s=>{ M[s.k]=_pprMetricas(s.k,dias); A[s.k]=_pprMetricas(s.k,ant); });
+  let h='<div class="pt-grid pt-g4">'+PPR_SETORES.map(s=>{
+    const m=M[s.k], a=A[s.k];
+    return '<button class="pt-card" onclick="pprIr(\''+s.k+'\')" style="text-align:left;cursor:pointer;font-family:inherit;color:inherit;border-top:3px solid '+s.cor+';">'+
+      '<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:18px;">'+s.ic+'</span><b style="font-size:15px;">'+s.nome+'</b><span style="margin-left:auto;color:#94a3b8;">›</span></div>'+
+      '<div style="font-size:26px;font-weight:800;margin-top:10px;color:'+s.cor+';">'+_pprFmt(m.tot,s.un)+' <span style="font-size:12px;color:#64748b;font-weight:600;">'+_pprUn(s.un)+'</span></div>'+
+      '<div style="margin-top:4px;">'+_pprVar(m.tot,a.tot)+'</div>'+
+      '<div class="pt-mini" style="grid-template-columns:repeat(3,minmax(0,1fr));">'+
+        '<div><b>'+(m.temPonto?(Math.round(m.pessoas*10)/10).toLocaleString('pt-BR'):'…')+'</b><span>pessoas/dia</span></div>'+
+        '<div><b>'+(m.temPonto?_pprHh(m.min):'…')+'</b><span>horas</span></div>'+
+        '<div><b>'+(m.porHora?_pprFmt(m.porHora,s.un==='kg'?'kg':'x'):'—')+'</b><span>'+s.un+'/hora</span></div></div></button>';
+  }).join('')+'</div>';
+
+  // horas por dia, os 4 setores no mesmo gráfico
+  const grupos=_pprGrupos(dias);
+  const temPonto=PPR_SETORES.some(s=>M[s.k].temPonto);
+  if(temPonto && grupos.length>1){
+    const series=PPR_SETORES.map(s=>({nome:s.nome, cor:s.cor, vals:grupos.map(g=>{ const e=M[s.k].eq; let t=0, tem=false; g.dias.forEach(d=>{ if(e&&e[d]){ t+=e[d].min; tem=true; } }); return tem?t/60:null; })}));
+    const leg='<div style="display:flex;gap:14px;flex-wrap:wrap;margin:-4px 0 8px;">'+PPR_SETORES.map(s=>'<span style="font-size:12px;color:#334155;display:inline-flex;align-items:center;gap:6px;"><span style="width:18px;height:3px;border-radius:2px;background:'+s.cor+';"></span>'+s.nome+'</span>').join('')+'</div>';
+    h+='<div class="pt-grid">'+_ptCard('Horas trabalhadas por setor', 'pelo Controle de Ponto', leg+_ptGrafico(series, grupos.map(g=>g.rot), v=>Math.round(v)+'h', {valores:'fim', id:'pprh', largo:1100, alto:260}),
+      '<div class="pt-seg">'+[['dia','Dia'],['semana','Semana'],['mes','Mês']].map(([k,t])=>'<button class="'+(_pprAgr===k?'on':'')+'" onclick="pprAgr(\''+k+'\')">'+t+'</button>').join('')+'</div>')+'</div>';
+  }
+
+  // tabela comparativa
+  const tab='<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Setor</th><th class="c">Produção</th><th class="c">Média/dia</th><th class="c">vs anterior</th><th class="c">Pessoas/dia</th><th class="c">Horas</th><th class="c">Produtividade</th><th class="c">vs anterior</th></tr></thead><tbody>'+
+    PPR_SETORES.map(s=>{ const m=M[s.k], a=A[s.k];
+      return '<tr class="cl" onclick="pprIr(\''+s.k+'\')"><td><b>'+s.ic+' '+s.nome+'</b></td>'+
+        '<td class="c" style="font-weight:800;color:'+s.cor+';">'+_pprFmt(m.tot,s.un)+' '+s.un+'</td><td class="c">'+_pprFmt(m.media,s.un)+'</td><td class="c">'+(_pprVar(m.tot,a.tot)||'—')+'</td>'+
+        '<td class="c">'+(m.temPonto?(Math.round(m.pessoas*10)/10).toLocaleString('pt-BR'):'…')+'</td><td class="c">'+(m.temPonto?_pprHh(m.min):'…')+'</td>'+
+        '<td class="c" style="font-weight:700;">'+(m.porHora?_pprFmt(m.porHora,s.un==='kg'?'kg':'x')+' '+s.un+'/h':'—')+'</td><td class="c">'+(m.porHora&&a.porHora?_pprVar(m.porHora,a.porHora):'—')+'</td></tr>'; }).join('')+
+    '</tbody></table></div>';
+  h+='<div class="pt-grid">'+_ptCard('Comparativo dos setores', '“vs anterior” compara com o mesmo número de dias logo antes', tab)+'</div>';
+
+  // alerta de vendas
+  const v=_pprVendasDia(_pprBR(new Date()));
+  h+='<div class="pt-grid">'+_ptCard('📈 Vendas fora do padrão hoje', v.fechado?'notas do dia fechadas':'dia em andamento — as notas fecham às 18:00',
+    v.achados.length? '<div class="pt-lista">'+v.achados.slice(0,5).map(a=>'<div class="pt-li" style="cursor:default;"><div class="pt-quem"><div><div class="n">'+a.nome+'</div><div class="c2">vendeu '+Math.round(a.v)+' · média '+Math.round(a.media)+' ('+a.n+' '+a.w+')</div></div></div>'+_ptPill(a.pct===null?'novo':'+'+a.pct+'%','red',true)+'</div>').join('')+'</div>'
+      : '<div class="pt-vazio" style="padding:16px;">Nenhum produto acima da média até agora.</div>',
+    '<button class="pt-btn pri" onclick="pprIr(\'vendas\')">Abrir análise ›</button>')+'</div>';
+  return h;
+}
+
+/* ── UM SETOR ── */
+function _pprSetorTela(k){
+  const s=PPR_SETORES.find(x=>x.k===k);
+  const dias=_pprDias(), ant=_pprAnterior(dias);
+  const m=_pprMetricas(k,dias), a=_pprMetricas(k,ant);
+  let h='<div class="pt-grid pt-g4">'+
+    _ptKpi(s.ic,'blue', _pprFmt(m.tot,s.un), 'Produção ('+_pprUn(s.un)+')', (_pprVar(m.tot,a.tot)||'')+' '+m.diasProd+' dia(s) com produção')+
+    _ptKpi('📊','violet', _pprFmt(m.media,s.un), 'Média por dia', 'só dias com produção')+
+    _ptKpi('👥','sky', m.temPonto?(Math.round(m.pessoas*10)/10).toLocaleString('pt-BR'):'…', 'Pessoas por dia', m.temPonto?(_pprHh(m.min)+' trabalhadas no período'):'carregando o ponto…')+
+    _ptKpi('⚡','green', m.porHora?_pprFmt(m.porHora,s.un==='kg'?'kg':'x'):'—', s.un+' por hora trabalhada', m.porHora&&a.porHora?_pprVar(m.porHora,a.porHora):'dias com produção e ponto')+
+  '</div>';
+
+  // extras de cada setor
+  const ex=[];
+  if(k==='quadra'){
+    const qr=(quadraRegistros||[]).filter(r=>dias.includes(r.data));
+    const kits=qr.reduce((t,r)=>t+(Number(r.numKits)||0),0), esp=qr.reduce((t,r)=>t+(Number(r.totalEsperado)||0),0), prod=qr.reduce((t,r)=>t+(Number(r.totalProduzido)||0),0);
+    ex.push(_ptKpi('🧺','amber', kits.toLocaleString('pt-BR'), 'Kits consumidos', qr.length+' lançamento(s)'));
+    ex.push(_ptKpi('⚖️', Math.abs(prod-esp)>esp*0.03?'red':'green', (prod-esp>0?'+':'')+(Math.round((prod-esp)*10)/10).toLocaleString('pt-BR')+' kg', 'Quebra (produzido − esperado)', esp?((prod/esp*100-100).toFixed(1).replace('.',',')+'% sobre o esperado pelos kits'):''));
+  }
+  if(k==='confeitaria'){
+    const ms=(regMassas||[]).filter(r=>dias.includes(r.data)).reduce((t,r)=>t+(Number(r.qtdKg)||0),0);
+    ex.push(_ptKpi('🥣','amber', (Math.round(ms*10)/10).toLocaleString('pt-BR')+' kg', 'Massas produzidas', 'no período'));
+    const v=_pprVendasDia(_pprBR(new Date()));
+    ex.push('<button class="pt-card pt-kpi" style="cursor:pointer;font-family:inherit;text-align:left;" onclick="pprIr(\'vendas\')"><div class="pt-ico t-red">📈</div><div><div class="v">'+v.achados.length+'</div><div class="l">Vendas fora do padrão hoje</div><div class="s">abrir análise ›</div></div></button>');
+  }
+  if(k==='embalagem' && typeof _erPendentes==='function'){
+    const p=_erPendentes().reduce((t,x)=>t+x.falta,0);
+    ex.push(_ptKpi('⏳', p?'amber':'green', _pprFmt(p,'pct'), 'Falta embalar', 'pacotes pendentes'));
+    ex.push('<button class="pt-card pt-kpi" style="cursor:pointer;font-family:inherit;text-align:left;" onclick="embRendAbrir()"><div class="pt-ico t-green">📋</div><div><div class="v" style="font-size:17px;">Rendimento</div><div class="l">detalhe por classe e por dia</div><div class="s">abrir ›</div></div></button>');
+  }
+  if(ex.length) h+='<div class="pt-grid pt-g4">'+ex.join('')+'</div>';
+
+  // gráfico
+  const grupos=_pprGrupos(dias);
+  // dia sem produção (domingo, feriado) fica vazio no gráfico, em vez de despencar a zero
+  const series={vol:['Produção',g=>{ let t=0; g.dias.forEach(d=>t+=(m.vol[d]||{vol:0}).vol); return t>0?t:null; }, v=>_pprFmt(v,s.un)],
+    pes:['Pessoas',g=>{ let t=0,n=0; g.dias.forEach(d=>{ const e=m.eq&&m.eq[d]; if(e){ t+=e.pessoas.size; n++; } }); return n?t/n:null; }, v=>(Math.round(v*10)/10).toLocaleString('pt-BR')],
+    hrs:['Horas',g=>{ let t=0,tem=false; g.dias.forEach(d=>{ const e=m.eq&&m.eq[d]; if(e){ t+=e.min; tem=true; } }); return tem?t/60:null; }, v=>Math.round(v)+'h'],
+    ph:[s.un+'/hora',g=>{ let v=0,mi=0; g.dias.forEach(d=>{ const x=(m.vol[d]||{vol:0}).vol, e=m.eq&&m.eq[d]; if(x>0&&e&&e.min>0){ v+=x; mi+=e.min; } }); return mi?v/(mi/60):null; }, v=>_pprFmt(v,s.un==='kg'?'kg':'x')]};
+  if(!series[_pprSerie]) _pprSerie='vol';
+  const [nomeS,fn,fmtS]=series[_pprSerie];
+  const vals=grupos.map(fn);
+  const segS='<div class="pt-seg">'+Object.keys(series).map(x=>'<button class="'+(_pprSerie===x?'on':'')+'" onclick="pprSerie(\''+x+'\')">'+series[x][0]+'</button>').join('')+'</div>';
+  const segA='<div class="pt-seg">'+[['dia','Dia'],['semana','Semana'],['mes','Mês']].map(([x,t])=>'<button class="'+(_pprAgr===x?'on':'')+'" onclick="pprAgr(\''+x+'\')">'+t+'</button>').join('')+'</div>';
+  h+='<div class="pt-grid">'+_ptCard('Evolução', nomeS+' por '+({dia:'dia',semana:'semana',mes:'mês'}[_pprAgr]), vals.some(v=>v!==null&&v!==undefined)
+    ? _ptGrafico([{nome:nomeS, cor:s.cor, vals}], grupos.map(g=>g.rot), fmtS, {valores:grupos.length<=31?'todos':'fim', id:'ppr', largo:1100, alto:260})
+    : '<div class="pt-vazio">Sem dados no período.</div>', segS+segA)+'</div>';
+
+  // itens mais produzidos + dia a dia
+  const top=Object.entries(m.itens).sort((x,y)=>y[1]-x[1]).slice(0,12);
+  const topH=top.length?'<div class="pt-tw"><table class="pt-tab"><thead><tr><th>'+(k==='cozinha'?'Recheio':'Produto')+'</th><th class="c">Total</th><th class="c">Parte</th><th class="c">Por dia</th></tr></thead><tbody>'+
+    top.map(([n,q])=>'<tr><td style="font-weight:600;">'+n+'</td><td class="c" style="font-weight:800;">'+_pprFmt(q,s.un)+'</td>'+
+      '<td class="c"><div style="display:flex;align-items:center;gap:6px;justify-content:center;"><div class="pt-barra" style="width:60px;"><div style="width:'+Math.round(q/m.tot*100)+'%;background:'+s.cor+';"></div></div><span style="font-size:11.5px;color:#64748b;min-width:30px;">'+Math.round(q/m.tot*100)+'%</span></div></td>'+
+      '<td class="c" style="color:#64748b;">'+_pprFmt(q/Math.max(1,m.diasProd),s.un)+'</td></tr>').join('')+'</tbody></table></div>'
+    : '<div class="pt-vazio" style="padding:16px;">Nada lançado no período.</div>';
+  const diaH='<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Dia</th><th class="c">Produção</th><th class="c">Pessoas</th><th class="c">Horas</th><th class="c">'+s.un+'/hora</th></tr></thead><tbody>'+
+    dias.slice().reverse().map(d=>{ const v=(m.vol[d]||{vol:0}).vol, e=m.eq&&m.eq[d], ph=(v>0&&e&&e.min>0)?v/(e.min/60):null;
+      return '<tr><td><b style="font-weight:650;">'+d.slice(0,5)+'</b> <span style="color:#94a3b8;font-size:11.5px;">'+nomeDiaSemana(_pprDeBR(d)).slice(0,3).toLowerCase()+'</span></td>'+
+        '<td class="c" style="font-weight:700;">'+(v>0?_pprFmt(v,s.un):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+        '<td class="c">'+(e?e.pessoas.size:'<span style="color:#cbd5e1;">—</span>')+'</td><td class="c">'+(e?_pprHh(e.min):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+        '<td class="c" style="font-weight:700;">'+(ph?_pprFmt(ph,s.un==='kg'?'kg':'x'):'<span style="color:#cbd5e1;">—</span>')+'</td></tr>'; }).join('')+'</tbody></table></div>';
+  h+='<div class="pt-grid pt-g21">'+_ptCard('Dia a dia','produção, equipe e produtividade', diaH)+_ptCard(k==='cozinha'?'Recheios mais produzidos':'Mais produzidos','no período', topH)+'</div>';
+  h+='<div class="pt-nota">Volume: '+({cozinha:'recheios lançados pela cozinha (kg)',confeitaria:'produção lançada pela confeitaria (pacotes)',quadra:'produção lançada pela Quadra (pacotes)',embalagem:'pacotes embalados produto a produto — sem o “embalar em lote”'}[k])+
+    '. Pessoas e horas: quem bateu ponto no Símix em '+((_pprPontoMapa&&_pprPontoMapa[k]&&_pprPontoMapa[k].length)?_pprPontoMapa[k].join(', '):(typeof _pontoCarregado!=='undefined'&&_pontoCarregado?(_pprSetoresDoPonto().filter(t=>_pprPontoCasa(k,t)).join(', ')||'nenhum setor encontrado'):'…'))+' (ajuste em ⚙️ Setores do ponto).</div>';
+  return h;
+}
+
+/* ── AJUSTE: quais setores do ponto contam para cada setor ── */
+function _pprConfigTela(){
+  if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado) return '<div class="pt-card pt-vazio">Carregando o ponto…</div>';
+  const todos=_pprSetoresDoPonto();
+  let h='<div class="pt-head"><div><h1>⚙️ Setores do ponto</h1><p>Quais setores do Símix contam para cada setor do painel (pessoas e horas)</p></div></div>';
+  h+='<div class="pt-grid pt-g4">'+PPR_SETORES.map(s=>'<div class="pt-card"><div class="pt-card-h"><h3>'+s.ic+' '+s.nome+'</h3></div>'+
+    todos.map(t=>'<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;cursor:pointer;"><input type="checkbox" class="ppr-map" data-s="'+s.k+'" value="'+t.replace(/"/g,'&quot;')+'"'+(_pprPontoCasa(s.k,t)?' checked':'')+' style="width:16px;height:16px;margin:0;">'+t+'</label>').join('')+
+    '</div>').join('')+'</div>'+
+    '<button class="pt-btn pri" style="height:40px;padding:0 22px;" onclick="pprSalvarMapa()">Salvar</button>';
+  return h;
+}
+async function pprSalvarMapa(){
+  const mapa={}; PPR_SETORES.forEach(s=>mapa[s.k]=[]);
+  document.querySelectorAll('.ppr-map:checked').forEach(i=>mapa[i.dataset.s].push(i.value));
+  _pprPontoMapa=mapa;
+  try{ await setDoc(doc(db,'configuracoes','painelProducao'),{setoresPonto:mapa, atualizadoEm:agora()},{merge:true}); _ptAviso('✓ Setores do ponto salvos'); }
+  catch(e){ alert('Não consegui salvar: '+e.message); }
+  _pprSetor='geral'; renderPpr();
+}
+window.pprSalvarMapa=pprSalvarMapa;
+
+/* ══ VENDAS FORA DO PADRÃO ══ */
+const _PPR_SEM=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+function _pprVendasMapa(){
+  const m={};   // dia → {cod: {q, nome, c:{nome:q}}}
+  (typeof carregamentos!=='undefined'?carregamentos:[]).forEach(c=>{
+    const d=_pprDeBR(c.data); if(!d) return;
+    const dia=_pprBR(d);
+    const D=m[dia]||(m[dia]={});
+    (c.itens||[]).forEach(it=>{
+      const q=parseFloat(String(it.qtdSolicitada).replace(',','.'))||0; if(q<=0) return;
+      const s=String(it.codigo==null?'':it.codigo).trim(); const k=/^\d+$/.test(s)?String(parseInt(s,10)):_normNome(it.nome||s);
+      const x=D[k]||(D[k]={q:0, nome:it.nome||s, cod:s, c:{}});
+      x.q+=q; const nc=c.nome||'Carregamento'; x.c[nc]=(x.c[nc]||0)+q;
+    });
+  });
+  return m;
+}
+function _pprGrupoProd(cod){
+  const t=(typeof _ajRefTipoProduto==='function')?_ajRefTipoProduto(cod):'outro';
+  return t==='pao'?'pao':(t==='salgado'?'salgado':'outro');
+}
+/* Produtos acima da média num dia. Média = mesmos dias da semana nas N semanas anteriores. */
+function _pprVendasDia(dia, mapa){
+  mapa=mapa||_pprVendasMapa();
+  const d=_pprDeBR(dia), N=Math.max(1,parseInt(_pprCfg.semanas)||4), pct=Number(_pprCfg.pct)||30, min=Number(_pprCfg.min)||0;
+  const base=[]; for(let k=1;k<=N;k++){ const b=new Date(d); b.setDate(d.getDate()-7*k); const s=_pprBR(b); if(mapa[s]) base.push(s); }   // dia sem nenhum carregamento (feriado) não entra
+  const hoje=mapa[dia]||{};
+  const agoraD=new Date();
+  const ehHoje=dia===_pprBR(agoraD);
+  const fechado=!ehHoje || agoraD.getHours()>=18;
+  const achados=[];
+  Object.keys(hoje).forEach(k=>{
+    const x=hoje[k];
+    if(_pprVGrupo!=='todos' && _pprGrupoProd(x.cod)!==_pprVGrupo) return;
+    if(x.q<min) return;
+    if(!base.length) return;
+    const media=base.reduce((t,b)=>t+((mapa[b][k]||{q:0}).q),0)/base.length;
+    if(media>0 && x.q<media*(1+pct/100)) return;
+    achados.push({k, nome:x.nome, cod:x.cod, v:x.q, media, n:base.length, w:_PPR_SEM[d.getDay()].toLowerCase(), pct:media>0?Math.round((x.q/media-1)*100):null,
+      top:Object.entries(x.c).sort((a,b)=>b[1]-a[1]).slice(0,2)});
+  });
+  achados.sort((a,b)=>(b.pct===null?1e9:b.pct)-(a.pct===null?1e9:a.pct));
+  const doGrupo=Object.keys(hoje).filter(k=>_pprVGrupo==='todos'||_pprGrupoProd(hoje[k].cod)===_pprVGrupo);
+  const totDia=doGrupo.reduce((t,k)=>t+hoje[k].q,0);
+  return {achados, base, fechado, ehHoje, totDia, nProd:doGrupo.length};
+}
+
+function pprVAba(v){ _pprVAba=v; renderPpr(); }
+window.pprVAba=pprVAba;
+function pprVGrupo(v){ _pprVGrupo=v; renderPpr(); }
+window.pprVGrupo=pprVGrupo;
+function pprVDia(v){ _pprVDia=v; renderPpr(); }
+window.pprVDia=pprVDia;
+function pprVPeriodo(){
+  const de=(document.getElementById('pprv-de')||{}).value, ate=(document.getElementById('pprv-ate')||{}).value;
+  if(!de||!ate||de>ate){ alert('Confira as datas.'); return; }
+  _pprVDe=de; _pprVAte=ate; renderPpr();
+}
+window.pprVPeriodo=pprVPeriodo;
+async function pprVSalvarCfg(){
+  const g=id=>parseFloat((document.getElementById(id)||{}).value);
+  const c={semanas:Math.min(12,Math.max(1,Math.round(g('pprv-sem')||4))), pct:Math.max(1,g('pprv-pct')||30), min:Math.max(0,g('pprv-min')||0)};
+  _pprCfg=c;
+  try{ await setDoc(doc(db,'configuracoes','vendasForaPadrao'),{...c, atualizadoEm:agora()},{merge:true}); }catch(e){ console.warn(e); }
+  renderPpr();
+}
+window.pprVSalvarCfg=pprVSalvarCfg;
+
+function _pprVendasTela(){
+  const mapa=_pprVendasMapa();
+  const hojeS=_pprBR(new Date());
+  const N=parseInt(_pprCfg.semanas)||4;
+  let h='<div class="pt-head"><div><h1>📈 Vendas fora do padrão</h1><p>venda do dia comparada com a média dos mesmos dias da semana nas últimas '+N+' semana(s) · venda = lançado nos carregamentos</p></div>'+
+    '<div class="pt-filtros"><div class="pt-seg">'+[['salgado','🥐 Confeitaria'],['pao','🍞 Pães'],['todos','Todos']].map(([v,t])=>'<button class="'+(_pprVGrupo===v?'on':'')+'" onclick="pprVGrupo(\''+v+'\')">'+t+'</button>').join('')+'</div>'+
+    '<div class="pt-seg">'+[['hoje','Relatório do dia'],['periodo','Analisar período']].map(([v,t])=>'<button class="'+(_pprVAba===v?'on':'')+'" onclick="pprVAba(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
+  // regras
+  h+='<div class="pt-datas" style="margin-top:-4px;">'+
+    '<label>Média das últimas</label><input class="pt-ctl" type="number" id="pprv-sem" min="1" max="12" value="'+N+'" style="width:76px;"><label>semanas</label>'+
+    '<label style="margin-left:10px;">Avisar acima de</label><input class="pt-ctl" type="number" id="pprv-pct" min="1" step="5" value="'+_pprCfg.pct+'" style="width:84px;"><label>%</label>'+
+    '<label style="margin-left:10px;">Mínimo</label><input class="pt-ctl" type="number" id="pprv-min" min="0" step="5" value="'+_pprCfg.min+'" style="width:84px;"><label>pacotes</label>'+
+    '<button class="pt-btn pri" style="height:40px;padding:0 18px;" onclick="pprVSalvarCfg()">Aplicar</button></div>';
+
+  const linhas=(lista,mostraDia)=>'<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,760px);"><thead><tr>'+(mostraDia?'<th>Dia</th>':'')+'<th>Produto</th><th class="c">Vendeu</th><th class="c">Média</th><th class="c">Acima</th><th>Principais carregamentos</th></tr></thead><tbody>'+
+    lista.map(a=>'<tr>'+(mostraDia?'<td style="padding-right:24px;"><b>'+a.dia.slice(0,5)+'</b> <span style="color:#94a3b8;font-size:11.5px;">'+a.w+'</span></td>':'')+
+      '<td style="padding-right:30px;"><span style="color:#94a3b8;font-size:11.5px;">'+a.cod+'</span> <b style="font-weight:600;">'+a.nome+'</b></td>'+
+      '<td class="c" style="font-weight:800;">'+Math.round(a.v)+'</td>'+
+      '<td class="c" style="color:#64748b;">'+Math.round(a.media)+' <span style="font-size:11px;">('+a.n+' '+a.w+')</span></td>'+
+      '<td class="c">'+_ptPill(a.pct===null?'novo':'+'+a.pct+'%','red',true)+'<div style="font-size:11px;color:#94a3b8;margin-top:2px;">+'+Math.round(a.v-a.media)+' pct</div></td>'+
+      '<td style="font-size:12px;color:#475569;">'+a.top.map(t=>t[0]+' <b>('+Math.round(t[1])+')</b>').join('<br>')+'</td></tr>').join('')+
+    '</tbody></table></div>';
+
+  if(_pprVAba==='hoje'){
+    const dia=_pprVDia||hojeS;
+    const r=_pprVendasDia(dia, mapa);
+    const status=r.ehHoje
+      ? (r.fechado?_ptPill('dia fechado · notas emitidas','green'):_ptPill('em andamento · as notas fecham às 18:00','amber'))
+      : _ptPill('dia encerrado','gray');
+    h+='<div class="pt-grid pt-g4">'+
+      '<div class="pt-card pt-kpi"><div class="pt-ico t-blue">📅</div><div style="min-width:0;"><input class="pt-ctl" type="date" value="'+_pprISO(_pprDeBR(dia))+'" onchange="pprVDia(this.value?this.value.split(\'-\').reverse().join(\'/\'):\'\')" style="width:100%;max-width:170px;"><div class="s" style="margin-top:5px;">'+status+'</div></div></div>'+
+      _ptKpi('📈', r.achados.length?'red':'green', r.achados.length, 'Produtos acima da média', 'acima de '+_pprCfg.pct+'% e de '+_pprCfg.min+' pacotes')+
+      _ptKpi('🚚','sky', Math.round(r.totDia).toLocaleString('pt-BR'), 'Pacotes vendidos no dia', r.nProd+' produto(s) nos carregamentos')+
+      _ptKpi('🗓️','violet', r.base.length, 'Semanas na média', r.base.length?('mesmo dia: '+r.base.map(b=>b.slice(0,5)).join(', ')):'sem histórico desse dia')+
+    '</div>';
+    h+='<div class="pt-grid">'+_ptCard('Relatório de '+dia, r.ehHoje&&!r.fechado?'atualiza sozinho conforme os carregamentos são lançados':'',
+      r.achados.length?linhas(r.achados,false):'<div class="pt-vazio" style="padding:20px;">Nenhum produto acima da média neste dia 👍</div>')+'</div>';
+  } else {
+    if(!_pprVDe||!_pprVAte){ const a=new Date(); const d=new Date(); d.setDate(a.getDate()-13); _pprVDe=_pprISO(d); _pprVAte=_pprISO(a); }
+    h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="pprv-de" value="'+_pprVDe+'"><label>até</label><input class="pt-ctl" type="date" id="pprv-ate" value="'+_pprVAte+'">'+
+      '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="pprVPeriodo()">Aplicar</button></div>';
+    const tudo=[]; const porDia=[];
+    for(let d=new Date(_pprVDe+'T12:00:00'); d<=new Date(_pprVAte+'T12:00:00'); d.setDate(d.getDate()+1)){
+      const s=_pprBR(d); const r=_pprVendasDia(s, mapa);
+      r.achados.forEach(a=>tudo.push({...a, dia:s})); porDia.push({dia:s, n:r.achados.length, w:_PPR_SEM[d.getDay()]});
+    }
+    tudo.sort((a,b)=>_pprDeBR(b.dia)-_pprDeBR(a.dia) || (b.pct===null?1e9:b.pct)-(a.pct===null?1e9:a.pct));
+    const vezes={}; tudo.forEach(a=>{ vezes[a.nome]=(vezes[a.nome]||0)+1; });
+    const recorrentes=Object.entries(vezes).filter(x=>x[1]>=2).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    h+='<div class="pt-grid pt-g3">'+
+      _ptKpi('📈', tudo.length?'red':'green', tudo.length, 'Vendas acima da média', 'no período')+
+      _ptKpi('📦','blue', new Set(tudo.map(a=>a.nome)).size, 'Produtos diferentes', 'que passaram da média ao menos uma vez')+
+      _ptKpi('🔁', recorrentes.length?'amber':'green', recorrentes.length, 'Produtos recorrentes', 'acima da média 2 vezes ou mais — talvez a média esteja baixa')+
+    '</div>';
+    if(recorrentes.length) h+='<div class="pt-grid">'+_ptCard('🔁 Recorrentes','vale revisar a produção desses produtos',
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+recorrentes.map(([n,q])=>'<span class="pt-pill t-amber np" style="font-size:12.5px;padding:5px 12px;">'+n+' · '+q+'×</span>').join('')+'</div>')+'</div>';
+    h+='<div class="pt-grid">'+_ptCard('Todas as ocorrências', tudo.length+' no período · mais recente primeiro',
+      tudo.length?linhas(tudo,true):'<div class="pt-vazio" style="padding:20px;">Nenhuma venda acima da média no período 👍</div>')+'</div>';
+  }
+  h+='<div class="pt-nota">Para cada produto, a venda do dia é comparada com a média do <b>mesmo dia da semana</b> nas últimas '+N+' semanas (uma segunda com as '+N+' segundas anteriores). '+
+    'Dias sem nenhum carregamento (feriado) ficam fora da média. Venda = quantidade lançada nos carregamentos, no dia do carregamento. As regras valem para todos os admins.</div>';
+  return h;
+}
 
 function renderEmbalagem(){
   document.getElementById('emb-data-topbar').textContent=dataSelEmb||hoje();
@@ -25141,6 +25627,7 @@ async function pontoCarregarMeses(){
   if(t==='s-ponto-mes') renderPontoMes();
   if(t==='s-ponto-dash') renderPdash();
   if(t==='s-emb-rend' && typeof renderEmbRend==='function') renderEmbRend();
+  if(t==='s-ppr' && typeof renderPpr==='function') renderPpr();
 }
 window.pontoCarregarMeses=pontoCarregarMeses;
 function pontoTentarDeNovo(){ _pontoErro=''; renderPonto(); }
