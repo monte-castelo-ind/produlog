@@ -5762,6 +5762,9 @@ let CONTAGEM_ITENS = {};
 const MP_TESTES_LISTA = ["OVO EM GALÃO", "AÇUCAR CRISTAL", "AMIDO DE MILHO PILAO SACO 25KG", "AMIDO SACO 25KG", "ACEM", "AÇUCAR CONCENTRADO", "AÇUCAR REFINADO", "AMACIANTE DE CARNE", "AMIDO DE MILHO SACO 25KG", "AMIDO ESPECIAL PODIUM 100", "AMIDO NOVO PSE560", "ARROZ", "CAFÉ", "CALDO DE CARNE KNOR", "CALDO DE GALINHA", "CALDO DE GALINHA KNOR", "CALDO DE LEGUMES", "CANELA", "CATCHUP", "CHEDDAR", "CHOCOLATE AO LEITE EM BARRA 24gr", "CHOCOLATE EM BARRA 6gr", "COLORAU", "CORANTE AMARELO GEMA", "CORANTE CARAMELO", "COXÃO DURO", "DOCE DE LEITE", "ERVA DOCE", "ESSENCIA DE BAUNILHA", "ESSENCIA MANTEIGA", "FARINHA DE MILHO MEDIA", "FARINHA DE ROSCA", "FEIJÃO PRETO", "FERMENTO DOCE", "FERMENTO DOCE ITAIQUARA", "FERMENTO EM PÓ", "FERMENTO FLASHMANN", "FILÉ DE PEITO DE FRANGO", "FILTRO PRA CAFE TAM 103", "FLOCOS DE BATATA", "FRUTAS CRISTALIZADAS", "GOIABADA", "GOTAS PINGO CHOCOLATE", "GRANOLA 7 CEREAIS", "LEITE", "LENTILHA", "LINGÜIÇA CALABRESA", "LINGÜIÇA CALABRESA FINA", "MARGARINA  AMÉLIA 80% GORDURA", "MARGARINA (COAMO)", "MARGARINA COAMO 80% PÃO DE QUEIJO", "MARGARINA CREMOSA 60% GORDURA REFEITORIO", "MARGARINA DUALIS 20% GORDURA", "MARGARINA FOLHADA", "MARGARINA PREMIUM 80% GORDURA", "MASSA ESPAGUETE", "MASSA PENNE", "MISTURA DE PÃO DE QUEIJO RECHEADO (6520)", "MISTURA PARA PÃO DE QUEIJO NORMAL (651)", "MISTURA PRA CUCA ALEMA", "MOLHO BARBECUE LIZA", "MOLHO INGLES", "MOLHO REFOGADO", "MOSTARDA", "NATA( CREME DE LEITE)", "NOZ MOSCADA", "OLEO DE SOJA", "OLEO EMULSIFICANTE", "OVAM25 Lubrificante para fins alimenticios (608419)", "OVO EM PÓ (DESIDRATADO)", "PAPRICA DOCE", "POLVILHO", "PRESUNTO", "PROTEINA SABOR CEBOLA E SALSA (CLCS4000-10)", "PROTEINA SABOR PICANHA", "PROTEINA SABOR PRESUNTO ( código FPPE3000-10 )", "PROTEINA TEXTURIZADA CARAMELO (CL4000-12)", "PROTEINA TEXTURIZADA NATURAL FRANGO (FNLG3000-10)", "PROTEINA TEXTURIZADA NATURAL RED BORDO", "QUEIJO MINAS (MEIA CURA) - CRIOLO", "QUEIJO MUSSARELA", "QUEIJO TROPICAL", "RECHEIO DOCE DE LEITE", "REFORÇADOR (MELHORADOR)", "REQUEIJÃO AMARILIS", "REQUEIJÃO VALE DO PARDO", "RETARDADOR", "SABOR A MI COM PIMENTA", "SAL", "SAL GROSSO", "SALSICHA", "SALSICHA NOBRE", "SEMENTE DE LINHAÇA", "SOBRECOXA", "SOBREPALETA SUINA", "SORO DE LEITE EM PO", "VINAGRE ALCOOL 750ML"];
 
 let QUADRA_PRODUTOS = [];
+/* Classes dos pães (Quadra), como as classes dos salgados. Sem nada
+   gravado, o produto é Miudeza; os de Pão Francês são marcados à mão. */
+const PAO_CLASSES=['Pão Francês','Miudeza'];
 let QUADRA_KITS_RECEITAS = {};
   let QUADRA_KITS = []; // Lista de nomes de kits da Quadra
 let QUADRA_KIT_MAPPING = {"Kit Massa Especial Mini Sonho": "KIT MASSA ESPECIAL MINI SONHO", "Kit Pão Sovado": "KIT PÃO SOVADO", "Kit Pao De Milho Salgado Cacetinho": "KIT PAO DE MILHO SALGADO CACETINHO", "Kit Cuca Alemã": "KIT CUCA ALEMÃ", "Kit Rosca De Polvilho": "KIT ROSCA DE POLVILHO", "Kit Massa Especial Donuts E Cueca Grande": "KIT MASSA ESPECIAL DONUTS E CUECA GRANDE", "Kit Pão Preto": "KIT PÃO PRETO", "Kit Massa Sonho": "KIT MASSA SONHO", "Kit Massa Especial": "KIT MASSA ESPECIAL", "Kit Massa Doce": "KIT MASSA DOCE", "Kit Pão De Cenoura": "KIT PÃO DE CENOURA", "Kit Cueca Virada": "KIT CUECA VIRADA", "Kit Pão De Leite": "KIT PÃO DE LEITE", "Kit Cuca Colonial": "KIT CUCA COLONIAL", "Kit Pão De Aipim": "KIT PÃO DE AIPIM", "Kit Cuca Frutas": "KIT CUCA FRUTAS", "Kit Cuca Chocolate": "KIT CUCA CHOCOLATE", "Kit Vovo/Gajeta": "KIT VOVO/GAJETA", "Kit Pão De Milho Doce": "KIT PÃO DE MILHO DOCE", "Kit Pão De Batata": "KIT PÃO DE BATATA", "Kit Pão Caseiro": "KIT PÃO CASEIRO", "Kit Raminho": "KIT RAMINHO", "Kit Pão De Milho Salgado": "KIT PÃO DE MILHO SALGADO", "Kit Pão Folhado": "KIT PÃO FOLHADO", "Kit Pão Brioche": "KIT PÃO BRIOCHE", "Kit Pão Integral": "KIT PÃO INTEGRAL", "Kit Grande Premium 6/8": "KIT GRANDE PREMIUM 6/8", "Kit Pão 7 Grãos": "KIT PÃO 7 GRÃOS"};
@@ -7305,7 +7308,7 @@ window.embConfirmarLote=embConfirmarLote;
    finalizado (é correção de contagem, não trabalho novo).
 
    A embalagem conta em UNIDADES; aqui tudo vira PACOTES. */
-let _erPer='7', _erDia='', _erDe='', _erAte='';
+let _erPer='7', _erDia='', _erDe='', _erAte='', _erPendSel='';
 
 function _erDataDe(txt){
   const m=String(txt||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
@@ -7314,10 +7317,15 @@ function _erDataDe(txt){
 function _erNum(br){ const m=String(br||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m?+(m[3]+m[2]+m[1]):0; }
 function _erDate(br){ return new Date(br.split('/').reverse().join('-')+'T12:00:00'); }
 
+function _erClassePao(r){
+  const c=String(r.cod||'').trim(), n=_normNome(r.produto||'');
+  const q=(QUADRA_PRODUTOS||[]).find(x=>c && String(x.cod||'').trim()===c) || (QUADRA_PRODUTOS||[]).find(x=>_normNome(x.nome||'')===n);
+  return (q && q.classe) || 'Miudeza';
+}
 function _erGrupo(r){
-  if(r.origem==='quadra') return {tipo:'pao', classe:''};
+  if(r.origem==='quadra') return {tipo:'pao', classe:_erClassePao(r)};
   const t=(typeof _ajRefTipoProduto==='function') ? _ajRefTipoProduto(r.cod) : 'outro';
-  if(t==='pao') return {tipo:'pao', classe:''};
+  if(t==='pao') return {tipo:'pao', classe:_erClassePao(r)};
   if(t!=='salgado') return {tipo:'outro', classe:''};
   const c=String(r.cod||'').trim(), n=_normNome(r.produto||'');
   const p=(produtosConfFirebase||[]).find(x=>String(x.cod||'').trim()===c) || (produtosConfFirebase||[]).find(x=>_normNome(x.nome||'')===n);
@@ -7398,6 +7406,70 @@ function erDatas(){
   _erDe=de; _erAte=ate; _erDia=''; renderEmbRend();
 }
 window.erDatas=erDatas;
+function erPendVer(k){ _erPendSel=(_erPendSel===k?'':k); renderEmbRend(); if(_erPendSel) setTimeout(()=>document.getElementById('er-pend-lista')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
+window.erPendVer=erPendVer;
+
+/* Equipe da embalagem por dia, pelo Controle de Ponto: quem bateu ponto
+   no setor de embalagem e quantas horas trabalhou. */
+function _erEquipe(){
+  const out={};
+  if(typeof pontoMeses==='undefined') return out;
+  Object.keys(pontoMeses).forEach(ch=>{
+    const ano=ch.slice(0,4);
+    ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+      const setor=_normNome((typeof _pmesSetorDe==='function'?_pmesSetorDe(p,ch):'')||p.setor||'');
+      if(setor.indexOf('EMBALA')<0) return;
+      (p.dias||[]).forEach(d=>{
+        if(!d.batidas || !d.batidas.length) return;
+        const dia=d.data+'/'+ano;
+        let min=Number(d.minTrab)||0;
+        if(!min && typeof _pjDia==='function'){ const j=_pjDia(d); if(j) min=j.trab; }
+        const o=out[dia]||(out[dia]={pessoas:new Set(), min:0});
+        o.pessoas.add(String(p.codigo||p.nome)); o.min+=min;
+      });
+    });
+  });
+  return out;
+}
+
+/* Classes dos pães: marcar os de Pão Francês sem abrir produto por produto */
+function erClassesPao(){
+  document.getElementById('er-cls-ov')?.remove();
+  const ov=document.createElement('div'); ov.id='er-cls-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  document.body.appendChild(ov);
+  _erClassesRender();
+}
+window.erClassesPao=erClassesPao;
+function _erClassesRender(){
+  const ov=document.getElementById('er-cls-ov'); if(!ov) return;
+  const busca=_normNome((document.getElementById('er-cls-busca')||{}).value||'');
+  const lista=(QUADRA_PRODUTOS||[]).filter(p=>p.firestoreId && (!busca || _normNome(p.nome).includes(busca) || String(p.cod||'').includes(busca)))
+    .sort((a,b)=>(a.classe===b.classe?0:(a.classe==='Pão Francês'?-1:1)) || String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+  const nFr=(QUADRA_PRODUTOS||[]).filter(p=>p.classe==='Pão Francês').length;
+  const val=(document.getElementById('er-cls-busca')||{}).value||'';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;">'+
+    '<div style="padding:18px 20px 10px;"><div style="font-size:17px;font-weight:800;">🍞 Classes dos pães</div>'+
+      '<div style="font-size:12.5px;color:#64748b;margin-top:4px;line-height:1.5;">Todos começam como <b>Miudeza</b>. Toque para trocar para <b>Pão Francês</b>. '+nFr+' marcado(s) como Pão Francês.</div>'+
+      '<input id="er-cls-busca" value="'+val.replace(/"/g,'&quot;')+'" oninput="_erClassesRender()" placeholder="Buscar pão" style="margin-top:10px;width:100%;padding:9px 12px;font-size:14px;"></div>'+
+    '<div style="overflow:auto;flex:1;padding:0 20px;">'+lista.map(p=>{
+      const fr=p.classe==='Pão Francês';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #f1f5f9;">'+
+        '<span style="flex:1;font-size:13px;"><span style="color:#94a3b8;font-size:11px;">'+(p.cod||'')+'</span> '+p.nome+'</span>'+
+        '<button onclick="erClasseTrocar(\''+p.firestoreId+'\',\''+(fr?'Miudeza':'Pão Francês')+'\')" style="border:none;border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:'+(fr?'#fef3c7':'#f1f5f9')+';color:'+(fr?'#92400e':'#475569')+';">'+(fr?'🥖 Pão Francês':'Miudeza')+'</button></div>';
+    }).join('')+'</div>'+
+    '<div style="padding:12px 20px 16px;"><button class="btn btn-secondary" style="width:100%;margin:0;" onclick="document.getElementById(\'er-cls-ov\').remove();renderEmbRend();">Fechar</button></div></div>';
+  const b=document.getElementById('er-cls-busca'); if(b && val){ b.focus(); b.setSelectionRange(val.length,val.length); }
+}
+window._erClassesRender=_erClassesRender;
+async function erClasseTrocar(fid, classe){
+  const p=(QUADRA_PRODUTOS||[]).find(x=>x.firestoreId===fid); if(p) p.classe=classe;   // na tela já
+  _erClassesRender();
+  try{ await updateDoc(doc(db,'quadraProdutosCustom',fid),{classe}); }
+  catch(e){ alert('Não consegui gravar: '+e.message); }
+}
+window.erClasseTrocar=erClasseTrocar;
+
 function erVerDia(d){ _erDia=(_erDia===d?'':d); renderEmbRend(); if(_erDia) setTimeout(()=>document.getElementById('er-detalhe')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
 window.erVerDia=erVerDia;
 
@@ -7425,12 +7497,12 @@ function renderEmbRend(){
   const {ev:evTodos, lote:loteTodos}=_erEventos();
   const ev=evTodos.filter(x=>noPer.has(x.dia));
   const lotePer=loteTodos.filter(x=>noPer.has(x.dia)).reduce((t,x)=>t+x.pct,0);
-  const porDia={}; dias.forEach(d=>porDia[d]={tot:0, pao:0, salg:0, outro:0, cls:{}, prods:{}});
+  const porDia={}; dias.forEach(d=>porDia[d]={tot:0, pao:0, salg:0, outro:0, cls:{}, paoCls:{}, prods:{}});
   ev.forEach(x=>{
     const g=x.r.manual?{tipo:'outro',classe:''}:_erGrupo(x.r);
     const D=porDia[x.dia];
     D.tot+=x.pct;
-    if(g.tipo==='pao') D.pao+=x.pct; else if(g.tipo==='salgado'){ D.salg+=x.pct; D.cls[g.classe]=(D.cls[g.classe]||0)+x.pct; } else D.outro+=x.pct;
+    if(g.tipo==='pao'){ D.pao+=x.pct; D.paoCls[g.classe]=(D.paoCls[g.classe]||0)+x.pct; } else if(g.tipo==='salgado'){ D.salg+=x.pct; D.cls[g.classe]=(D.cls[g.classe]||0)+x.pct; } else D.outro+=x.pct;
     const chave=(x.r.produto||'?')+'|'+(x.r.data||'');
     const P=D.prods[chave]||(D.prods[chave]={produto:x.r.produto||'?', dataProd:x.r.data||'', pct:0, g});
     P.pct+=x.pct;
@@ -7442,11 +7514,27 @@ function renderEmbRend(){
   const pior=comTrabalho.slice().sort((a,b)=>porDia[a].tot-porDia[b].tot)[0];
   const clsPer=[...new Set(dias.flatMap(d=>Object.keys(porDia[d].cls)))].sort(ordCls);
   const temOutro=dias.some(d=>porDia[d].outro>0.5);
+  const paoPer=PAO_CLASSES.filter(c=>dias.some(d=>(porDia[d].paoCls[c]||0)>0.5));
+
+  // equipe (Controle de Ponto, setor Embalação)
+  if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado && !_pontoCarregando && !_pontoErro){
+    pontoCarregarMeses().then(()=>{ if(document.querySelector('.screen.active')?.id==='s-emb-rend') renderEmbRend(); });
+  }
+  const eqMapa=(typeof _pontoCarregado!=='undefined' && _pontoCarregado) ? _erEquipe() : null;
+  const eqDia=d=>eqMapa&&eqMapa[d]?{n:eqMapa[d].pessoas.size, min:eqMapa[d].min}:null;
+  const eqDias=dias.map(eqDia).filter(Boolean);
+  const eqMin=eqDias.reduce((t,x)=>t+x.min,0);
+  const eqPessoasMed=eqDias.length?eqDias.reduce((t,x)=>t+x.n,0)/eqDias.length:0;
+  // pacotes por hora: só nos dias que têm lançamento e ponto
+  const diasPH=dias.filter(d=>porDia[d].tot>0.5 && eqDia(d) && eqDia(d).min>0);
+  const pctHora=diasPH.length?diasPH.reduce((t,d)=>t+porDia[d].tot,0)/(diasPH.reduce((t,d)=>t+eqDia(d).min,0)/60):null;
+  const hh=m=>(typeof _pontoHhmm==='function')?_pontoHhmm(Math.round(m)):(Math.round(m/60)+'h');
 
   // ── pendente ──
   const pend=_erPendentes();
   const pTot=pend.reduce((t,x)=>t+x.falta,0);
   const pPao=pend.filter(x=>x.tipo==='pao').reduce((t,x)=>t+x.falta,0);
+  const pPaoCls={}; pend.filter(x=>x.tipo==='pao').forEach(x=>{ pPaoCls[x.classe]=(pPaoCls[x.classe]||0)+x.falta; });
   const pSalg=pend.filter(x=>x.tipo==='salgado');
   const pSalgTot=pSalg.reduce((t,x)=>t+x.falta,0);
   const pCls={}; pSalg.forEach(x=>{ pCls[x.classe]=(pCls[x.classe]||0)+x.falta; });
@@ -7460,7 +7548,8 @@ function renderEmbRend(){
   const perTxt=dias.length?(dias.length===1?dias[0]:(dias[0]+' a '+dias[dias.length-1])):'escolha as datas';
   let h='<div class="pt"><main class="pt-main">'+
     '<div class="pt-head"><div><h1>Rendimento da Embalagem</h1><p>'+perTxt+' · lançamentos feitos produto a produto</p></div>'+
-      '<div class="pt-filtros"><div class="pt-seg">'+seg.map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
+      '<div class="pt-filtros">'+(window.adminMode===true?'<button class="pt-btn" onclick="erClassesPao()">🍞 Classes dos pães</button>':'')+
+      '<div class="pt-seg">'+seg.map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
   if(_erPer==='datas'){
     h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="er-de" value="'+(_erDe||'')+'">'+
       '<label>até</label><input class="pt-ctl" type="date" id="er-ate" value="'+(_erAte||'')+'">'+
@@ -7475,6 +7564,11 @@ function renderEmbRend(){
     _ptKpi('📊','blue', fmt(media), 'Média por dia', 'pacotes · só dias com lançamento')+
     _ptKpi('🏆','violet', melhor?fmt(porDia[melhor].tot):'—', 'Melhor dia', melhor?(melhor.slice(0,5)+' · '+semana(melhor)+(pior&&pior!==melhor?(' · menor: '+fmt(porDia[pior].tot)+' em '+pior.slice(0,5)):'')):'sem lançamentos')+
     _ptKpi('⏳', pTot?'amber':'green', fmt(pTot), 'Falta embalar', diasParaZerar?('≈ '+(diasParaZerar<1?'menos de 1 dia':(diasParaZerar.toFixed(1).replace('.',',')+' dia(s)'))+' no ritmo médio'):(pTot?'pacotes':'tudo embalado 🎉'))+
+  '</div>';
+  h+='<div class="pt-grid pt-g3">'+
+    _ptKpi('👥','sky', eqMapa?(eqDias.length?(Math.round(eqPessoasMed*10)/10).toLocaleString('pt-BR'):'—'):'…', 'Pessoas por dia', eqMapa?(eqDias.length?('média no setor Embalação · '+eqDias.length+' dia(s) com ponto'):'sem ponto do setor no período'):'carregando o ponto…')+
+    _ptKpi('🕐','sky', eqMapa?(eqMin?hh(eqMin):'—'):'…', 'Horas trabalhadas', eqMapa?(eqDias.length?('no período · '+hh(eqMin/eqDias.length)+' por dia'):'pelo Controle de Ponto'):'carregando o ponto…')+
+    _ptKpi('⚡','green', pctHora?(Math.round(pctHora*10)/10).toLocaleString('pt-BR'):'—', 'Pacotes por hora trabalhada', pctHora?('rendimento da equipe · '+diasPH.length+' dia(s)'):'precisa de lançamento e ponto no mesmo dia')+
   '</div>';
 
   // ── gráfico + pendente ──
@@ -7496,18 +7590,39 @@ function renderEmbRend(){
           '<div style="font-size:10px;color:var(--pt-sub);margin-top:5px;white-space:nowrap;">'+d.slice(0,5)+'</div></button>';
       }).join('')+
     '</div></div>';
-  const linhaP=(rot,v,cor,tot)=>'<div style="margin-bottom:11px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="font-weight:600;color:#334155;">'+rot+'</span><b>'+fmt(v)+'</b></div>'+
-    '<div class="pt-barra"><div style="width:'+(tot?Math.max(2,v/tot*100):0)+'%;background:'+cor+';"></div></div></div>';
+  const linhaP=(rot,v,cor,tot,k)=>'<button onclick="erPendVer(\''+k+'\')" title="Ver os pendentes" style="display:block;width:100%;text-align:left;border:none;background:'+(_erPendSel===k?'#eff6ff':'transparent')+';border-radius:9px;padding:6px 8px;margin:0 -8px 5px;width:calc(100% + 16px);cursor:pointer;font-family:inherit;color:inherit;">'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="font-weight:600;color:#334155;">'+rot+'</span><span><b>'+fmt(v)+'</b> <span style="color:#94a3b8;font-size:12px;">›</span></span></div>'+
+    '<div class="pt-barra"><div style="width:'+(tot?Math.max(2,v/tot*100):0)+'%;background:'+cor+';"></div></div></button>';
+  const clsPaoPend=PAO_CLASSES.filter(c=>(pPaoCls[c]||0)>0.5);
   const clsPend=Object.keys(pCls).sort(ordCls);
   const pendHtml=pTot<0.5
     ? '<div class="pt-vazio" style="padding:26px 10px;"><div style="font-size:30px;">✅</div><div style="font-weight:700;color:var(--pt-txt);margin-top:6px;">Nada pendente</div></div>'
     : '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px;"><span style="font-size:30px;font-weight:800;color:#b45309;">'+fmt(pTot)+'</span><span style="font-size:13px;color:var(--pt-sub);">pacotes · '+pend.length+' produto(s) · '+diasPend+' dia(s)</span></div>'+
-      linhaP('🍞 Pães',pPao,'#f59e0b',pTot)+
-      linhaP('🥐 Salgados',pSalgTot,'#3b82f6',pTot)+
-      (clsPend.length?'<div style="margin:2px 0 8px 14px;padding-left:12px;border-left:2px solid #dbeafe;">'+clsPend.map(c=>linhaP(c,pCls[c],'#93c5fd',pTot)).join('')+'</div>':'')+
-      (pOutro>0.5?linhaP('📦 Outros',pOutro,'#94a3b8',pTot):'')+
+      linhaP('🍞 Pães',pPao,'#f59e0b',pTot,'pao')+
+      (clsPaoPend.length?'<div style="margin:2px 0 8px 14px;padding-left:12px;border-left:2px solid #fde68a;">'+clsPaoPend.map(c=>linhaP(c,pPaoCls[c],'#fcd34d',pTot,'pao:'+c)).join('')+'</div>':'')+
+      linhaP('🥐 Salgados',pSalgTot,'#3b82f6',pTot,'salgado')+
+      (clsPend.length?'<div style="margin:2px 0 8px 14px;padding-left:12px;border-left:2px solid #dbeafe;">'+clsPend.map(c=>linhaP(c,pCls[c],'#93c5fd',pTot,'salgado:'+c)).join('')+'</div>':'')+
+      (pOutro>0.5?linhaP('📦 Outros',pOutro,'#94a3b8',pTot,'outro'):'')+
       (maisAntigo?'<div style="font-size:11.5px;color:var(--pt-mut);margin-top:6px;">Mais antigo pendente: <b style="color:#b45309;">'+maisAntigo+'</b></div>':'');
-  h+='<div class="pt-grid pt-g21">'+_ptCard('Embalado por dia','toque num dia para ver o detalhe', barras)+_ptCard('Falta embalar','produções dos últimos 30 dias', pendHtml)+'</div>';
+  h+='<div class="pt-grid pt-g21">'+_ptCard('Embalado por dia','toque num dia para ver o detalhe', barras)+_ptCard('Falta embalar','toque num grupo para ver a lista', pendHtml)+'</div>';
+
+  // ── lista dos pendentes do grupo escolhido ──
+  if(_erPendSel){
+    const [tp,cl]=_erPendSel.split(':');
+    const sel=pend.filter(x=>x.tipo===tp && (!cl || x.classe===cl)).sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)||b.falta-a.falta);
+    const nome=cl||({pao:'Pães',salgado:'Salgados',outro:'Outros'}[tp]);
+    const hojeN=_erNum(fmtData(new Date()));
+    const corpoP=sel.length
+      ? '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,560px);"><thead><tr><th>Produto</th><th>Produção</th><th class="c">Faltam</th></tr></thead><tbody>'+
+          sel.map(x=>{ const atras=_erNum(x.r.data)<hojeN;
+            return '<tr><td style="padding-right:36px;"><b style="font-weight:600;">'+x.r.produto+'</b></td>'+
+              '<td style="padding-right:28px;color:'+(atras?'#b45309':'var(--pt-sub)')+';font-weight:'+(atras?'700':'400')+';">'+x.r.data.slice(0,5)+' <span style="font-size:11px;color:var(--pt-mut);font-weight:400;">'+semana(x.r.data)+'</span></td>'+
+              '<td class="c" style="font-weight:800;">'+fmt(x.falta)+'</td></tr>'; }).join('')+
+        '</tbody></table></div>'
+      : '<div class="pt-vazio" style="padding:18px;">Nada pendente aqui.</div>';
+    h+='<div id="er-pend-lista" class="pt-grid">'+_ptCard('Pendentes · '+nome, sel.length+' produto(s) · '+fmt(sel.reduce((t,x)=>t+x.falta,0))+' pacotes · produção mais antiga primeiro', corpoP,
+      '<button class="pt-btn" onclick="erPendVer(\''+_erPendSel+'\')">Fechar</button>')+'</div>';
+  }
 
   // ── tabela dia a dia ──
   const linhas=dias.slice().reverse().map(d=>{
@@ -7515,14 +7630,20 @@ function renderEmbRend(){
     const vs=media&&D.tot>0.5?Math.round((D.tot/media-1)*100):null;
     return '<tr class="cl" onclick="erVerDia(\''+d+'\')"'+(_erDia===d?' style="background:#eff6ff;"':'')+'>'+
       '<td><b style="font-weight:650;">'+d.slice(0,5)+'</b> <span style="color:var(--pt-mut);font-size:11.5px;">'+semana(d)+'</span></td>'+
-      '<td class="c" style="color:#b45309;">'+(D.pao>0.5?fmt(D.pao):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+      paoPer.map(c=>'<td class="c" style="color:#b45309;">'+((D.paoCls[c]||0)>0.5?fmt(D.paoCls[c]):'<span style="color:#cbd5e1;">—</span>')+'</td>').join('')+
       clsPer.map(c=>'<td class="c" style="color:#1d4ed8;">'+(D.cls[c]>0.5?fmt(D.cls[c]):'<span style="color:#cbd5e1;">—</span>')+'</td>').join('')+
       (temOutro?'<td class="c" style="color:#475569;">'+(D.outro>0.5?fmt(D.outro):'<span style="color:#cbd5e1;">—</span>')+'</td>':'')+
       '<td class="c" style="font-weight:800;">'+(D.tot>0.5?fmt(D.tot):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+      (()=>{ const e=eqDia(d); const ph=(e&&e.min>0&&D.tot>0.5)?D.tot/(e.min/60):null;
+        return '<td class="c" style="color:#0369a1;">'+(e?e.n:'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+          '<td class="c" style="color:#0369a1;">'+(e&&e.min?hh(e.min):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
+          '<td class="c" style="font-weight:700;">'+(ph?(Math.round(ph*10)/10).toLocaleString('pt-BR'):'<span style="color:#cbd5e1;">—</span>')+'</td>'; })()+
       '<td class="c">'+(vs===null?'<span style="color:#cbd5e1;">—</span>':_ptPill((vs>0?'+':'')+vs+'%', vs>=0?'green':'red', true))+'</td></tr>';
   }).join('');
-  h+='<div class="pt-grid">'+_ptCard('Dia a dia','pacotes embalados', '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Dia</th><th class="c">🍞 Pães</th>'+
-    clsPer.map(c=>'<th class="c">🥐 '+c+'</th>').join('')+(temOutro?'<th class="c">Outros</th>':'')+'<th class="c">Total</th><th class="c">vs média</th></tr></thead><tbody>'+linhas+'</tbody></table></div>')+'</div>';
+  h+='<div class="pt-grid">'+_ptCard('Dia a dia','pacotes embalados · equipe do setor Embalação pelo ponto', '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Dia</th>'+
+    paoPer.map(c=>'<th class="c">🍞 '+c+'</th>').join('')+
+    clsPer.map(c=>'<th class="c">🥐 '+c+'</th>').join('')+(temOutro?'<th class="c">Outros</th>':'')+'<th class="c">Total</th>'+
+    '<th class="c">Pessoas</th><th class="c">Horas</th><th class="c">Pct/hora</th><th class="c">vs média</th></tr></thead><tbody>'+linhas+'</tbody></table></div>')+'</div>';
 
   // ── detalhe do dia ──
   const dSel=_erDia || (dias.length===1?dias[0]:'');
@@ -7532,14 +7653,16 @@ function renderEmbRend(){
     const deOutros=prods.filter(p=>p.dataProd && p.dataProd!==dSel).reduce((t,p)=>t+p.pct,0);
     const ic=g=>g.tipo==='pao'?'🍞':(g.tipo==='salgado'?'🥐':'📦');
     const corpo=prods.length
-      ? '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Produto</th><th>Produção de</th><th>Grupo</th><th class="c">Pacotes</th></tr></thead><tbody>'+
-          prods.map(p=>'<tr><td><span style="margin-right:6px;">'+ic(p.g)+'</span><b style="font-weight:600;">'+p.produto+'</b></td>'+
-            '<td style="color:'+(p.dataProd&&p.dataProd!==dSel?'#b45309':'var(--pt-sub)')+';">'+(p.dataProd?p.dataProd.slice(0,5):'—')+(p.dataProd&&p.dataProd!==dSel?' · outro dia':'')+'</td>'+
-            '<td>'+(p.g.tipo==='salgado'?_ptPill(p.g.classe,'blue',true):(p.g.tipo==='pao'?_ptPill('Pão','amber',true):_ptPill('Outro','gray',true)))+'</td>'+
+      ? '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,560px);"><thead><tr><th>Produto</th><th>Produção</th><th>Grupo</th><th class="c">Pacotes</th></tr></thead><tbody>'+
+          prods.map(p=>'<tr><td style="padding-right:36px;"><span style="margin-right:6px;">'+ic(p.g)+'</span><b style="font-weight:600;">'+p.produto+'</b></td>'+
+            '<td style="padding-right:28px;color:'+(p.dataProd&&p.dataProd!==dSel?'#b45309':'var(--pt-sub)')+';">'+(p.dataProd?p.dataProd.slice(0,5):'—')+(p.dataProd&&p.dataProd!==dSel?' · outro dia':'')+'</td>'+
+            '<td style="padding-right:28px;">'+(p.g.tipo==='salgado'?_ptPill(p.g.classe,'blue',true):(p.g.tipo==='pao'?_ptPill(p.g.classe||'Pão','amber',true):_ptPill('Outro','gray',true)))+'</td>'+
             '<td class="c" style="font-weight:800;">'+fmt(p.pct)+'</td></tr>').join('')+
         '</tbody></table></div>'
       : '<div class="pt-vazio" style="padding:18px;">Nada lançado neste dia.</div>';
-    h+='<div id="er-detalhe" class="pt-grid">'+_ptCard('Embalado em '+dSel, semana(dSel)+' · '+fmt(D.tot)+' pacotes'+(deOutros>0.5?(' · '+fmt(deOutros)+' de produções de outros dias'):''), corpo,
+    const eD=eqDia(dSel);
+    h+='<div id="er-detalhe" class="pt-grid">'+_ptCard('Embalado em '+dSel, semana(dSel)+' · '+fmt(D.tot)+' pacotes'+(deOutros>0.5?(' · '+fmt(deOutros)+' de produções de outros dias'):'')+
+      (eD?(' · '+eD.n+' pessoa(s), '+hh(eD.min)+(eD.min&&D.tot>0.5?(' · '+(Math.round(D.tot/(eD.min/60)*10)/10).toLocaleString('pt-BR')+' pct/hora'):'')):''), corpo,
       '<button class="pt-btn" onclick="erVerDia(\''+dSel+'\')">Fechar</button>')+'</div>';
   }
 
@@ -13494,7 +13617,10 @@ function aplicarKitsProdutosFirebase(){
         qtdPct:p.qtdPct||0,
         grMassa:p.grMassa||0,
         grRecheio:p.grRecheio||0,
-        grRecheio2:p.grRecheio2||0
+        grRecheio2:p.grRecheio2||0,
+        // classe do pão: quem não tem nada gravado é Miudeza
+        classe:(PAO_CLASSES.includes(p.classe)?p.classe:'Miudeza'),
+        firestoreId:p.firestoreId
       });
       // Garantir que o p.kit também existe no MAPPING para resolver via lookup
       if(!QUADRA_KIT_MAPPING[p.kit]){
@@ -14515,6 +14641,13 @@ function renderProdutoForm(){
   html+='</div>';
 
   html+='<div class="card" style="padding:14px;margin-bottom:10px;">';
+  html+='<div class="card-label">Classe</div>';
+  html+='<select id="prod-classe" style="font-size:15px;width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid var(--border-md);">'+
+    PAO_CLASSES.map(c=>'<option value="'+c+'"'+(((p.classe&&PAO_CLASSES.includes(p.classe))?p.classe:'Miudeza')===c?' selected':'')+'>'+c+'</option>').join('')+'</select>';
+  html+='<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;">Separa os pães no rendimento da embalagem, como as classes dos salgados.</div>';
+  html+='</div>';
+
+  html+='<div class="card" style="padding:14px;margin-bottom:10px;">';
   html+='<div class="card-label">Detalhes do produto</div>';
   html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;">';
   html+='<div><label style="font-size:11px;color:var(--text-secondary);">Kg por pacote</label><input type="number" id="prod-kgpct" value="'+(p.kgPacote||'')+'" step="0.001" placeholder="Ex: 1.0" style="width:100%;font-size:16px;padding:11px;border-radius:8px;border:1px solid var(--border-md);box-sizing:border-box;" /></div>';
@@ -14545,11 +14678,12 @@ async function salvarProduto(){
   const grMassa=parseFloat(document.getElementById('prod-grmassa').value)||0;
   const grRecheio=parseFloat(document.getElementById('prod-grr1').value)||0;
   const grRecheio2=parseFloat(document.getElementById('prod-grr2').value)||0;
+  const classe=(document.getElementById('prod-classe')||{}).value||'Miudeza';
 
   if(!nome){ alert('Digite o nome do produto'); return; }
   if(!kit){ alert('Selecione o kit'); return; }
 
-  const dados={cod,nome,kit,kgPacote,qtdPct,grMassa,grRecheio,grRecheio2,atualizadoEm:new Date().toISOString()};
+  const dados={cod,nome,kit,kgPacote,qtdPct,grMassa,grRecheio,grRecheio2,classe,atualizadoEm:new Date().toISOString()};
   try{
     if(_produtoEditando&&_produtoEditando.firestoreId){
       await updateDoc(doc(db,'quadraProdutosCustom',_produtoEditando.firestoreId),dados);
@@ -25006,6 +25140,7 @@ async function pontoCarregarMeses(){
   if(t==='s-ponto') renderPonto();
   if(t==='s-ponto-mes') renderPontoMes();
   if(t==='s-ponto-dash') renderPdash();
+  if(t==='s-emb-rend' && typeof renderEmbRend==='function') renderEmbRend();
 }
 window.pontoCarregarMeses=pontoCarregarMeses;
 function pontoTentarDeNovo(){ _pontoErro=''; renderPonto(); }
