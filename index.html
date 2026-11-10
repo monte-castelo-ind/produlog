@@ -3442,6 +3442,16 @@
 
       <div class="agenda-aviso" style="display:none;"></div>
 
+      <div id="adm-linha"></div>
+      <div>
+        <div class="hir">
+          <span class="lupa">🔍</span>
+          <input type="text" id="adm-ir" placeholder="Ir para… ponto, senhas, contagem, embalagem" autocomplete="off" oninput="hubxBuscar(this.value)" onkeydown="hubxTecla(event)" aria-label="Ir para uma tela do painel">
+          <kbd>/</kbd>
+        </div>
+        <div class="hir-res" id="adm-ir-res"></div>
+      </div>
+
       <div class="mc-section-header" style="margin-top:18px;">📦 Produção do dia<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">o que está acontecendo agora</span></div>
       <button class="mc-sector-card" style="border-left:4px solid var(--mc-azul);margin-bottom:10px;" onclick="goTo('s-adm-g-setores')">
         <div class="mc-sector-icon blue">🏭</div>
@@ -5952,7 +5962,7 @@ function atualizarTela(){
   if(tela==='s-eans') renderEans();
   if(tela==='s-ctrl-prod') renderCtrlProd();
   if(tela==='s-agenda') renderAgenda();
-  if(tela==='s-adm-hub') _hubContadores();
+  if(tela==='s-adm-hub'){ _hubContadores(); if(typeof hubxAtualizar==='function') hubxAtualizar(); }
   if(tela==='s-compras') renderCompras();
   if(tela==='s-compra-forn') renderCompraForn();
   if(tela==='s-compras-fornlist') renderCompFornList();
@@ -6252,7 +6262,7 @@ function goTo(id, semHistorico){
   if(id==='s-eans') renderEans();
   if(id==='s-ctrl-prod') renderCtrlProd();
   if(id==='s-agenda') renderAgenda();
-  if(id==='s-adm-hub') _hubContadores();
+  if(id==='s-adm-hub'){ _hubContadores(); if(typeof hubxAtualizar==='function') hubxAtualizar(); const _ir=document.getElementById('adm-ir'); if(_ir && _ir.value){ _ir.value=''; hubxBuscar(''); } }
   _agAtualizarAvisos&&_agAtualizarAvisos();
   if(id==='s-compras') renderCompras();
   if(id==='s-compra-forn') renderCompraForn();
@@ -8019,13 +8029,16 @@ let _pprVAba='hoje', _pprVDia='', _pprVDe='', _pprVAte='', _pprVGrupo='salgado';
 let _pprCfg={semanas:4, pct:30, min:20}, _pprCfgLido=false;
 let _pprPontoMapa=null;     // {cozinha:['Cozinha'], ...} escolhido à mão (configuracoes/painelProducao)
 
+/* Regras do painel (vendas fora do padrão e setores do ponto): lidas uma vez */
+async function _pprCarregarCfg(){
+  if(_pprCfgLido) return;
+  _pprCfgLido=true;
+  try{ const d=await getDoc(doc(db,'configuracoes','vendasForaPadrao')); if(d.exists()) _pprCfg={..._pprCfg, ...d.data()}; }catch(e){ console.warn('vendasForaPadrao',e); }
+  try{ const d=await getDoc(doc(db,'configuracoes','painelProducao')); if(d.exists() && d.data().setoresPonto) _pprPontoMapa=d.data().setoresPonto; }catch(e){ console.warn('painelProducao',e); }
+}
 async function pprAbrir(){
   goTo('s-ppr');
-  if(!_pprCfgLido){
-    _pprCfgLido=true;
-    try{ const d=await getDoc(doc(db,'configuracoes','vendasForaPadrao')); if(d.exists()) _pprCfg={..._pprCfg, ...d.data()}; }catch(e){ console.warn('vendasForaPadrao',e); }
-    try{ const d=await getDoc(doc(db,'configuracoes','painelProducao')); if(d.exists() && d.data().setoresPonto) _pprPontoMapa=d.data().setoresPonto; }catch(e){ console.warn('painelProducao',e); }
-  }
+  await _pprCarregarCfg();
   renderPpr();
 }
 window.pprAbrir=pprAbrir;
@@ -8477,8 +8490,9 @@ function _pprGrupoProd(cod){
   return t==='pao'?'pao':(t==='salgado'?'salgado':'outro');
 }
 /* Produtos acima da média num dia. Média = mesmos dias da semana nas N semanas anteriores. */
-function _pprVendasDia(dia, mapa){
+function _pprVendasDia(dia, mapa, grupo){
   mapa=mapa||_pprVendasMapa();
+  grupo=grupo||_pprVGrupo;
   const d=_pprDeBR(dia), N=Math.max(1,parseInt(_pprCfg.semanas)||4), pct=Number(_pprCfg.pct)||30, min=Number(_pprCfg.min)||0;
   const base=[]; for(let k=1;k<=N;k++){ const b=new Date(d); b.setDate(d.getDate()-7*k); const s=_pprBR(b); if(mapa[s]) base.push(s); }   // dia sem nenhum carregamento (feriado) não entra
   const hoje=mapa[dia]||{};
@@ -8488,7 +8502,7 @@ function _pprVendasDia(dia, mapa){
   const achados=[];
   Object.keys(hoje).forEach(k=>{
     const x=hoje[k];
-    if(_pprVGrupo!=='todos' && _pprGrupoProd(x.cod)!==_pprVGrupo) return;
+    if(grupo!=='todos' && _pprGrupoProd(x.cod)!==grupo) return;
     if(x.q<min) return;
     if(!base.length) return;
     const media=base.reduce((t,b)=>t+((mapa[b][k]||{q:0}).q),0)/base.length;
@@ -8497,7 +8511,7 @@ function _pprVendasDia(dia, mapa){
       top:Object.entries(x.c).sort((a,b)=>b[1]-a[1]).slice(0,2)});
   });
   achados.sort((a,b)=>(b.pct===null?1e9:b.pct)-(a.pct===null?1e9:a.pct));
-  const doGrupo=Object.keys(hoje).filter(k=>_pprVGrupo==='todos'||_pprGrupoProd(hoje[k].cod)===_pprVGrupo);
+  const doGrupo=Object.keys(hoje).filter(k=>grupo==='todos'||_pprGrupoProd(hoje[k].cod)===grupo);
   const totDia=doGrupo.reduce((t,k)=>t+hoje[k].q,0);
   return {achados, base, fechado, ehHoje, totDia, nProd:doGrupo.length};
 }
@@ -26085,6 +26099,7 @@ async function pontoCarregarMeses(){
   if(t==='s-ponto-dash') renderPdash();
   if(t==='s-emb-rend' && typeof renderEmbRend==='function') renderEmbRend();
   if(t==='s-ppr' && typeof renderPpr==='function') renderPpr();
+  if(t==='s-adm-hub' && typeof hubxAtualizar==='function') hubxAtualizar();
 }
 window.pontoCarregarMeses=pontoCarregarMeses;
 function pontoTentarDeNovo(){ _pontoErro=''; renderPonto(); }
@@ -39647,6 +39662,364 @@ function _hubContadores(){
   }catch(e){ console.error('hub contadores',e); }
 }
 window._hubContadores=_hubContadores;
+
+/* ══ CENTRAL DO ADMIN ═══════════════════════════════════════════════
+   O painel do admin era uma coluna única com 24 cartões de largura
+   total: muita rolagem e nenhum número. Agora ele abre com
+   "a linha de hoje" — o dia da fábrica na ordem em que acontece:
+   produzido → embalado → liberado pela expedição → carregado, com as
+   duas filas entre as etapas — e, embaixo, os mesmos destinos em
+   blocos compactos, com uma busca que também acha o que está dentro
+   dos sub-painéis.
+
+   Nenhum cartão foi removido nem religado: os botões são os mesmos
+   elementos de antes (mesmos onclick, mesmos selos); só mudou a
+   disposição. Tudo em pacotes, como a operação lança. */
+const HUBX_SUB=['s-adm-g-setores','s-adm-g-plan','s-adm-g-log','s-adm-g-mp','s-adm-g-gestao','s-adm-g-rel','s-adm-cadastros'];
+let _hubxPronto=false, _hubxTimer=null, _hubxIndice=null;
+
+function _hubxCss(){
+  if(document.getElementById('hubx-css')) return;
+  const st=document.createElement('style'); st.id='hubx-css';
+  st.textContent=`
+.hubx{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;align-content:start;padding:20px 24px 44px !important;}
+.hubx>*{min-width:0;}
+.hubx>*:not(.mc-sector-card){grid-column:1/-1;}
+.hubx>div:empty{display:none;}
+.hubx>.mc-sector-card{margin:0 !important;border:1px solid var(--border) !important;border-radius:14px;padding:11px 13px;gap:11px;box-shadow:none;min-height:64px;}
+.hubx>.mc-sector-card:hover{border-color:var(--mc-azul-medio,#3b82f6) !important;box-shadow:0 4px 14px rgba(30,58,138,.08);transform:none;}
+.hubx>.mc-sector-card:focus-visible{outline:3px solid rgba(59,130,246,.45);outline-offset:1px;}
+.hubx>.mc-sector-card .mc-sector-icon{width:40px;height:40px;border-radius:11px;font-size:19px;}
+.hubx>.mc-sector-card .mc-sector-title{font-size:14px;line-height:1.25;}
+.hubx>.mc-sector-card .mc-sector-desc{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hubx>.mc-sector-card .mc-sector-arrow{font-size:15px;opacity:.6;}
+.hubx>.mc-section-header{text-transform:none;letter-spacing:0;font-size:14px;font-weight:700;color:var(--text-primary);margin:16px 0 0 !important;}
+.hubx>.mc-section-header:first-of-type{margin-top:6px !important;}
+.hubx>.mc-section-header>span{display:inline !important;margin:0 0 0 8px !important;font-size:12px !important;}
+.hubx.buscando>.mc-sector-card,.hubx.buscando>.mc-section-header{display:none !important;}
+
+.av{background:linear-gradient(135deg,#172a6b 0%,#1e3a8a 55%,#24449b 100%);border-radius:18px;padding:16px 18px 18px;color:#fff;}
+.av-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+.av-top>b{font-size:17px;font-weight:700;letter-spacing:-.01em;}
+.av-res{font-size:13px;color:rgba(255,255,255,.72);}
+.av-res b{color:#fbbf24;font-size:15px;}
+.av-dir{margin-left:auto;display:flex;gap:16px;}
+.av-lk{border:none;background:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:#bfdbfe;cursor:pointer;}
+.av-lk:hover{color:#fff;text-decoration:underline;}
+.av-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:14px;}
+.av-col{min-width:0;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px 14px 10px;}
+.av-gh{display:flex;align-items:center;gap:7px;font-size:13.5px;}
+.av-gh .ic{font-size:14px;}
+.av-gh .ct{background:#fbbf24;color:#422006;font-size:11px;font-weight:800;border-radius:99px;padding:1px 8px;}
+.av-inf{font-size:11.5px;color:rgba(255,255,255,.55);margin:2px 0 4px;}
+.av-li{display:flex;align-items:center;gap:10px;padding:5px 0;}
+.av-ck{flex:0 0 22px;width:22px;height:22px;border-radius:7px;border:1.5px solid rgba(255,255,255,.5);background:rgba(255,255,255,.06);cursor:pointer;font-size:13px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;padding:0;font-family:inherit;}
+.av-ck:hover{border-color:#fff;background:rgba(255,255,255,.16);}
+.av-ck:focus-visible,.av-tx:focus-visible{outline:3px solid #fbbf24;outline-offset:1px;}
+.av-li.visto .av-ck{background:#22c55e;border-color:#22c55e;}
+.av-tx{flex:1;min-width:0;border:none;background:none;padding:2px 5px;border-radius:8px;text-align:left;font-family:inherit;cursor:pointer;color:inherit;}
+.av-tx:hover{background:rgba(255,255,255,.1);}
+.av-tx .n{display:block;font-size:13.5px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.av-tx .tg{font-size:11.5px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:5px;background:#fff !important;}
+.av-tx .s{display:block;font-size:11.5px;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.av-li.visto .av-tx .n{font-weight:500;color:rgba(255,255,255,.45);text-decoration:line-through;}
+.av-li.visto .av-tx .tg{opacity:.45;}
+.av-ok{font-size:12.5px;color:rgba(255,255,255,.55);padding:6px 0 4px;}
+.av-mais{display:block;margin:4px 0 2px 32px;}
+
+.hir{position:relative;margin-top:12px;}
+.hir input{width:100%;height:46px;border-radius:13px;border:1px solid var(--border-md,#d1d5db);background:#fff;padding:0 44px 0 42px;font-size:15px;font-family:inherit;color:var(--text-primary);outline:none;box-sizing:border-box;}
+.hir input:focus{border-color:var(--mc-azul-medio,#3b82f6);box-shadow:0 0 0 3px rgba(59,130,246,.15);}
+.hir .lupa{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:15px;opacity:.5;pointer-events:none;}
+.hir kbd{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-family:inherit;font-size:11.5px;font-weight:600;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:2px 7px;background:var(--bg-page);}
+.hir-res{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:12px;}
+.hir-res:empty{display:none;}
+.hir-res .vazio{grid-column:1/-1;padding:22px;text-align:center;color:var(--text-secondary);font-size:13.5px;background:#fff;border:1px dashed var(--border-md,#d1d5db);border-radius:14px;}
+.hir-it{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid var(--border);border-radius:14px;padding:11px 13px;min-height:64px;font-family:inherit;text-align:left;cursor:pointer;color:inherit;min-width:0;}
+.hir-it:hover,.hir-it.prim{border-color:var(--mc-azul-medio,#3b82f6);box-shadow:0 4px 14px rgba(30,58,138,.08);}
+.hir-it .ic{width:40px;height:40px;border-radius:11px;background:var(--mc-azul-claro,#dbeafe);display:flex;align-items:center;justify-content:center;font-size:19px;flex:0 0 40px;}
+.hir-it .t{font-size:14px;font-weight:600;color:var(--text-primary);line-height:1.25;}
+.hir-it .d{font-size:11.5px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hir-it .ent{margin-left:auto;font-size:11px;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px;display:none;}
+.hir-it.prim .ent{display:block;}
+
+@media (max-width:980px){
+  .hubx{padding:16px 14px 36px !important;}
+}
+@media (max-width:520px){ .hir kbd{display:none;} }
+@media (prefers-reduced-motion:reduce){ .hubx>.mc-sector-card{transition:none;} }
+`;
+  document.head.appendChild(st);
+}
+
+/* Liga a disposição nova uma vez: marca os contêineres e cria a busca */
+function _hubxInit(){
+  if(_hubxPronto) return;
+  const hub=document.getElementById('s-adm-hub'); if(!hub) return;
+  _hubxCss();
+  const marca=id=>{ const s=document.getElementById(id); if(!s) return null; const c=[...s.children].find(x=>!x.classList.contains('mc-header')); if(c) c.classList.add('hubx'); return c; };
+  [marca('s-adm-hub'), ...HUBX_SUB.map(marca)].forEach(c=>{
+    // a descrição pode ficar cortada no bloco compacto: o texto inteiro aparece ao parar o mouse
+    if(c) c.querySelectorAll('.mc-sector-card').forEach(b=>{ const d=b.querySelector('.mc-sector-desc'); if(d && !b.title) b.title=d.textContent.trim(); });
+  });
+  document.addEventListener('keydown', ev=>{
+    if(document.querySelector('.screen.active')?.id!=='s-adm-hub') return;
+    const inp=document.getElementById('adm-ir'); if(!inp) return;
+    const emCampo=/INPUT|TEXTAREA|SELECT/.test((ev.target&&ev.target.tagName)||'');
+    if((ev.key==='/' && !emCampo) || (ev.key.toLowerCase()==='k' && (ev.ctrlKey||ev.metaKey))){ ev.preventDefault(); inp.focus(); inp.select(); }
+  });
+  _hubxPronto=true;
+}
+
+/* ── AVISOS DO ADMIN ─────────────────────────────────────────────────
+   O que pede a atenção do admin, em grupos, com um "já vi" em cada
+   linha. O visto vale para o dia: no dia seguinte zera e entram os
+   avisos novos. O que aparece é escolhido em ⚙ Personalizar.
+
+   · Ponto (só setores de produção — os do Painel da Produção): quem
+     faltou, chegou muito atrasado ou fez muita hora extra no último
+     dia com ponto importado.
+   · Vendas: produtos que fugiram da média (regras das Vendas fora do
+     padrão), do último dia fechado e de hoje.
+   · Embalagem: produção antiga ainda sem embalar.
+   · Carregamentos de hoje em aberto.
+
+   Regras e vistos ficam no Firestore (configuracoes/avisosAdmin e
+   avisosVistos), então valem em qualquer aparelho do admin. */
+let _avCfg={ponto:true, faltas:true, atraso:true, atrasoMin:30, extra:true, extraMin:120, vendas:true, emb:true, embDias:2, carreg:true};
+let _avVistos={dia:'', ids:[]}, _avLido=false, _avAbertos={}, _avMostrarVistos=false;
+
+async function _avCarregar(){
+  if(_avLido) return; _avLido=true;
+  try{ const d=await getDoc(doc(db,'configuracoes','avisosAdmin')); if(d.exists()) _avCfg={..._avCfg, ...d.data()}; }catch(e){ console.warn('avisosAdmin',e); }
+  try{ const d=await getDoc(doc(db,'configuracoes','avisosVistos')); if(d.exists()){ const x=d.data(); _avVistos={dia:x.dia||'', ids:Array.isArray(x.ids)?x.ids:[]}; } }catch(e){ console.warn('avisosVistos',e); }
+  if(typeof _pprCarregarCfg==='function') await _pprCarregarCfg();
+  _hubxAvisos();
+}
+function _avVisto(id){ return _avVistos.dia===fmtData(new Date()) && _avVistos.ids.includes(id); }
+async function avMarcar(id){
+  const hojeS=fmtData(new Date());
+  if(_avVistos.dia!==hojeS) _avVistos={dia:hojeS, ids:[]};          // virou o dia: zera
+  const i=_avVistos.ids.indexOf(id);
+  if(i>=0) _avVistos.ids.splice(i,1); else _avVistos.ids.push(id);
+  _hubxAvisos();
+  try{ await setDoc(doc(db,'configuracoes','avisosVistos'),{dia:_avVistos.dia, ids:_avVistos.ids, por:(typeof _demAutor==='function'?_demAutor():'')}); }
+  catch(e){ console.warn('avisosVistos gravar',e); }
+}
+window.avMarcar=avMarcar;
+async function avMarcarGrupo(g){
+  const hojeS=fmtData(new Date());
+  if(_avVistos.dia!==hojeS) _avVistos={dia:hojeS, ids:[]};
+  (window._avLista||[]).filter(a=>a.g===g).forEach(a=>{ if(!_avVistos.ids.includes(a.id)) _avVistos.ids.push(a.id); });
+  _hubxAvisos();
+  try{ await setDoc(doc(db,'configuracoes','avisosVistos'),{dia:_avVistos.dia, ids:_avVistos.ids}); }catch(e){ console.warn(e); }
+}
+window.avMarcarGrupo=avMarcarGrupo;
+function avMais(g){ _avAbertos[g]=!_avAbertos[g]; _hubxAvisos(); }
+window.avMais=avMais;
+function avVerVistos(){ _avMostrarVistos=!_avMostrarVistos; _hubxAvisos(); }
+window.avVerVistos=avVerVistos;
+
+/* Ponto: último dia com marcação, só setores de produção */
+function _avPonto(){
+  const out=[]; let info='';
+  if(typeof pontoMeses==='undefined' || !_pontoCarregado) return {lista:out, info:'carregando o ponto…'};
+  const hojeN=_erNum(fmtData(new Date()));
+  const ehProd=nome=>PPR_SETORES.some(s=>_pprPontoCasa(s.k, nome));
+  const pessoas=[];   // {p, ch, ano, setor}
+  Object.keys(pontoMeses).forEach(ch=>((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+    const setor=_pmesSetorDe(p,ch)||p.setor||''; if(!ehProd(setor)) return;
+    pessoas.push({p, ch, ano:ch.slice(0,4), setor});
+  }));
+  // último dia (antes de hoje) em que alguém da produção bateu ponto
+  let ult=0, ultS='';
+  pessoas.forEach(x=>(x.p.dias||[]).forEach(d=>{ if(!d.batidas||!d.batidas.length) return; const s=d.data+'/'+x.ano, n=_erNum(s); if(n<hojeN && n>ult){ ult=n; ultS=s; } }));
+  if(!ult) return {lista:out, info:'sem ponto importado da produção'};
+  const dS=ultS.slice(0,5), sem=nomeDiaSemana(_erDate(ultS)).slice(0,3).toLowerCase();
+  const atras=Math.round((_erDate(fmtData(new Date()))-_erDate(ultS))/864e5);
+  info='ponto de '+dS+' ('+sem+')'+(atras>3?' — está '+atras+' dias atrasado, atualize pelo Símix':'');
+  pessoas.forEach(x=>{
+    if(x.ch.slice(0,4)!==ultS.slice(6) ) return;
+    const d=(x.p.dias||[]).find(y=>y.data===dS && !y.foraDoPeriodo); if(!d) return;
+    const base={g:'ponto', nome:x.p.nome, sub:x.setor+' · '+dS+' '+sem, acao:"avAbrirPonto('"+String(x.p.codigo).replace(/'/g,'')+"','"+x.ch+"')"};
+    if(_avCfg.faltas && d.falta) out.push({...base, id:'falta|'+ultS+'|'+x.p.codigo, cor:'#dc2626', tag:'faltou', peso:3});
+    else if(d.batidas && d.batidas.length){
+      if(_avCfg.atraso && d.atraso!==null && d.atraso>(Number(_avCfg.atrasoMin)||30)) out.push({...base, id:'atraso|'+ultS+'|'+x.p.codigo, cor:'#d97706', tag:'chegou '+_pontoHhmm(d.atraso)+' atrasado', peso:2});
+      if(_avCfg.extra){ const j=_pjDia(d); if(j && j.dif>(Number(_avCfg.extraMin)||120)) out.push({...base, id:'extra|'+ultS+'|'+x.p.codigo, cor:'#7c3aed', tag:_pontoHhmm(j.dif)+' de hora extra', peso:1}); }
+    }
+  });
+  out.sort((a,b)=>b.peso-a.peso || String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+  return {lista:out, info};
+}
+function avAbrirPonto(cod, ch){
+  _pontoAba='pessoas'; if(typeof _pontoAplicarPer==='function') _pontoAplicarPer('mes:'+ch);
+  goTo('s-ponto'); _pontoPessoa=cod; pontoCarregarMeses(); renderPonto();
+}
+window.avAbrirPonto=avAbrirPonto;
+function avAbrirVenda(k){ pprAbrir().then(()=>{ pprIr('vendas'); pprVProd(k); }); }
+window.avAbrirVenda=avAbrirVenda;
+
+function _avMontar(){
+  const hojeS=fmtData(new Date());
+  const grupos=[];   // {g, ic, nome, info, lista}
+  // ponto
+  if(_avCfg.ponto && (_avCfg.faltas||_avCfg.atraso||_avCfg.extra)){
+    if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado && !_pontoCarregando && !_pontoErro) pontoCarregarMeses();
+    const r=_avPonto(); grupos.push({g:'ponto', ic:'🕐', nome:'Ponto da produção', info:r.info, lista:r.lista});
+  }
+  // vendas: último dia fechado + hoje
+  if(_avCfg.vendas && typeof _pprVendasDia==='function'){
+    const mapa=_pprVendasMapa(); const lista=[];
+    let ant=''; for(let i=1;i<=5 && !ant;i++){ const d=new Date(); d.setDate(d.getDate()-i); const s=fmtData(d); if(mapa[s]) ant=s; }
+    const junta=(dia,rot)=>{ if(!dia) return; _pprVendasDia(dia, mapa, 'todos').achados.forEach(a=>lista.push({g:'vendas', id:'venda|'+dia+'|'+a.k, cor:'#dc2626',
+      nome:a.nome, tag:(a.pct===null?'venda nova':'+'+a.pct+'%'), sub:rot+' · vendeu '+Math.round(a.v)+', média '+Math.round(a.media), acao:"avAbrirVenda('"+String(a.k).replace(/'/g,'')+"')", peso:a.pct===null?9999:a.pct})); };
+    const fechouHoje=new Date().getHours()>=18;
+    junta(hojeS, fechouHoje?'hoje':'hoje, até agora'); junta(ant, ant.slice(0,5));
+    grupos.push({g:'vendas', ic:'📈', nome:'Vendas fora da média', info:ant?('hoje e '+ant.slice(0,5)):'hoje', lista});
+  }
+  // produção
+  const prod=[];
+  if(_avCfg.emb && typeof _erPendentes==='function'){
+    const porDia={}; _erPendentes().forEach(x=>{ porDia[x.r.data]=(porDia[x.r.data]||0)+x.falta; });
+    const lim=Number(_avCfg.embDias)||2;
+    Object.keys(porDia).sort((a,b)=>_erNum(a)-_erNum(b)).forEach(d=>{
+      const dias=Math.round((_erDate(hojeS)-_erDate(d))/864e5);
+      if(dias>=lim) prod.push({g:'prod', id:'emb|'+d, cor:'#d97706', nome:'Produção de '+d.slice(0,5)+' sem embalar', tag:dias+' dias', sub:Math.round(porDia[d]).toLocaleString('pt-BR')+' pacotes na fila', acao:'embRendAbrir()', peso:dias});
+    });
+    prod.sort((a,b)=>b.peso-a.peso);
+  }
+  if(_avCfg.carreg && typeof carregamentos!=='undefined'){
+    const ab=carregamentos.filter(c=>c.status!=='concluido' && String(c.data||'').slice(0,10)===hojeS);
+    if(ab.length) prod.push({g:'prod', id:'carreg|'+hojeS+'|'+ab.length, cor:'#2563eb', nome:ab.length+' carregamento'+(ab.length>1?'s':'')+' de hoje em aberto', tag:'', sub:ab.slice(0,3).map(c=>c.nome||'sem nome').join(', ')+(ab.length>3?'…':''), acao:"goTo('s-carreg')", peso:0});
+  }
+  if(_avCfg.emb||_avCfg.carreg) grupos.push({g:'prod', ic:'📦', nome:'Embalagem e carregamento', info:'', lista:prod});
+  return grupos;
+}
+
+function _hubxAvisos(){
+  const el=document.getElementById('adm-linha'); if(!el) return;
+  let grupos; try{ grupos=_avMontar(); }catch(e){ console.error('avisos',e); el.innerHTML=''; return; }
+  window._avLista=grupos.flatMap(g=>g.lista);
+  const total=window._avLista.length, vistos=window._avLista.filter(a=>_avVisto(a.id)).length, novos=total-vistos;
+  const linha=a=>{ const v=_avVisto(a.id);
+    return '<div class="av-li'+(v?' visto':'')+'"><button class="av-ck" onclick="avMarcar(\''+a.id.replace(/'/g,'')+'\')" title="'+(v?'Desmarcar':'Marcar como visto')+'" aria-label="'+(v?'Desmarcar':'Marcar como visto')+'">'+(v?'✓':'')+'</button>'+
+      '<button class="av-tx" onclick="'+a.acao+'"><span class="n">'+a.nome+(a.tag?' <span class="tg" style="color:'+a.cor+';background:'+a.cor+'14;">'+a.tag+'</span>':'')+'</span><span class="s">'+a.sub+'</span></button></div>'; };
+  let h='<div class="av"><div class="av-top"><b>Avisos</b>'+
+    '<span class="av-res">'+(total?(novos?('<b>'+novos+'</b> para ver'+(vistos?(' · '+vistos+' já visto'+(vistos>1?'s':'')):'')):'tudo visto por hoje ✓'):'nada pedindo atenção agora')+'</span>'+
+    '<span class="av-dir">'+(vistos?'<button class="av-lk" onclick="avVerVistos()">'+(_avMostrarVistos?'Esconder vistos':'Mostrar vistos')+'</button>':'')+
+      '<button class="av-lk" onclick="avPersonalizar()">⚙ Personalizar</button></span></div>';
+  if(grupos.length){
+    h+='<div class="av-cols">'+grupos.map(g=>{
+      const novosG=g.lista.filter(a=>!_avVisto(a.id)), vistosG=g.lista.filter(a=>_avVisto(a.id));
+      const aberta=!!_avAbertos[g.g], LIM=4;
+      const mostra=aberta?novosG:novosG.slice(0,LIM);
+      return '<div class="av-col"><div class="av-gh"><span class="ic">'+g.ic+'</span><b>'+g.nome+'</b>'+(novosG.length?'<span class="ct">'+novosG.length+'</span>':'')+
+          (novosG.length>1?'<button class="av-lk" style="margin-left:auto;" onclick="avMarcarGrupo(\''+g.g+'\')">marcar todos</button>':'')+'</div>'+
+        (g.info?'<div class="av-inf">'+g.info+'</div>':'')+
+        (mostra.length?mostra.map(linha).join(''):'<div class="av-ok">'+(g.lista.length?'Tudo visto ✓':'Nada por aqui')+'</div>')+
+        (novosG.length>LIM?'<button class="av-lk av-mais" onclick="avMais(\''+g.g+'\')">'+(aberta?'mostrar menos':'ver os outros '+(novosG.length-LIM))+'</button>':'')+
+        (_avMostrarVistos&&vistosG.length?vistosG.map(linha).join(''):'')+
+      '</div>'; }).join('')+'</div>';
+  }
+  el.innerHTML=h+'</div>';
+}
+/* chamado sempre que os dados mudam: junta as mudanças e desenha uma vez */
+function hubxAtualizar(){
+  _hubxInit();
+  _avCarregar();
+  clearTimeout(_hubxTimer);
+  _hubxTimer=setTimeout(_hubxAvisos, 250);
+}
+window.hubxAtualizar=hubxAtualizar;
+
+/* ⚙ Personalizar: o que aparece nos avisos */
+function avPersonalizar(){
+  document.getElementById('av-cfg')?.remove();
+  const c=_avCfg, ck=(id,on,rot,extra)=>'<label style="display:flex;align-items:center;gap:10px;padding:9px 0;font-size:14px;cursor:pointer;border-top:1px solid #f1f5f9;">'+
+    '<input type="checkbox" id="'+id+'"'+(on?' checked':'')+' style="width:18px;height:18px;margin:0;flex:0 0 18px;accent-color:#1e40af;"><span style="flex:1;">'+rot+'</span>'+(extra||'')+'</label>';
+  const num=(id,v,un)=>'<span style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#64748b;" onclick="event.preventDefault()"><input type="number" id="'+id+'" value="'+v+'" min="0" style="width:74px;padding:6px 8px;font-size:14px;" onclick="event.stopPropagation()">'+un+'</span>';
+  const tit=t=>'<div style="font-size:12px;font-weight:700;color:#1e40af;margin:16px 0 2px;">'+t+'</div>';
+  const ov=document.createElement('div'); ov.id='av-cfg';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:520px;width:100%;max-height:90vh;overflow:auto;padding:22px 22px 18px;">'+
+    '<div style="font-size:18px;font-weight:800;">⚙ Personalizar os avisos</div>'+
+    '<div style="font-size:13px;color:#64748b;margin-top:4px;">Escolha o que aparece no painel. Vale para todos os admins.</div>'+
+    tit('Ponto — só setores de produção')+
+    ck('av-c-faltas', c.ponto&&c.faltas, 'Quem faltou no último dia')+
+    ck('av-c-atraso', c.ponto&&c.atraso, 'Quem chegou atrasado mais de', num('av-c-atrasoMin', c.atrasoMin, 'min'))+
+    ck('av-c-extra', c.ponto&&c.extra, 'Quem fez hora extra acima de', num('av-c-extraMin', c.extraMin, 'min'))+
+    tit('Vendas')+
+    ck('av-c-vendas', c.vendas, 'Produtos que fugiram da média de venda')+
+    '<div style="font-size:12px;color:#94a3b8;padding:0 0 4px 28px;">Usa as regras de “Vendas fora do padrão” (semanas, % e mínimo), no Painel da Produção.</div>'+
+    tit('Embalagem e carregamento')+
+    ck('av-c-emb', c.emb, 'Produção sem embalar há pelo menos', num('av-c-embDias', c.embDias, 'dias'))+
+    ck('av-c-carreg', c.carreg, 'Carregamentos de hoje em aberto')+
+    '<div style="display:flex;gap:8px;margin-top:18px;"><button class="btn btn-secondary" style="flex:1;margin:0;" onclick="document.getElementById(\'av-cfg\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;margin:0;" onclick="avSalvarCfg()">Salvar</button></div></div>';
+  document.body.appendChild(ov);
+}
+window.avPersonalizar=avPersonalizar;
+async function avSalvarCfg(){
+  const on=id=>!!(document.getElementById(id)||{}).checked, n=(id,d)=>{ const v=parseFloat((document.getElementById(id)||{}).value); return isNaN(v)?d:Math.max(0,v); };
+  const faltas=on('av-c-faltas'), atraso=on('av-c-atraso'), extra=on('av-c-extra');
+  _avCfg={ponto:faltas||atraso||extra, faltas, atraso, atrasoMin:n('av-c-atrasoMin',30), extra, extraMin:n('av-c-extraMin',120), vendas:on('av-c-vendas'), emb:on('av-c-emb'), embDias:n('av-c-embDias',2), carreg:on('av-c-carreg')};
+  document.getElementById('av-cfg')?.remove();
+  _hubxAvisos();
+  try{ await setDoc(doc(db,'configuracoes','avisosAdmin'),{..._avCfg, atualizadoEm:agora()}); }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+window.avSalvarCfg=avSalvarCfg;
+
+/* ── "Ir para": acha um destino do painel e de dentro dos sub-painéis ── */
+function _hubxMontarIndice(){
+  const txt=el=>el?[...el.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join(' ').replace(/\s+/g,' ').trim():'';
+  const itens=[], vistos=new Set(['s-adm-hub']);
+  const ler=(telaId, trilha, nivel)=>{
+    const s=document.getElementById(telaId); if(!s) return;
+    s.querySelectorAll('.mc-sector-card, .home-btn').forEach(b=>{
+      const t=txt(b.querySelector('.mc-sector-title, .hb-title')) || b.textContent.trim().slice(0,40);
+      if(!t) return;
+      const d=(b.querySelector('.mc-sector-desc, .hb-desc')||{}).textContent||'';
+      const ic=((b.querySelector('.mc-sector-icon, .hb-icon')||{}).textContent||'•').trim();
+      itens.push({t, d:d.trim(), ic, trilha, el:b, chave:_normNome(t+' '+d+' '+trilha)});
+      const m=String(b.getAttribute('onclick')||'').match(/goTo(?:Admin)?\('(s-adm-[\w-]+)'/);
+      if(m && nivel<2 && !vistos.has(m[1])){ vistos.add(m[1]); ler(m[1], trilha?(trilha+' › '+t):t, nivel+1); }
+    });
+  };
+  ler('s-adm-hub','',0);
+  return itens;
+}
+function hubxBuscar(v){
+  const cont=document.querySelector('#s-adm-hub .hubx'), res=document.getElementById('adm-ir-res');
+  if(!cont||!res) return;
+  const q=_normNome(v||'').trim();
+  if(!q){ cont.classList.remove('buscando'); res.innerHTML=''; return; }
+  if(!_hubxIndice) _hubxIndice=_hubxMontarIndice();
+  const palavras=q.split(/\s+/);
+  // quem tem a palavra no NOME vem antes de quem só a tem na descrição
+  const nota=x=>{ const t=_normNome(x.t); return (t.startsWith(palavras[0])?4:0)+(palavras.every(p=>t.includes(p))?2:0)-(x.trilha?0.5:0); };
+  const achados=_hubxIndice.filter(x=>palavras.every(p=>x.chave.includes(p))).sort((a,b)=>nota(b)-nota(a)).slice(0,12);
+  cont.classList.add('buscando');
+  window._hubxAchados=achados;
+  res.innerHTML=achados.length
+    ? achados.map((x,i)=>'<button class="hir-it'+(i===0?' prim':'')+'" onclick="hubxIr('+i+')"><span class="ic">'+x.ic+'</span><span style="min-width:0;flex:1;"><span class="t" style="display:block;">'+x.t+'</span>'+
+        '<span class="d" style="display:block;">'+(x.trilha?('em '+x.trilha):x.d)+'</span></span><span class="ent">Enter</span></button>').join('')
+    : '<div class="vazio">Nada com “'+String(v).replace(/</g,'&lt;')+'”. Tente outra palavra, como “senhas”, “contagem” ou “ponto”.</div>';
+}
+window.hubxBuscar=hubxBuscar;
+function hubxIr(i){
+  const x=(window._hubxAchados||[])[i]; if(!x) return;
+  const inp=document.getElementById('adm-ir'); if(inp){ inp.value=''; }
+  hubxBuscar('');
+  x.el.click();
+}
+window.hubxIr=hubxIr;
+function hubxTecla(ev){
+  if(ev.key==='Enter'){ ev.preventDefault(); hubxIr(0); }
+  else if(ev.key==='Escape'){ ev.target.value=''; hubxBuscar(''); ev.target.blur(); }
+}
+window.hubxTecla=hubxTecla;
+// a disposição em blocos vale também para os sub-painéis; liga assim que a página monta
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>setTimeout(_hubxInit,0)); else setTimeout(_hubxInit,0);
 
 
 
