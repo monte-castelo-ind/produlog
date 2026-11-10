@@ -2082,6 +2082,26 @@
 
 
 
+  <!-- EXPEDIÇÃO: LIBERADO NO DIA (admin) -->
+  <div class="screen" id="s-exp-dia">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Expedição</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">📋 Liberado no dia</div>
+        <div class="mc-page-sub">Tudo o que a expedição lançou, de qualquer produção</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:0;background:#f5f7fb;overflow-y:auto;" id="exp-dia-content"></div>
+  </div>
+
   <!-- PAINEL DA PRODUÇÃO (admin) -->
   <div class="screen" id="s-ppr">
     <div class="mc-header">
@@ -2176,6 +2196,9 @@
       <div class="mc-page-info">
         <div class="mc-page-title">Liberações da Expedição</div>
         <div class="mc-page-sub">Selecione o dia (somente visualização)</div>
+      </div>
+      <div class="mc-header-actions">
+        <button class="mc-act-btn-primary" onclick="expDiaAbrir()" title="Tudo o que foi liberado num dia">📋 Liberado no dia</button>
       </div>
       
     </div>
@@ -3333,6 +3356,7 @@
         <div class="mc-page-sub">Selecione o dia</div>
       </div>
       <div class="mc-header-actions">
+        <button class="mc-act-btn-secondary" id="btn-exp-dia" style="display:none;" onclick="expDiaAbrir()" title="Tudo o que foi liberado num dia (admin)">📋 Liberado no dia</button>
         <button class="mc-act-btn-secondary" onclick="goTo('s-exp-manual')" title="Lançar produto já pego antes da embalagem">📥 Já peguei</button>
       </div>
     </div>
@@ -5904,6 +5928,7 @@ function atualizarTela(){
   if(!tela||tela==='loading'){ goTo('s-inicio'); return; }
   if(tela==='s-conf-home') renderConfHome();
   if(tela==='s-emb-rend') renderEmbRend();
+  if(tela==='s-exp-dia') renderExpDia();
   if(tela==='s-ppr'){ const a=document.activeElement; if(!(a && a.closest && a.closest('#ppr-content') && /INPUT|SELECT/.test(a.tagName))) renderPpr(); }
   if(tela==='s-adm-hub' && typeof _pprBadge==='function') _pprBadge();
   if(tela==='s-estoque-coz') renderEstoqueCoz();
@@ -6155,7 +6180,8 @@ function goTo(id, semHistorico){
      dizia "5 pendentes" num dia já 100% embalado. */
   if(id==='s-emb-produtos-pendentes') renderSelDataEmb();
 
-  if(id==='s-exp-sel-data') renderSelDataExp();
+  if(id==='s-exp-sel-data'){ renderSelDataExp(); const b=document.getElementById('btn-exp-dia'); if(b) b.style.display=window.adminMode===true?'':'none'; }
+  if(id==='s-exp-dia' && typeof renderExpDia==='function') renderExpDia();
   if(id==='s-meus-reg') renderMeusReg();
   if(id==='s-conf-massas') renderConfMassas();
   if(id==='s-coz-reg') renderCozReg();
@@ -7424,7 +7450,7 @@ function _erPendentes(){
   return out;
 }
 
-function embRendAbrir(){ goTo('s-emb-rend'); renderEmbRend(); }
+function embRendAbrir(){ if(typeof _erVista!=='undefined') _erVista='rend'; goTo('s-emb-rend'); renderEmbRend(); }
 window.embRendAbrir=embRendAbrir;
 function erPeriodo(v){ _erPer=v; _erDia=''; renderEmbRend(); }
 window.erPeriodo=erPeriodo;
@@ -7503,8 +7529,163 @@ window.erClasseTrocar=erClasseTrocar;
 function erVerDia(d){ _erDia=(_erDia===d?'':d); renderEmbRend(); if(_erDia) setTimeout(()=>document.getElementById('er-detalhe')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
 window.erVerDia=erVerDia;
 
+
+/* ── INÍCIO E FIM DO DIA (admin) ─────────────────────────────────────
+   Para cada dia: com quantos pacotes a embalagem começou ("falta
+   embalar" na abertura), quanto foi produzido, quanto embalou e com
+   quanto terminou. Fim = início + produzido − embalado − baixas.
+   Baixas = o que saiu do "falta embalar" sem ser embalado produto a
+   produto: o "embalar em lote" e o que sobra quando um produto é
+   finalizado com menos do que foi produzido.
+   Contam as produções dos últimos 30 dias antes de cada período, como
+   no "falta embalar". */
+let _erVista='rend', _erSaldoGrupo='todos', _erSaldoDia='';
+function erVista(v){ _erVista=v; _erSaldoDia=''; renderEmbRend(); document.getElementById('emb-rend-content')?.scrollTo?.(0,0); }
+window.erVista=erVista;
+function erSaldoGrupo(g){ _erSaldoGrupo=g; renderEmbRend(); }
+window.erSaldoGrupo=erSaldoGrupo;
+function erSaldoDia(d){ _erSaldoDia=(_erSaldoDia===d?'':d); renderEmbRend(); if(_erSaldoDia) setTimeout(()=>document.getElementById('er-saldo-det')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
+window.erSaldoDia=erSaldoDia;
+
+/* Linha do tempo de um registro, em pacotes: o que entrou e o que saiu do "falta embalar" */
+function _erLinhaTempo(r){
+  const out=[];      // {dia, t:'emb'|'baixa', pct}
+  const e=r.embalagem||{};
+  const k=_erUnPorPct(r);
+  const prod=Number(r.qtd)||0;
+  let saiu=0, explicado=0;
+  (e.parciais||[]).forEach(p=>{ const q=Number(p.qtd)||0; if(!q) return; explicado+=q; const dia=_erDataDe(p.hora); if(dia){ out.push({dia, t:'emb', pct:q/k}); saiu+=q/k; } });
+  const ultParcial=(e.parciais||[]).map(p=>_erDataDe(p.hora)).filter(Boolean).pop();
+  const diaFim=_erDataDe(e.horaFeito)||(e.emLote&&_erDataDe(e.emLote.em))||ultParcial||r.data;
+  if(!e.emLote){
+    (e.alteracoes||[]).forEach(a=>{ const q=Number(a.diff)||0; if(!q) return; explicado+=q; out.push({dia:diaFim, t:'emb', pct:q/k}); saiu+=q/k; });
+    if(e.feito){ const resto=(Number(e.qtdEmbalada)||0)-explicado; if(Math.abs(resto)>0.001){ out.push({dia:diaFim, t:'emb', pct:resto/k}); saiu+=resto/k; } }
+  }
+  // finalizado (normal ou em lote): o que faltava sai do "falta embalar" no dia em que fechou
+  if(e.feito){ const resto=prod-saiu; if(Math.abs(resto)>0.001) out.push({dia:diaFim, t:'baixa', pct:resto}); }
+  return out;
+}
+
+function _erSaldoTela(){
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const semana=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
+  // dias: os do período do gráfico
+  const dias=[];
+  if(_erPer==='datas' && _erDe && _erAte){
+    const a=new Date(_erDe+'T12:00:00'), b=new Date(_erAte+'T12:00:00');
+    for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) dias.push(fmtData(d));
+  } else { const n=parseInt(_erPer)||7; for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); dias.push(fmtData(d)); } }
+  if(!dias.length) return '<div class="pt-card pt-vazio">Escolha o período.</div>';
+  const ini=_erNum(dias[0]);
+  const lim=_erDate(dias[0]); lim.setDate(lim.getDate()-30);
+  const limN=_erNum(fmtData(lim));
+
+  // grupo de cada registro: 'pao:Classe' / 'salg:Classe' / 'outro'
+  const chaveG=g=>g.tipo==='pao'?('pao:'+g.classe):(g.tipo==='salgado'?('salg:'+g.classe):'outro');
+  const regs=(registros||[]).filter(r=>(Number(r.qtd)||0)>0 && _erNum(r.data)>=limN && _erNum(r.data)<=_erNum(dias[dias.length-1]));
+  const grupos=new Set();
+  const mov={};   // dia → grupo → {prod, emb, baixa}
+  const antes={}; // grupo → saldo antes do primeiro dia
+  const add=(dia,g,campo,v)=>{ const n=_erNum(dia);
+    if(n<ini){ antes[g]=(antes[g]||0)+(campo==='prod'?v:-v); return; }
+    if(!mov[dia]) mov[dia]={}; const o=mov[dia][g]||(mov[dia][g]={prod:0,emb:0,baixa:0}); o[campo]+=v; };
+  regs.forEach(r=>{
+    const g=chaveG(_erGrupo(r)); grupos.add(g);
+    add(r.data, g, 'prod', Number(r.qtd)||0);
+    _erLinhaTempo(r).forEach(x=>{ if(_erNum(x.dia)>=_erNum(r.data)||true) add(x.dia, g, x.t==='emb'?'emb':'baixa', x.pct); });
+  });
+  const ordemCls=[...(typeof classesProducao!=='undefined'?classesProducao:[]),'Sem classe'];
+  const lista=[...grupos].sort((a,b)=>{
+    const ta=a.split(':')[0], tb=b.split(':')[0];
+    const pa={pao:0,salg:1,outro:2}[ta], pb={pao:0,salg:1,outro:2}[tb];
+    if(pa!==pb) return pa-pb;
+    const ca=a.split(':')[1]||'', cb=b.split(':')[1]||'';
+    const oa=ta==='pao'?PAO_CLASSES.indexOf(ca):ordemCls.indexOf(ca), ob=tb==='pao'?PAO_CLASSES.indexOf(cb):ordemCls.indexOf(cb);
+    return (oa<0?99:oa)-(ob<0?99:ob);
+  });
+  const nomeG=g=>g==='outro'?'📦 Outros':((g.startsWith('pao:')?'🍞 ':'🥐 ')+g.split(':')[1]);
+  const pertence=(g,filtro)=>filtro==='todos'||g===filtro||(filtro==='pao'&&g.startsWith('pao:'))||(filtro==='salg'&&g.startsWith('salg:'));
+
+  // saldo dia a dia por grupo
+  const saldo={}; lista.forEach(g=>saldo[g]=antes[g]||0);
+  const linhas=dias.map(d=>{
+    const porG={};
+    lista.forEach(g=>{
+      const m=(mov[d]||{})[g]||{prod:0,emb:0,baixa:0};
+      const i=saldo[g], f=i+m.prod-m.emb-m.baixa;
+      porG[g]={ini:i, prod:m.prod, emb:m.emb, baixa:m.baixa, fim:f};
+      saldo[g]=f;
+    });
+    return {d, porG};
+  });
+  const soma=(L,filtro,c)=>lista.filter(g=>pertence(g,filtro)).reduce((t,g)=>t+L.porG[g][c],0);
+
+  // filtros
+  const opc=[['todos','Todos'],['pao','🍞 Pães'],...lista.filter(g=>g.startsWith('pao:')).map(g=>[g,g.split(':')[1]]),['salg','🥐 Salgados'],...lista.filter(g=>g.startsWith('salg:')).map(g=>[g,g.split(':')[1]]),...(lista.includes('outro')?[['outro','Outros']]:[])];
+  if(!opc.some(o=>o[0]===_erSaldoGrupo)) _erSaldoGrupo='todos';
+  const F=_erSaldoGrupo;
+  const seg=[['1','Hoje'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['datas','📅 Datas']];
+  let h='<div style="margin-bottom:14px;"><button class="pt-btn" onclick="erVista(\'rend\')">‹ Voltar ao rendimento</button></div>'+
+    '<div class="pt-head"><div><h1>Início e fim do dia</h1><p>'+dias[0]+(dias.length>1?' a '+dias[dias.length-1]:'')+' · fim = início + produzido − embalado − baixas</p></div>'+
+    '<div class="pt-filtros"><div class="pt-seg">'+seg.map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
+  if(_erPer==='datas') h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="er-de" value="'+(_erDe||'')+'"><label>até</label><input class="pt-ctl" type="date" id="er-ate" value="'+(_erAte||'')+'">'+
+    '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="erDatas()">Aplicar</button><span id="er-datas-erro" style="font-size:12px;color:#dc2626;font-weight:600;"></span></div>';
+  h+='<div class="pt-card" style="margin-bottom:16px;padding:12px 14px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">'+
+    opc.map(([v,t])=>'<button onclick="erSaldoGrupo(\''+v+'\')" style="border:1px solid '+(F===v?'#1e40af':'#e2e8f0')+';background:'+(F===v?'#1e40af':'#fff')+';color:'+(F===v?'#fff':'#334155')+';border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">'+t+'</button>').join('')+'</div></div>';
+
+  // indicadores do período, para o grupo escolhido
+  const L0=linhas[0], Lf=linhas[linhas.length-1];
+  const tProd=linhas.reduce((t,L)=>t+soma(L,F,'prod'),0), tEmb=linhas.reduce((t,L)=>t+soma(L,F,'emb'),0), tBx=linhas.reduce((t,L)=>t+soma(L,F,'baixa'),0);
+  const iniP=soma(L0,F,'ini'), fimP=soma(Lf,F,'fim');
+  h+='<div class="pt-grid pt-g4">'+
+    _ptKpi('🌅','amber', fmt(iniP), 'Início do período', 'falta embalar em '+dias[0].slice(0,5))+
+    _ptKpi('🏭','blue', fmt(tProd), 'Produzido', 'no período')+
+    _ptKpi('📦','green', fmt(tEmb), 'Embalado', 'produto a produto'+(tBx>0.5?(' · '+fmt(tBx)+' em baixas'):''))+
+    _ptKpi('🌙', fimP>iniP?'red':'green', fmt(fimP), 'Fim do período', (fimP>iniP?'+':'')+fmt(fimP-iniP)+' no saldo · '+(fimP>iniP?'a fila cresceu':'a fila diminuiu'))+
+  '</div>';
+
+  // tabela por dia
+  const td=(v,cor,peso)=>'<td class="c" style="'+(cor?'color:'+cor+';':'')+(peso?'font-weight:'+peso+';':'')+'">'+(Math.abs(v)>0.5?fmt(v):'<span style="color:#cbd5e1;">—</span>')+'</td>';
+  const corpo=linhas.slice().reverse().map(L=>{
+    const i=soma(L,F,'ini'), p=soma(L,F,'prod'), e=soma(L,F,'emb'), b=soma(L,F,'baixa'), f=soma(L,F,'fim');
+    const disp=i+p, aprov=disp>0.5?Math.round(e/disp*100):null;
+    return '<tr class="cl" onclick="erSaldoDia(\''+L.d+'\')"'+(_erSaldoDia===L.d?' style="background:#eff6ff;"':'')+'>'+
+      '<td><b style="font-weight:650;">'+L.d.slice(0,5)+'</b> <span style="color:#94a3b8;font-size:11.5px;">'+semana(L.d)+'</span></td>'+
+      td(i,'#b45309',700)+td(p,'#1d4ed8')+td(e,'#047857',700)+td(b,'#94a3b8')+td(f,f>i+0.5?'#b91c1c':'#334155',800)+
+      '<td class="c">'+(aprov===null?'<span style="color:#cbd5e1;">—</span>':_ptPill(aprov+'%', aprov>=50?'green':(aprov>=25?'amber':'red'), true))+'</td></tr>';
+  }).join('');
+  h+='<div class="pt-grid">'+_ptCard((F==='todos'?'Todos os produtos':opc.find(o=>o[0]===F)[1])+' · dia a dia','toque num dia para ver por classe',
+    '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,760px);"><thead><tr><th>Dia</th><th class="c">🌅 Início</th><th class="c">🏭 Produzido</th><th class="c">📦 Embalado</th><th class="c">Baixas</th><th class="c">🌙 Fim</th><th class="c">Embalou do disponível</th></tr></thead><tbody>'+corpo+'</tbody></table></div>')+'</div>';
+
+  // um dia, por classe
+  const dSel=_erSaldoDia||(dias.length===1?dias[0]:'');
+  const L=linhas.find(x=>x.d===dSel);
+  if(L){
+    const rows=lista.filter(g=>Object.values(L.porG[g]).some(v=>Math.abs(v)>0.5)).map(g=>{ const x=L.porG[g];
+      return '<tr><td style="padding-right:30px;font-weight:600;">'+nomeG(g)+'</td>'+td(x.ini,'#b45309',700)+td(x.prod,'#1d4ed8')+td(x.emb,'#047857',700)+td(x.baixa,'#94a3b8')+td(x.fim,x.fim>x.ini+0.5?'#b91c1c':'#334155',800)+'</tr>'; }).join('');
+    h+='<div id="er-saldo-det" class="pt-grid">'+_ptCard(dSel+' por classe', semana(dSel),
+      rows?'<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,620px);"><thead><tr><th>Classe</th><th class="c">🌅 Início</th><th class="c">🏭 Produzido</th><th class="c">📦 Embalado</th><th class="c">Baixas</th><th class="c">🌙 Fim</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+        :'<div class="pt-vazio" style="padding:16px;">Sem movimento neste dia.</div>', '<button class="pt-btn" onclick="erSaldoDia(\''+dSel+'\')">Fechar</button>')+'</div>';
+  }
+  h+='<div class="pt-nota"><b>Início</b> = o que faltava embalar quando o dia começou. <b>Produzido</b> = produção lançada naquele dia. <b>Embalado</b> = lançado produto a produto (sem o lote). '+
+    '<b>Baixas</b> = o que saiu da fila sem ser embalado produto a produto: o “embalar em lote” e a diferença quando um produto é finalizado com menos do que foi produzido. '+
+    '<b>Embalou do disponível</b> = embalado ÷ (início + produzido). Contam as produções a partir de '+fmtData(lim).slice(0,5)+' (30 dias antes do período).</div>';
+  return h;
+}
+
+/* Período só dos indicadores do topo: 'graf' = o mesmo do gráfico */
+let _erKpiPer='graf';
+function erKpiPer(v){ _erKpiPer=v; renderEmbRend(); }
+window.erKpiPer=erKpiPer;
+
 function renderEmbRend(){
   const el=document.getElementById('emb-rend-content'); if(!el) return;
+  if(_erVista==='saldo' && window.adminMode===true){
+    if(typeof _ptCss==='function') _ptCss();
+    el.style.padding='0'; el.style.background='#f5f7fb';
+    el.innerHTML='<div class="pt"><main class="pt-main">'+_erSaldoTela()+'</main></div>';
+    return;
+  }
   if(typeof _ptCss==='function') _ptCss();
   el.style.padding='0'; el.style.background='#f5f7fb';
   const fmt=n=>Math.round(n).toLocaleString('pt-BR');
@@ -7578,7 +7759,7 @@ function renderEmbRend(){
   const perTxt=dias.length?(dias.length===1?dias[0]:(dias[0]+' a '+dias[dias.length-1])):'escolha as datas';
   let h='<div class="pt"><main class="pt-main">'+
     '<div class="pt-head"><div><h1>Rendimento da Embalagem</h1><p>'+perTxt+' · lançamentos feitos produto a produto</p></div>'+
-      '<div class="pt-filtros">'+(window.adminMode===true?'<button class="pt-btn" onclick="erClassesPao()">🍞 Classes dos pães</button>':'')+
+      '<div class="pt-filtros">'+(window.adminMode===true?'<button class="pt-btn pri" onclick="erVista(\'saldo\')">🌅 Início e fim do dia</button><button class="pt-btn" onclick="erClassesPao()">🍞 Classes dos pães</button>':'')+
       '<div class="pt-seg">'+seg.map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
   if(_erPer==='datas'){
     h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="er-de" value="'+(_erDe||'')+'">'+
@@ -7588,17 +7769,36 @@ function renderEmbRend(){
     if(!dias.length){ el.innerHTML=h+'<div class="pt-card pt-vazio">Escolha o período e toque em Aplicar.</div></main></div>'; return; }
   }
 
-  // ── indicadores ──
+  // ── indicadores: com período próprio (ex.: só os últimos 3 dias) ──
+  let kDias=dias;
+  if(_erKpiPer!=='graf'){ const n=parseInt(_erKpiPer)||7; kDias=[]; for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); kDias.push(fmtData(d)); } }
+  const kSet=new Set(kDias), kTot={};
+  kDias.forEach(d=>kTot[d]=0);
+  evTodos.forEach(x=>{ if(kSet.has(x.dia)) kTot[x.dia]+=x.pct; });
+  const kCom=kDias.filter(d=>kTot[d]>0.5);
+  const kTotal=kDias.reduce((t,d)=>t+kTot[d],0);
+  const kMedia=kCom.length?kTotal/kCom.length:0;
+  const kMelhor=kCom.slice().sort((a,b)=>kTot[b]-kTot[a])[0], kPior=kCom.slice().sort((a,b)=>kTot[a]-kTot[b])[0];
+  const kEq=kDias.map(eqDia).filter(Boolean);
+  const kMin=kEq.reduce((t,x)=>t+x.min,0), kPes=kEq.length?kEq.reduce((t,x)=>t+x.n,0)/kEq.length:0;
+  const kPH=kDias.filter(d=>kTot[d]>0.5 && eqDia(d) && eqDia(d).min>0);
+  const kPctHora=kPH.length?kPH.reduce((t,d)=>t+kTot[d],0)/(kPH.reduce((t,d)=>t+eqDia(d).min,0)/60):null;
+  const kParaZerar=kMedia?pTot/kMedia:null;
+  const kTxt=_erKpiPer==='graf'?'no período':('nos últimos '+kDias.length+' dias');
+  const kSeg=[['graf','Mesmo do gráfico'],['3','Últimos 3 dias'],['7','7 dias'],['15','15 dias'],['30','30 dias']];
+  h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-4px 0 10px;"><span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--pt-mut);">INDICADORES</span>'+
+    '<div class="pt-seg">'+kSeg.map(([v,t])=>'<button class="'+(_erKpiPer===v?'on':'')+'" onclick="erKpiPer(\''+v+'\')">'+t+'</button>').join('')+'</div>'+
+    '<span style="font-size:11.5px;color:var(--pt-mut);">'+kDias[0].slice(0,5)+(kDias.length>1?' a '+kDias[kDias.length-1].slice(0,5):'')+'</span></div>';
   h+='<div class="pt-grid pt-g4">'+
-    _ptKpi('📦','green', fmt(totPer), 'Embalado no período', comTrabalho.length+' dia(s) com lançamento')+
-    _ptKpi('📊','blue', fmt(media), 'Média por dia', 'pacotes · só dias com lançamento')+
-    _ptKpi('🏆','violet', melhor?fmt(porDia[melhor].tot):'—', 'Melhor dia', melhor?(melhor.slice(0,5)+' · '+semana(melhor)+(pior&&pior!==melhor?(' · menor: '+fmt(porDia[pior].tot)+' em '+pior.slice(0,5)):'')):'sem lançamentos')+
-    _ptKpi('⏳', pTot?'amber':'green', fmt(pTot), 'Falta embalar', diasParaZerar?('≈ '+(diasParaZerar<1?'menos de 1 dia':(diasParaZerar.toFixed(1).replace('.',',')+' dia(s)'))+' no ritmo médio'):(pTot?'pacotes':'tudo embalado 🎉'))+
+    _ptKpi('📦','green', fmt(kTotal), 'Embalado '+kTxt, kCom.length+' dia(s) com lançamento')+
+    _ptKpi('📊','blue', fmt(kMedia), 'Média por dia', 'pacotes · só dias com lançamento')+
+    _ptKpi('🏆','violet', kMelhor?fmt(kTot[kMelhor]):'—', 'Melhor dia', kMelhor?(kMelhor.slice(0,5)+' · '+semana(kMelhor)+(kPior&&kPior!==kMelhor?(' · menor: '+fmt(kTot[kPior])+' em '+kPior.slice(0,5)):'')):'sem lançamentos')+
+    _ptKpi('⏳', pTot?'amber':'green', fmt(pTot), 'Falta embalar agora', kParaZerar?('≈ '+(kParaZerar<1?'menos de 1 dia':(kParaZerar.toFixed(1).replace('.',',')+' dia(s)'))+' na média acima'):(pTot?'pacotes':'tudo embalado 🎉'))+
   '</div>';
   h+='<div class="pt-grid pt-g3">'+
-    _ptKpi('👥','sky', eqMapa?(eqDias.length?(Math.round(eqPessoasMed*10)/10).toLocaleString('pt-BR'):'—'):'…', 'Pessoas por dia', eqMapa?(eqDias.length?('média no setor Embalação · '+eqDias.length+' dia(s) com ponto'):'sem ponto do setor no período'):'carregando o ponto…')+
-    _ptKpi('🕐','sky', eqMapa?(eqMin?hh(eqMin):'—'):'…', 'Horas trabalhadas', eqMapa?(eqDias.length?('no período · '+hh(eqMin/eqDias.length)+' por dia'):'pelo Controle de Ponto'):'carregando o ponto…')+
-    _ptKpi('⚡','green', pctHora?(Math.round(pctHora*10)/10).toLocaleString('pt-BR'):'—', 'Pacotes por hora trabalhada', pctHora?('rendimento da equipe · '+diasPH.length+' dia(s)'):'precisa de lançamento e ponto no mesmo dia')+
+    _ptKpi('👥','sky', eqMapa?(kEq.length?(Math.round(kPes*10)/10).toLocaleString('pt-BR'):'—'):'…', 'Pessoas por dia', eqMapa?(kEq.length?('média no setor Embalação · '+kEq.length+' dia(s) com ponto'):'sem ponto do setor nesses dias'):'carregando o ponto…')+
+    _ptKpi('🕐','sky', eqMapa?(kMin?hh(kMin):'—'):'…', 'Horas trabalhadas', eqMapa?(kEq.length?(kTxt+' · '+hh(kMin/kEq.length)+' por dia'):'pelo Controle de Ponto'):'carregando o ponto…')+
+    _ptKpi('⚡','green', kPctHora?(Math.round(kPctHora*10)/10).toLocaleString('pt-BR'):'—', 'Pacotes por hora trabalhada', kPctHora?('rendimento da equipe · '+kPH.length+' dia(s)'):'precisa de lançamento e ponto no mesmo dia')+
   '</div>';
 
   // ── gráfico + pendente ──
@@ -7703,6 +7903,98 @@ function renderEmbRend(){
   el.innerHTML=h;
 }
 window.renderEmbRend=renderEmbRend;
+
+/* ══ EXPEDIÇÃO: O QUE FOI LIBERADO NO DIA (admin) ═══════════════════
+   A tela normal da expedição mostra uma produção inteira. Aqui é o
+   contrário: tudo o que a expedição LANÇOU num dia, de qualquer
+   produção (do dia 03, do 04…), somado. Conta pela hora de cada
+   lançamento, inclusive o "Já peguei". Em pacotes (a expedição lança
+   em unidades, como a embalagem). */
+let _exdDia='';
+function expDiaAbrir(){ _exdDia=_exdDia||fmtData(new Date()); goTo('s-exp-dia'); renderExpDia(); }
+window.expDiaAbrir=expDiaAbrir;
+function exdDia(v){ _exdDia=v; renderExpDia(); }
+window.exdDia=exdDia;
+function exdMover(n){ const d=_erDate(_exdDia||fmtData(new Date())); d.setDate(d.getDate()+n); _exdDia=fmtData(d); renderExpDia(); }
+window.exdMover=exdMover;
+
+function _exdLancamentos(){
+  const out=[];   // {dia, hora, pct, un, r, antecipada}
+  (registros||[]).forEach(r=>{
+    const ps=(r.expedicao||{}).parciais||[]; if(!ps.length) return;
+    const k=_erUnPorPct(r);
+    ps.forEach(p=>{ const q=Number(p.qtd)||0; if(!q) return;
+      const dia=_erDataDe(p.hora); if(!dia) return;
+      out.push({dia, hora:String(p.hora||'').slice(11,16), un:q, pct:q/k, r, antecipada:!!p.antecipada}); });
+  });
+  return out;
+}
+
+function renderExpDia(){
+  const el=document.getElementById('exp-dia-content'); if(!el) return;
+  _ptCss(); el.style.padding='0'; el.style.background='#f5f7fb';
+  const dia=_exdDia||fmtData(new Date());
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const semana=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
+  const todos=_exdLancamentos();
+  const doDia=todos.filter(x=>x.dia===dia);
+
+  // por produto + produção
+  const porProd={};
+  doDia.forEach(x=>{
+    const ch=(x.r.produto||'?')+'|'+(x.r.data||'');
+    const o=porProd[ch]||(porProd[ch]={produto:x.r.produto||'?', prod:x.r.data||'', pct:0, un:0, n:0, horas:[], ant:0, g:_erGrupo(x.r)});
+    o.pct+=x.pct; o.un+=x.un; o.n++; if(x.hora) o.horas.push(x.hora); if(x.antecipada) o.ant+=x.pct;
+  });
+  const linhas=Object.values(porProd).sort((a,b)=>_erNum(a.prod)-_erNum(b.prod)||String(a.produto).localeCompare(String(b.produto),'pt-BR'));
+  const tot=linhas.reduce((t,x)=>t+x.pct,0);
+  const ant=linhas.reduce((t,x)=>t+x.ant,0);
+  const diasProd=new Set(linhas.map(x=>x.prod));
+  const deOutros=linhas.filter(x=>x.prod!==dia).reduce((t,x)=>t+x.pct,0);
+  const grupos={}; linhas.forEach(x=>{ const k=x.g.tipo==='outro'?'📦 Outros':((x.g.tipo==='pao'?'🍞 ':'🥐 ')+x.g.classe); grupos[k]=(grupos[k]||0)+x.pct; });
+
+  // últimos 14 dias
+  const ult=[]; const dRef=_erDate(dia);
+  for(let i=13;i>=0;i--){ const d=new Date(dRef); d.setDate(dRef.getDate()-i); ult.push(fmtData(d)); }
+  const porDia={}; todos.forEach(x=>{ porDia[x.dia]=(porDia[x.dia]||0)+x.pct; });
+  const vals=ult.map(d=>porDia[d]>0.5?porDia[d]:null);
+  const comVal=vals.filter(v=>v!==null); const media=comVal.length?comVal.reduce((t,v)=>t+v,0)/comVal.length:0;
+
+  let h='<div class="pt"><main class="pt-main">'+
+    '<div class="pt-head"><div><h1>Liberado no dia</h1><p>tudo o que a expedição lançou em '+dia+' ('+semana(dia)+'), de qualquer produção</p></div>'+
+    '<div class="pt-filtros"><button class="pt-btn" onclick="exdMover(-1)">‹ Dia anterior</button>'+
+      '<input class="pt-ctl" type="date" value="'+dia.split('/').reverse().join('-')+'" onchange="if(this.value)exdDia(this.value.split(\'-\').reverse().join(\'/\'))" style="width:170px;">'+
+      '<button class="pt-btn" onclick="exdMover(1)">Próximo dia ›</button>'+
+      '<button class="pt-btn pri" onclick="exdDia(fmtData(new Date()))">Hoje</button></div></div>';
+  h+='<div class="pt-grid pt-g4">'+
+    _ptKpi('🚚','blue', fmt(tot), 'Pacotes liberados', linhas.length+' produto(s) · '+doDia.length+' lançamento(s)')+
+    _ptKpi('📅','violet', diasProd.size, 'Produções diferentes', deOutros>0.5?(fmt(deOutros)+' pct de produções de outros dias'):'todas do próprio dia')+
+    _ptKpi('📥', ant>0.5?'amber':'gray', fmt(ant), '“Já peguei”', 'pego antes da embalagem terminar')+
+    _ptKpi('📊','green', fmt(media), 'Média dos últimos 14 dias', media&&tot?((tot>=media?'+':'')+Math.round((tot/media-1)*100)+'% neste dia'):'dias com liberação')+
+  '</div>';
+  if(Object.keys(grupos).length){
+    h+='<div class="pt-card" style="margin-bottom:16px;padding:12px 14px;"><div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+      Object.entries(grupos).sort((a,b)=>b[1]-a[1]).map(([k,v])=>'<div style="background:#f8fafc;border-radius:10px;padding:8px 12px;"><div style="font-size:17px;font-weight:800;">'+fmt(v)+'</div><div style="font-size:11.5px;color:#64748b;">'+k+'</div></div>').join('')+
+    '</div></div>';
+  }
+  const tab=linhas.length
+    ? '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,760px);"><thead><tr><th>Produto</th><th>Produção</th><th>Grupo</th><th class="c">Liberado</th><th>Lançamentos</th></tr></thead><tbody>'+
+        linhas.map(x=>'<tr><td style="padding-right:30px;"><b style="font-weight:600;">'+x.produto+'</b>'+(x.ant>0.5?' '+_ptPill('já peguei','amber',true):'')+'</td>'+
+          '<td style="padding-right:24px;color:'+(x.prod!==dia?'#b45309':'var(--pt-sub)')+';">'+(x.prod?x.prod.slice(0,5):'—')+(x.prod&&x.prod!==dia?' · outro dia':'')+'</td>'+
+          '<td style="padding-right:24px;">'+(x.g.tipo==='salgado'?_ptPill(x.g.classe,'blue',true):(x.g.tipo==='pao'?_ptPill(x.g.classe,'amber',true):_ptPill('Outro','gray',true)))+'</td>'+
+          '<td class="c" style="font-weight:800;">'+fmt(x.pct)+(Math.abs(x.un-x.pct)>0.5?'<div style="font-size:10.5px;color:#94a3b8;font-weight:500;">'+fmt(x.un)+' un</div>':'')+'</td>'+
+          '<td style="font-size:12px;color:#64748b;">'+x.n+'× · '+x.horas.slice(0,6).join(', ')+(x.horas.length>6?'…':'')+'</td></tr>').join('')+
+      '</tbody></table></div>'
+    : '<div class="pt-vazio" style="padding:22px;">Nada liberado neste dia.</div>';
+  h+='<div class="pt-grid">'+_ptCard('O que foi liberado', 'mais antigo primeiro', tab)+'</div>';
+  h+='<div class="pt-grid">'+_ptCard('Liberado por dia', 'últimos 14 dias até '+dia.slice(0,5)+' · tracejado = média',
+    comVal.length?_ptGrafico([{nome:'Liberado', cor:'#2563eb', vals},{nome:'Média', cor:'#ea8a0c', vals:ult.map(()=>media||null), tracejado:true}], ult.map(d=>d.slice(0,5)), v=>fmt(v), {valores:'todos', id:'exd', largo:1100, alto:240})
+      :'<div class="pt-vazio">Sem liberações nesses dias.</div>')+'</div>';
+  h+='<div class="pt-nota">Cada lançamento conta no dia em que foi feito na expedição, não no dia da produção. A expedição lança em unidades; aqui aparece em pacotes (unidades ÷ unidades por pacote). Liberações apagadas depois não aparecem.</div>';
+  h+='</main></div>';
+  el.innerHTML=h;
+}
+window.renderExpDia=renderExpDia;
 
 /* ══ PAINEL DA PRODUÇÃO (admin) ═════════════════════════════════════
    Visão dos 4 setores que mais pesam na produção — Cozinha,
@@ -19102,9 +19394,38 @@ function _tvFooter(d, views, viewIdx, isAdmin){
       (isAdmin?'<button onclick="configurarMuralTV()" style="'+btn+'padding:9px 16px;">💬 Recado</button>':'')+
       (isAdmin?'<button onclick="configurarPremioTV()" style="'+btn+'padding:9px 16px;">⚙️ Prêmio</button>':'')+
       '<button onclick="tvFullscreen()" style="background:#1e3a8a;border:none;color:#fff;font-size:14px;font-weight:600;padding:9px 16px;border-radius:12px;cursor:pointer;box-shadow:0 2px 8px rgba(30,58,138,.2);">⛶ Tela cheia</button>'+
+      (window._tvLinkMode?'':'<button onclick="tvMostrarLink()" style="'+btn+'padding:9px 16px;">🔗 Link da TV</button>')+
       (window._tvLinkMode?'':'<button onclick="sairTV()" style="'+btn+'color:#64748b;padding:9px 16px;">✕ Sair</button>')+
     '</div></div>';
 }
+/* O link da TV é montado a partir do endereço atual do app. Antes ele
+   era anotado à mão (jonathanthome1.github.io/produlog/?tv=1) e parou
+   de funcionar quando o app mudou para o endereço da empresa. */
+function tvLinkUrl(){ return location.origin+location.pathname+'?tv=1'; }
+window.tvLinkUrl=tvLinkUrl;
+function tvMostrarLink(){
+  const url=tvLinkUrl();
+  document.getElementById('tv-link-ov')?.remove();
+  const ov=document.createElement('div'); ov.id='tv-link-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:4000;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:540px;width:100%;padding:24px;box-shadow:0 24px 60px rgba(15,23,42,.3);">'+
+    '<div style="font-size:19px;font-weight:800;">📺 Link do Painel TV</div>'+
+    '<div style="font-size:13px;color:#64748b;margin-top:6px;line-height:1.55;">Abra este endereço no navegador da TV. Ele entra direto no painel, em tela cheia, sem os botões de sair.</div>'+
+    '<div style="margin-top:14px;display:flex;gap:8px;"><input id="tv-link-txt" readonly value="'+url+'" style="flex:1;font-size:14px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-family:monospace;" onclick="this.select()">'+
+      '<button id="tv-link-cp" onclick="tvCopiarLink()" style="border:none;background:#1e40af;color:#fff;border-radius:10px;padding:0 16px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Copiar</button></div>'+
+    '<div style="margin-top:14px;padding:12px 14px;background:#fffbeb;border:1px solid #fde68a;border-radius:12px;font-size:12.5px;color:#78350f;line-height:1.55;">'+
+      '<b>Na primeira vez, a TV pede login</b> (o ProduLog agora exige uma conta). Entre com uma conta liberada; ela fica salva e, das próximas vezes, o painel abre sozinho. '+
+      'Se possível, use uma conta só para a TV.</div>'+
+    '<button onclick="document.getElementById(\'tv-link-ov\').remove()" style="margin-top:16px;width:100%;border:1px solid #e2e8f0;background:#fff;border-radius:10px;padding:11px;font-weight:700;cursor:pointer;font-family:inherit;">Fechar</button></div>';
+  document.body.appendChild(ov);
+}
+window.tvMostrarLink=tvMostrarLink;
+async function tvCopiarLink(){
+  const t=tvLinkUrl(), b=document.getElementById('tv-link-cp');
+  try{ await navigator.clipboard.writeText(t); }catch(e){ const i=document.getElementById('tv-link-txt'); if(i){ i.select(); try{ document.execCommand('copy'); }catch(_){} } }
+  if(b){ b.textContent='✓ Copiado'; setTimeout(()=>{ if(b.isConnected) b.textContent='📋 Copiar'; },1800); }
+}
+window.tvCopiarLink=tvCopiarLink;
 function _tvViewHoje(d){
   const bateuDia=d.metaDiaPct>=100;
   const corDiaA=bateuDia?'#f59e0b':'#1e3a8a', corDiaB=bateuDia?'#fbbf24':'#3b82f6';
