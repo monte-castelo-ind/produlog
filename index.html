@@ -7363,7 +7363,7 @@ window.embConfirmarLote=embConfirmarLote;
    Ajuste depois de finalizar corrige o dia em que o produto foi
    finalizado (é correção de contagem, não trabalho novo).
 
-   A embalagem conta em UNIDADES; aqui tudo vira PACOTES. */
+   Tudo em PACOTES, como a embalagem lança. */
 let _erPer='7', _erDia='', _erDe='', _erAte='', _erPendSel='';
 
 function _erDataDe(txt){
@@ -7387,11 +7387,10 @@ function _erGrupo(r){
   const p=(produtosConfFirebase||[]).find(x=>String(x.cod||'').trim()===c) || (produtosConfFirebase||[]).find(x=>_normNome(x.nome||'')===n);
   return {tipo:'salgado', classe:((p&&p.classe)||'').trim()||'Sem classe'};
 }
-function _erUnPorPct(r){
-  const q=Number(r.qtd)||0, u=Number(r.qtdUnidades)||0;
-  if(q>0 && u>0) return u/q;
-  return Number((r.prodData||{}).qtdPct)||1;
-}
+/* A embalagem e a expedição lançam em PACOTES (confirmado na operação:
+   "Produzido 406 pct · Embalado 406" era 406 pacotes, não unidades).
+   Nada a converter. */
+function _erUnPorPct(r){ return 1; }
 
 /* Lançamentos de embalagem, um por dia. Devolve também o que foi em lote. */
 function _erEventos(){
@@ -7441,10 +7440,8 @@ function _erPendentes(){
     const e=r.embalagem||{};
     if(e.feito) return;
     const q=Number(r.qtd)||0; if(q<=0) return;
-    const k=_erUnPorPct(r);
-    const totalUn=Number(r.qtdUnidades)||q*k;
-    const feitoUn=(e.parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
-    const falta=Math.max(0,totalUn-feitoUn)/k;
+    const feito=(e.parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
+    const falta=Math.max(0,q-feito);
     if(falta>0.001) out.push({r, falta, ...(_erGrupo(r))});
   });
   return out;
@@ -7896,7 +7893,7 @@ function renderEmbRend(){
       '<button class="pt-btn" onclick="erVerDia(\''+dSel+'\')">Fechar</button>')+'</div>';
   }
 
-  h+='<div class="pt-nota">Cada pacote conta no dia em que foi <b>lançado</b> na embalagem, não no dia da produção. Lançamentos em unidades viram pacotes pelo número de unidades de cada pacote. '+
+  h+='<div class="pt-nota">Cada pacote conta no dia em que foi <b>lançado</b> na embalagem, não no dia da produção. '+
     'Ajuste de quantidade depois de finalizar corrige o dia em que o produto foi finalizado. '+
     '<b>Não entra o “Embalar em lote”</b>, que fecha o dia sem conferência'+(lotePer>0.5?(' — neste período foram '+fmt(lotePer)+' pacote(s) em lote, fora da conta'):'')+'.</div>';
   h+='</main></div>';
@@ -7982,7 +7979,7 @@ function renderExpDia(){
         linhas.map(x=>'<tr><td style="padding-right:30px;"><b style="font-weight:600;">'+x.produto+'</b>'+(x.ant>0.5?' '+_ptPill('já peguei','amber',true):'')+'</td>'+
           '<td style="padding-right:24px;color:'+(x.prod!==dia?'#b45309':'var(--pt-sub)')+';">'+(x.prod?x.prod.slice(0,5):'—')+(x.prod&&x.prod!==dia?' · outro dia':'')+'</td>'+
           '<td style="padding-right:24px;">'+(x.g.tipo==='salgado'?_ptPill(x.g.classe,'blue',true):(x.g.tipo==='pao'?_ptPill(x.g.classe,'amber',true):_ptPill('Outro','gray',true)))+'</td>'+
-          '<td class="c" style="font-weight:800;">'+fmt(x.pct)+(Math.abs(x.un-x.pct)>0.5?'<div style="font-size:10.5px;color:#94a3b8;font-weight:500;">'+fmt(x.un)+' un</div>':'')+'</td>'+
+          '<td class="c" style="font-weight:800;">'+fmt(x.pct)+'</td>'+
           '<td style="font-size:12px;color:#64748b;">'+x.n+'× · '+x.horas.slice(0,6).join(', ')+(x.horas.length>6?'…':'')+'</td></tr>').join('')+
       '</tbody></table></div>'
     : '<div class="pt-vazio" style="padding:22px;">Nada liberado neste dia.</div>';
@@ -7990,7 +7987,7 @@ function renderExpDia(){
   h+='<div class="pt-grid">'+_ptCard('Liberado por dia', 'últimos 14 dias até '+dia.slice(0,5)+' · tracejado = média',
     comVal.length?_ptGrafico([{nome:'Liberado', cor:'#2563eb', vals},{nome:'Média', cor:'#ea8a0c', vals:ult.map(()=>media||null), tracejado:true}], ult.map(d=>d.slice(0,5)), v=>fmt(v), {valores:'todos', id:'exd', largo:1100, alto:240})
       :'<div class="pt-vazio">Sem liberações nesses dias.</div>')+'</div>';
-  h+='<div class="pt-nota">Cada lançamento conta no dia em que foi feito na expedição, não no dia da produção. A expedição lança em unidades; aqui aparece em pacotes (unidades ÷ unidades por pacote). Liberações apagadas depois não aparecem.</div>';
+  h+='<div class="pt-nota">Cada lançamento conta no dia em que foi feito na expedição, não no dia da produção. Em pacotes, como a expedição lança. Liberações apagadas depois não aparecem.</div>';
   h+='</main></div>';
   el.innerHTML=h;
 }
@@ -8661,10 +8658,10 @@ function renderEmbalagem(){
           <div class="emb-item-info">
             <div class="emb-item-nome">${r.produto}</div>
             <div class="emb-item-qtd">
-              ${r.qtdPacotes>0?`Produzido: <strong>${r.qtdPacotes} pct</strong> <span style="color:var(--text-secondary);font-size:11px;">(${r.qtdUnidades||r.qtd} un)</span>`:`Produzido: <strong>${r.qtdUnidades||r.qtd} un</strong>`}
-              ${totalParcial>0&&!done?` · Embalando: <strong style="color:var(--mc-dourado);">${totalParcial} un</strong>`:''}
-              ${done?` · Embalado: <strong>${emb.qtdEmbalada} un</strong>`:''}
-              ${done&&emb.qtdEmbalada<(r.qtdUnidades||r.qtd)?` <span style="color:#c62828;font-size:11px;">(−${(r.qtdUnidades||r.qtd)-emb.qtdEmbalada})</span>`:''}
+              ${r.qtdPacotes>0?`Produzido: <strong>${r.qtdPacotes} pct</strong> <span style="color:var(--text-secondary);font-size:11px;">(${r.qtdUnidades||r.qtd} un)</span>`:`Produzido: <strong>${r.qtd} pct</strong>`}
+              ${totalParcial>0&&!done?` · Embalando: <strong style="color:var(--mc-dourado);">${totalParcial} pct</strong>`:''}
+              ${done?` · Embalado: <strong>${emb.qtdEmbalada} pct</strong>`:''}
+              ${done&&emb.qtdEmbalada<(r.qtd||0)?` <span style="color:#c62828;font-size:11px;">(−${(r.qtd||0)-emb.qtdEmbalada})</span>`:''}
             </div>
             ${parciais.length>0&&!done?`<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${parciais.map(p=>p.hora+': +'+p.qtd).join(' · ')}</div>`:''}
           </div>
@@ -8673,7 +8670,7 @@ function renderEmbalagem(){
           <div style="display:flex;gap:8px;margin-bottom:6px;">
             <input type="number" id="emb-parc-inp-${r.firestoreId}" placeholder="quantidade" min="0" inputmode="numeric"
               style="flex:1;font-size:14px;padding:8px;border-radius:8px;border:1px solid var(--mc-azul);background:var(--bg-primary);color:var(--text-primary);font-family:inherit;" />
-            <button onclick="adicionarParcialEmb('${r.firestoreId}',${r.qtdUnidades||r.qtd})"
+            <button onclick="adicionarParcialEmb('${r.firestoreId}',${r.qtd||0})"
               style="background:var(--mc-azul);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">+ Adicionar</button>
             <button onclick="subtrairParcialEmb('${r.firestoreId}')"
               style="background:none;border:1px solid #c62828;color:#c62828;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;" ${totalParcial===0?'disabled style="opacity:0.4;"':''}>− Remover</button>
@@ -8681,19 +8678,19 @@ function renderEmbalagem(){
           <textarea id="emb-obs-${r.firestoreId}" placeholder="Observação (opcional)..."
             onblur="salvarObsEmb('${r.firestoreId}',this.value)"
             style="width:100%;font-size:13px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-family:inherit;resize:vertical;min-height:40px;margin-bottom:6px;">${(r.embalagem&&r.embalagem.obs)||''}</textarea>
-          ${totalParcial>0?`<button onclick="confirmarEmbalagEmCompleto('${r.firestoreId}',${r.qtdUnidades||r.qtd},${totalParcial})"
+          ${totalParcial>0?`<button onclick="confirmarEmbalagEmCompleto('${r.firestoreId}',${r.qtd||0},${totalParcial})"
             style="width:100%;padding:10px;background:#2e7d32;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">
-            ✓ Confirmar ${totalParcial} un embaladas
+            ✓ Confirmar ${totalParcial} pacotes embalados
           </button>`:''}
         </div>`:''}
         ${done&&r.embalagem&&r.embalagem.obs?`<div style="margin-top:6px;padding:8px;background:rgba(0,0,0,0.04);border-radius:8px;font-size:12px;color:var(--text-secondary);">📝 ${r.embalagem.obs}</div>`:''}
         ${done?`<div class="emb-item-actions" id="ajuste-${r.firestoreId}" style="display:none;margin-top:8px;">
           <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">Ajustar:</span>
           <input type="number" class="emb-input-qtd" id="input-emb-${r.firestoreId}" value="${emb.qtdEmbalada||r.qtd}" min="0" inputmode="numeric" />
-          <button class="btn-sm-green" onclick="confirmarAjuste('${r.firestoreId}',${r.qtdUnidades||r.qtd})">OK</button>
+          <button class="btn-sm-green" onclick="confirmarAjuste('${r.firestoreId}',${r.qtd||0})">OK</button>
         </div>
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-          <button class="btn-sm-outline" style="font-size:11px;" onclick="toggleAjuste('${r.firestoreId}',${r.qtdUnidades||r.qtd},${emb.qtdEmbalada||r.qtd})">Ajustar qtd</button>
+          <button class="btn-sm-outline" style="font-size:11px;" onclick="toggleAjuste('${r.firestoreId}',${r.qtd||0},${emb.qtdEmbalada||r.qtd})">Ajustar qtd</button>
           <button class="btn-sm-outline" style="font-size:11px;border-color:#ef9a9a;color:#c62828;" onclick="desfazerEmbalagem('${r.firestoreId}')">↶ Desfazer embalagem</button>
         </div>`:''}
       </div>`;
@@ -9189,7 +9186,7 @@ function renderExpedicao(){
           <div class="emb-item-info">
             <div class="emb-item-nome">${r.produto}</div>
             <div class="emb-item-qtd">
-              Embalado: <strong>${qtdEmb} un</strong> · Liberado: <strong style="color:${concluido?'#4caf50':'var(--mc-laranja)'};">${totalLib} un</strong>
+              Embalado: <strong>${qtdEmb} pct</strong> · Liberado: <strong style="color:${concluido?'#4caf50':'var(--mc-laranja)'};">${totalLib} pct</strong>
               ${!concluido?` · Restante: <strong>${restante}</strong>`:''}
             </div>
             ${r.embalagem&&r.embalagem.obs?`<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);font-style:italic;">📝 ${r.embalagem.obs}</div>`:''}
@@ -9201,7 +9198,7 @@ function renderExpedicao(){
             ${exp.parciais.map((p,i)=>`<div class="exp-parcial-item" id="parcial-row-${r.firestoreId}-${i}">
               <span>${p.hora}${p.editadoEm?' <em style="font-size:10px;">(edit. '+p.editadoEm+')</em>':''}</span>
               <div style="display:flex;align-items:center;gap:8px;">
-                <span class="exp-parcial-qtd">+${p.qtd} un</span>
+                <span class="exp-parcial-qtd">+${p.qtd} pct</span>
                 <button onclick="toggleEditParcial('${r.firestoreId}',${i},${p.qtd})" style="background:none;border:1px solid var(--mc-laranja);color:var(--mc-laranja);font-size:11px;padding:2px 8px;border-radius:6px;cursor:pointer;font-family:inherit;">Editar</button>
               </div>
             </div>`).join('')}
@@ -15140,7 +15137,7 @@ function renderBuscarProduto(){
     regs.forEach(r=>{
       const emb=r.embalagem||{feito:false,qtdEmbalada:0};
       const exp=r.expedicao||{totalLiberado:0,parciais:[]};
-      const qtdProd=r.qtdUnidades||r.qtd;
+      const qtdProd=r.qtd||0;          // a embalagem e a expedição lançam em pacotes
       const qtdEmb=emb.qtdEmbalada||0;
       const lib=exp.totalLiberado||0;
 
