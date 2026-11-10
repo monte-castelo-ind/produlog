@@ -39704,11 +39704,12 @@ function _hubxCss(){
 .av-res{font-size:13px;color:rgba(255,255,255,.72);}
 .av-res b{color:#fbbf24;font-size:15px;}
 .av-dir{margin-left:auto;display:flex;gap:16px;}
-.av-lk{border:none;background:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:#bfdbfe;cursor:pointer;}
+.av-lk{border:none;background:none;padding:0;font-family:inherit;font-size:12.5px;font-weight:600;color:#bfdbfe;cursor:pointer;white-space:nowrap;}
 .av-lk:hover{color:#fff;text-decoration:underline;}
 .av-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:14px;}
 .av-col{min-width:0;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);border-radius:14px;padding:12px 14px 10px;}
-.av-gh{display:flex;align-items:center;gap:7px;font-size:13.5px;}
+.av-gh{display:flex;align-items:center;gap:7px;font-size:13.5px;flex-wrap:wrap;}
+.av-gh>b{white-space:nowrap;}
 .av-gh .ic{font-size:14px;}
 .av-gh .ct{background:#fbbf24;color:#422006;font-size:11px;font-weight:800;border-radius:99px;padding:1px 8px;}
 .av-inf{font-size:11.5px;color:rgba(255,255,255,.55);margin:2px 0 4px;}
@@ -39720,11 +39721,21 @@ function _hubxCss(){
 .av-tx{flex:1;min-width:0;border:none;background:none;padding:2px 5px;border-radius:8px;text-align:left;font-family:inherit;cursor:pointer;color:inherit;}
 .av-tx:hover{background:rgba(255,255,255,.1);}
 .av-tx .n{display:block;font-size:13.5px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.av-tx .tg{font-size:11.5px;font-weight:700;border-radius:99px;padding:1px 8px;margin-left:5px;background:#fff !important;}
+.av-tx .tg{font-size:11px;font-weight:700;border-radius:99px;padding:1px 7px;margin-right:6px;background:#fff;}
 .av-tx .s{display:block;font-size:11.5px;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .av-li.visto .av-tx .n{font-weight:500;color:rgba(255,255,255,.45);text-decoration:line-through;}
 .av-li.visto .av-tx .tg{opacity:.45;}
 .av-ok{font-size:12.5px;color:rgba(255,255,255,.55);padding:6px 0 4px;}
+.av-env{background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.55);border-radius:11px;padding:9px 10px;margin:6px 0 6px;font-size:13px;}
+.av-env .t{display:flex;align-items:center;gap:9px;}
+.av-env .b{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 0 31px;}
+.av-env.ok{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14);color:rgba(255,255,255,.7);display:flex;align-items:center;gap:9px;font-size:12.5px;}
+.av-ck.on{background:#22c55e;border-color:#22c55e;}
+.av-wa{border:none;border-radius:8px;background:#22c55e;color:#052e16;font-family:inherit;font-size:12px;font-weight:700;padding:6px 10px;cursor:pointer;}
+.av-wa:hover{background:#4ade80;}
+.av-wa.leve{background:rgba(255,255,255,.14);color:#fff;}
+.av-wa.leve:hover{background:rgba(255,255,255,.24);}
+.av-wa.vazio{background:#fbbf24;color:#422006;}
 .av-mais{display:block;margin:4px 0 2px 32px;}
 
 .hir{position:relative;margin-top:12px;}
@@ -39787,32 +39798,44 @@ function _hubxInit(){
    Regras e vistos ficam no Firestore (configuracoes/avisosAdmin e
    avisosVistos), então valem em qualquer aparelho do admin. */
 let _avCfg={ponto:true, faltas:true, atraso:true, atrasoMin:30, extra:true, extraMin:120, vendas:true, emb:true, embDias:2, carreg:true};
-let _avVistos={dia:'', ids:[]}, _avLido=false, _avAbertos={}, _avMostrarVistos=false;
+let _avVistos={dia:'', ids:[], enviados:{}}, _avLido=false, _avAbertos={}, _avMostrarVistos=false;
+let _avEnvios={};      // por área: a lista do último dia fechado, pronta para mandar
+const AV_AREAS={pao:{ic:'🍞', nome:'Pães', titulo:'Pães'}, salgado:{ic:'🥐', nome:'Salgados', titulo:'Salgados'}};
+/* pão ou salgado: pelo cadastro; produto fora dos dois cadastros vai pelo código (abaixo de 200 = Quadra) */
+function _avArea(cod){
+  const t=(typeof _pprGrupoProd==='function')?_pprGrupoProd(cod):'outro';
+  if(t==='pao'||t==='salgado') return t;
+  const n=parseInt(String(cod||'').trim(),10);
+  return (!isNaN(n) && n<200)?'pao':'salgado';
+}
+async function _avGravarVistos(){
+  try{ await setDoc(doc(db,'configuracoes','avisosVistos'),{dia:_avVistos.dia, ids:_avVistos.ids, enviados:_avVistos.enviados||{}}); }
+  catch(e){ console.warn('avisosVistos gravar',e); }
+}
 
 async function _avCarregar(){
   if(_avLido) return; _avLido=true;
   try{ const d=await getDoc(doc(db,'configuracoes','avisosAdmin')); if(d.exists()) _avCfg={..._avCfg, ...d.data()}; }catch(e){ console.warn('avisosAdmin',e); }
-  try{ const d=await getDoc(doc(db,'configuracoes','avisosVistos')); if(d.exists()){ const x=d.data(); _avVistos={dia:x.dia||'', ids:Array.isArray(x.ids)?x.ids:[]}; } }catch(e){ console.warn('avisosVistos',e); }
+  try{ const d=await getDoc(doc(db,'configuracoes','avisosVistos')); if(d.exists()){ const x=d.data(); _avVistos={dia:x.dia||'', ids:Array.isArray(x.ids)?x.ids:[], enviados:(x.enviados&&typeof x.enviados==='object')?x.enviados:{}}; } }catch(e){ console.warn('avisosVistos',e); }
   if(typeof _pprCarregarCfg==='function') await _pprCarregarCfg();
   _hubxAvisos();
 }
 function _avVisto(id){ return _avVistos.dia===fmtData(new Date()) && _avVistos.ids.includes(id); }
 async function avMarcar(id){
   const hojeS=fmtData(new Date());
-  if(_avVistos.dia!==hojeS) _avVistos={dia:hojeS, ids:[]};          // virou o dia: zera
+  if(_avVistos.dia!==hojeS){ _avVistos.dia=hojeS; _avVistos.ids=[]; }   // virou o dia: zera os vistos
   const i=_avVistos.ids.indexOf(id);
   if(i>=0) _avVistos.ids.splice(i,1); else _avVistos.ids.push(id);
   _hubxAvisos();
-  try{ await setDoc(doc(db,'configuracoes','avisosVistos'),{dia:_avVistos.dia, ids:_avVistos.ids, por:(typeof _demAutor==='function'?_demAutor():'')}); }
-  catch(e){ console.warn('avisosVistos gravar',e); }
+  await _avGravarVistos();
 }
 window.avMarcar=avMarcar;
 async function avMarcarGrupo(g){
   const hojeS=fmtData(new Date());
-  if(_avVistos.dia!==hojeS) _avVistos={dia:hojeS, ids:[]};
+  if(_avVistos.dia!==hojeS){ _avVistos.dia=hojeS; _avVistos.ids=[]; }
   (window._avLista||[]).filter(a=>a.g===g).forEach(a=>{ if(!_avVistos.ids.includes(a.id)) _avVistos.ids.push(a.id); });
   _hubxAvisos();
-  try{ await setDoc(doc(db,'configuracoes','avisosVistos'),{dia:_avVistos.dia, ids:_avVistos.ids}); }catch(e){ console.warn(e); }
+  await _avGravarVistos();
 }
 window.avMarcarGrupo=avMarcarGrupo;
 function avMais(g){ _avAbertos[g]=!_avAbertos[g]; _hubxAvisos(); }
@@ -39869,13 +39892,23 @@ function _avMontar(){
   }
   // vendas: último dia fechado + hoje
   if(_avCfg.vendas && typeof _pprVendasDia==='function'){
-    const mapa=_pprVendasMapa(); const lista=[];
+    const mapa=_pprVendasMapa();
+    // último dia fechado: é dele a lista que vai para os gestores
     let ant=''; for(let i=1;i<=5 && !ant;i++){ const d=new Date(); d.setDate(d.getDate()-i); const s=fmtData(d); if(mapa[s]) ant=s; }
-    const junta=(dia,rot)=>{ if(!dia) return; _pprVendasDia(dia, mapa, 'todos').achados.forEach(a=>lista.push({g:'vendas', id:'venda|'+dia+'|'+a.k, cor:'#dc2626',
-      nome:a.nome, tag:(a.pct===null?'venda nova':'+'+a.pct+'%'), sub:rot+' · vendeu '+Math.round(a.v)+', média '+Math.round(a.media), acao:"avAbrirVenda('"+String(a.k).replace(/'/g,'')+"')", peso:a.pct===null?9999:a.pct})); };
     const fechouHoje=new Date().getHours()>=18;
-    junta(hojeS, fechouHoje?'hoje':'hoje, até agora'); junta(ant, ant.slice(0,5));
-    grupos.push({g:'vendas', ic:'📈', nome:'Vendas fora da média', info:ant?('hoje e '+ant.slice(0,5)):'hoje', lista});
+    const doDia=dia=>dia?_pprVendasDia(dia, mapa, 'todos').achados.map(a=>({...a, area:_avArea(a.cod)})):[];
+    const hojeA=doDia(hojeS), antA=doDia(ant);
+    _avEnvios={};
+    Object.keys(AV_AREAS).forEach(area=>{
+      const lista=[];
+      const junta=(arr,dia,rot)=>arr.filter(a=>a.area===area).forEach(a=>lista.push({g:'v-'+area, id:'venda|'+dia+'|'+a.k, cor:'#dc2626',
+        nome:a.nome, tag:(a.pct===null?'venda nova':'+'+a.pct+'%'), sub:rot+' · vendeu '+Math.round(a.v)+', média '+Math.round(a.media), acao:"avAbrirVenda('"+String(a.k).replace(/'/g,'')+"')"}));
+      junta(antA, ant, ant.slice(0,5)); junta(hojeA, hojeS, fechouHoje?'hoje':'hoje, até agora');
+      const itens=antA.filter(a=>a.area===area).sort((a,b)=>(b.pct===null?1e9:b.pct)-(a.pct===null?1e9:a.pct));
+      const envio=ant?{area, dia:ant, itens, chave:area+'|'+ant, enviado:!!(_avVistos.enviados||{})[area+'|'+ant]}:null;
+      if(envio) _avEnvios[area]=envio;
+      grupos.push({g:'v-'+area, ic:AV_AREAS[area].ic, nome:AV_AREAS[area].titulo, info:'venda acima da média · '+(ant?(ant.slice(0,5)+' e hoje'):'hoje'), lista, envio});
+    });
   }
   // produção
   const prod=[];
@@ -39892,18 +39925,117 @@ function _avMontar(){
     const ab=carregamentos.filter(c=>c.status!=='concluido' && String(c.data||'').slice(0,10)===hojeS);
     if(ab.length) prod.push({g:'prod', id:'carreg|'+hojeS+'|'+ab.length, cor:'#2563eb', nome:ab.length+' carregamento'+(ab.length>1?'s':'')+' de hoje em aberto', tag:'', sub:ab.slice(0,3).map(c=>c.nome||'sem nome').join(', ')+(ab.length>3?'…':''), acao:"goTo('s-carreg')", peso:0});
   }
-  if(_avCfg.emb||_avCfg.carreg) grupos.push({g:'prod', ic:'📦', nome:'Embalagem e carregamento', info:'', lista:prod});
+  if(_avCfg.emb||_avCfg.carreg) grupos.push({g:'prod', ic:'📦', nome:'Embalagem e carga', info:'o que está parado', lista:prod});
   return grupos;
 }
+
+/* ── LISTA DIÁRIA PARA OS GESTORES ───────────────────────────────────
+   Todo dia, a lista dos produtos que venderam acima da média no último
+   dia fechado vai para o gestor da área, pelo WhatsApp. O app lembra
+   (a linha fica em destaque) até alguém marcar "enviada". A marca vale
+   para aquela lista: não volta a cobrar o mesmo dia. */
+function _avMsg(envio){
+  const A=AV_AREAS[envio.area], d=_erDate(envio.dia);
+  const N=Math.max(1,parseInt((_pprCfg||{}).semanas)||4), sem=nomeDiaSemana(d);
+  const L=['*Vendas acima da média — '+A.nome+'*', sem+', '+envio.dia, ''];
+  envio.itens.forEach((a,i)=>{
+    L.push((i+1)+'. *'+a.nome+'*');
+    L.push('   Vendeu '+Math.round(a.v)+' · média '+Math.round(a.media)+' · '+(a.pct===null?'sem venda nas semanas anteriores':'+'+a.pct+'%'));
+  });
+  L.push('', 'Média = o mesmo dia da semana nas últimas '+N+' semanas. Quantidades em pacotes.', '_ProduLog · Monte Castelo_');
+  return L.join('\n');
+}
+function _avFone(f){ let n=String(f||'').replace(/\D/g,''); if(n.length===10||n.length===11) n='55'+n; return n; }
+function _avEnvioHtml(e){
+  const cont=((_avCfg.contatos||{})[e.area]||[]).filter(c=>_avFone(c.fone).length>=12);
+  if(!e.itens.length) return '<div class="av-env ok">Nenhum produto acima da média em '+e.dia.slice(0,5)+' — nada a enviar.</div>';
+  if(e.enviado) return '<div class="av-env ok"><button class="av-ck on" onclick="avEnviado(\''+e.area+'\')" title="Desmarcar">✓</button><span>Lista de '+e.dia.slice(0,5)+' enviada</span></div>';
+  return '<div class="av-env"><div class="t"><button class="av-ck" onclick="avEnviado(\''+e.area+'\')" title="Marcar como enviada" aria-label="Marcar como enviada"></button>'+
+      '<span><b>Enviar a lista de '+e.dia.slice(0,5)+'</b> · '+e.itens.length+' produto'+(e.itens.length>1?'s':'')+'</span></div>'+
+    '<div class="b">'+
+      (cont.length?cont.map((c,i)=>'<button class="av-wa" onclick="avEnviar(\''+e.area+'\','+i+')">WhatsApp · '+String(c.nome||c.fone).replace(/</g,'&lt;')+'</button>').join('')
+                  :'<button class="av-wa vazio" onclick="avContatos(\''+e.area+'\')">📱 Cadastrar o número do gestor</button>')+
+      '<button class="av-wa leve" onclick="avCopiarMsg(\''+e.area+'\',this)">Copiar a mensagem</button>'+
+    '</div></div>';
+}
+function avEnviar(area, i){
+  const e=_avEnvios[area]; if(!e) return;
+  const c=((_avCfg.contatos||{})[area]||[]).filter(x=>_avFone(x.fone).length>=12)[i]; if(!c) return;
+  window.open('https://wa.me/'+_avFone(c.fone)+'?text='+encodeURIComponent(_avMsg(e)), '_blank');
+}
+window.avEnviar=avEnviar;
+async function avCopiarMsg(area, btn){
+  const e=_avEnvios[area]; if(!e) return;
+  const t=_avMsg(e);
+  try{ await navigator.clipboard.writeText(t); }
+  catch(err){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(_){} ta.remove(); }
+  if(btn){ const a=btn.textContent; btn.textContent='✓ Copiada'; setTimeout(()=>{ if(btn.isConnected) btn.textContent=a; },1600); }
+}
+window.avCopiarMsg=avCopiarMsg;
+async function avEnviado(area){
+  const e=_avEnvios[area]; if(!e) return;
+  const env=_avVistos.enviados||(_avVistos.enviados={});
+  if(env[e.chave]) delete env[e.chave];
+  else env[e.chave]={em:agora(), por:(typeof _demAutor==='function'?_demAutor():'')};
+  // guarda só as últimas listas, para o registro não crescer sem fim
+  const chaves=Object.keys(env).sort((a,b)=>_erNum(b.split('|')[1])-_erNum(a.split('|')[1]));
+  chaves.slice(30).forEach(k=>delete env[k]);
+  _hubxAvisos();
+  await _avGravarVistos();
+}
+window.avEnviado=avEnviado;
+
+/* Números que recebem a lista de cada área */
+function avContatos(area){
+  document.getElementById('av-cont')?.remove();
+  const A=AV_AREAS[area];
+  const lista=(((_avCfg.contatos||{})[area])||[]).slice(); while(lista.length<2) lista.push({nome:'', fone:''});
+  const lin=(c,i)=>'<div style="display:flex;gap:8px;margin-top:8px;"><input class="avc-n" placeholder="Nome do gestor" value="'+String(c.nome||'').replace(/"/g,'&quot;')+'" style="flex:1;font-size:14px;padding:9px 11px;">'+
+    '<input class="avc-f" placeholder="(55) 9 9999-9999" inputmode="tel" value="'+String(c.fone||'').replace(/"/g,'&quot;')+'" style="flex:1;font-size:14px;padding:9px 11px;"></div>';
+  const ov=document.createElement('div'); ov.id='av-cont';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:480px;width:100%;padding:22px;">'+
+    '<div style="font-size:18px;font-weight:800;">📱 Quem recebe a lista — '+A.ic+' '+A.nome+'</div>'+
+    '<div style="font-size:13px;color:#64748b;margin-top:4px;line-height:1.5;">Número com DDD. A mensagem abre no WhatsApp já escrita; é só tocar em enviar.</div>'+
+    '<div id="avc-linhas">'+lista.map(lin).join('')+'</div>'+
+    '<button onclick="avContatoMais()" style="margin-top:10px;border:none;background:none;color:#2563eb;font-weight:600;font-size:13px;cursor:pointer;font-family:inherit;padding:0;">+ outro número</button>'+
+    '<div id="avc-erro" style="font-size:12.5px;color:#dc2626;margin-top:8px;min-height:16px;"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-secondary" style="flex:1;margin:0;" onclick="document.getElementById(\'av-cont\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;margin:0;" onclick="avContatosSalvar(\''+area+'\')">Salvar</button></div></div>';
+  document.body.appendChild(ov);
+}
+window.avContatos=avContatos;
+function avContatoMais(){
+  const c=document.getElementById('avc-linhas'); if(!c) return;
+  const d=document.createElement('div'); d.style.cssText='display:flex;gap:8px;margin-top:8px;';
+  d.innerHTML='<input class="avc-n" placeholder="Nome do gestor" style="flex:1;font-size:14px;padding:9px 11px;"><input class="avc-f" placeholder="(55) 9 9999-9999" inputmode="tel" style="flex:1;font-size:14px;padding:9px 11px;">';
+  c.appendChild(d); d.querySelector('input').focus();
+}
+window.avContatoMais=avContatoMais;
+async function avContatosSalvar(area){
+  const ns=[...document.querySelectorAll('#av-cont .avc-n')], fs=[...document.querySelectorAll('#av-cont .avc-f')];
+  const lista=[]; let ruim='';
+  fs.forEach((f,i)=>{ const fone=f.value.trim(), nome=ns[i].value.trim(); if(!fone && !nome) return;
+    if(_avFone(fone).length<12 || _avFone(fone).length>13){ ruim=fone||nome; return; }
+    lista.push({nome, fone}); });
+  if(ruim){ document.getElementById('avc-erro').textContent='Confira o número “'+ruim+'”: precisa do DDD e do número completo.'; return; }
+  _avCfg.contatos={...(_avCfg.contatos||{}), [area]:lista};
+  document.getElementById('av-cont')?.remove();
+  _hubxAvisos();
+  try{ await setDoc(doc(db,'configuracoes','avisosAdmin'),{contatos:_avCfg.contatos, atualizadoEm:agora()},{merge:true}); }catch(e){ alert('Não consegui salvar: '+e.message); }
+}
+window.avContatosSalvar=avContatosSalvar;
 
 function _hubxAvisos(){
   const el=document.getElementById('adm-linha'); if(!el) return;
   let grupos; try{ grupos=_avMontar(); }catch(e){ console.error('avisos',e); el.innerHTML=''; return; }
   window._avLista=grupos.flatMap(g=>g.lista);
-  const total=window._avLista.length, vistos=window._avLista.filter(a=>_avVisto(a.id)).length, novos=total-vistos;
+  const envPend=grupos.filter(g=>g.envio && g.envio.itens.length && !g.envio.enviado).length;
+  const total=window._avLista.length+grupos.filter(g=>g.envio && g.envio.itens.length).length;
+  const vistos=window._avLista.filter(a=>_avVisto(a.id)).length+grupos.filter(g=>g.envio && g.envio.itens.length && g.envio.enviado).length, novos=total-vistos;
   const linha=a=>{ const v=_avVisto(a.id);
     return '<div class="av-li'+(v?' visto':'')+'"><button class="av-ck" onclick="avMarcar(\''+a.id.replace(/'/g,'')+'\')" title="'+(v?'Desmarcar':'Marcar como visto')+'" aria-label="'+(v?'Desmarcar':'Marcar como visto')+'">'+(v?'✓':'')+'</button>'+
-      '<button class="av-tx" onclick="'+a.acao+'"><span class="n">'+a.nome+(a.tag?' <span class="tg" style="color:'+a.cor+';background:'+a.cor+'14;">'+a.tag+'</span>':'')+'</span><span class="s">'+a.sub+'</span></button></div>'; };
+      '<button class="av-tx" onclick="'+a.acao+'"><span class="n">'+a.nome+'</span><span class="s">'+(a.tag?'<span class="tg" style="color:'+a.cor+';">'+a.tag+'</span>':'')+a.sub+'</span></button></div>'; };
   let h='<div class="av"><div class="av-top"><b>Avisos</b>'+
     '<span class="av-res">'+(total?(novos?('<b>'+novos+'</b> para ver'+(vistos?(' · '+vistos+' já visto'+(vistos>1?'s':'')):'')):'tudo visto por hoje ✓'):'nada pedindo atenção agora')+'</span>'+
     '<span class="av-dir">'+(vistos?'<button class="av-lk" onclick="avVerVistos()">'+(_avMostrarVistos?'Esconder vistos':'Mostrar vistos')+'</button>':'')+
@@ -39914,8 +40046,10 @@ function _hubxAvisos(){
       const aberta=!!_avAbertos[g.g], LIM=4;
       const mostra=aberta?novosG:novosG.slice(0,LIM);
       return '<div class="av-col"><div class="av-gh"><span class="ic">'+g.ic+'</span><b>'+g.nome+'</b>'+(novosG.length?'<span class="ct">'+novosG.length+'</span>':'')+
-          (novosG.length>1?'<button class="av-lk" style="margin-left:auto;" onclick="avMarcarGrupo(\''+g.g+'\')">marcar todos</button>':'')+'</div>'+
+          (g.envio?'<button class="av-lk" style="margin-left:auto;" onclick="avContatos(\''+g.envio.area+'\')" title="Números que recebem a lista">📱 '+(((_avCfg.contatos||{})[g.envio.area]||[]).length||'cadastrar')+'</button>':'')+
+          (novosG.length>1?'<button class="av-lk" style="margin-left:'+(g.envio?'12px':'auto')+';" onclick="avMarcarGrupo(\''+g.g+'\')">marcar todos</button>':'')+'</div>'+
         (g.info?'<div class="av-inf">'+g.info+'</div>':'')+
+        (g.envio?_avEnvioHtml(g.envio):'')+
         (mostra.length?mostra.map(linha).join(''):'<div class="av-ok">'+(g.lista.length?'Tudo visto ✓':'Nada por aqui')+'</div>')+
         (novosG.length>LIM?'<button class="av-lk av-mais" onclick="avMais(\''+g.g+'\')">'+(aberta?'mostrar menos':'ver os outros '+(novosG.length-LIM))+'</button>':'')+
         (_avMostrarVistos&&vistosG.length?vistosG.map(linha).join(''):'')+
@@ -39949,7 +40083,7 @@ function avPersonalizar(){
     ck('av-c-atraso', c.ponto&&c.atraso, 'Quem chegou atrasado mais de', num('av-c-atrasoMin', c.atrasoMin, 'min'))+
     ck('av-c-extra', c.ponto&&c.extra, 'Quem fez hora extra acima de', num('av-c-extraMin', c.extraMin, 'min'))+
     tit('Vendas')+
-    ck('av-c-vendas', c.vendas, 'Produtos que fugiram da média de venda')+
+    ck('av-c-vendas', c.vendas, 'Produtos que fugiram da média de venda (pães e salgados) e a lista diária para os gestores')+
     '<div style="font-size:12px;color:#94a3b8;padding:0 0 4px 28px;">Usa as regras de “Vendas fora do padrão” (semanas, % e mínimo), no Painel da Produção.</div>'+
     tit('Embalagem e carregamento')+
     ck('av-c-emb', c.emb, 'Produção sem embalar há pelo menos', num('av-c-embDias', c.embDias, 'dias'))+
@@ -39962,7 +40096,7 @@ window.avPersonalizar=avPersonalizar;
 async function avSalvarCfg(){
   const on=id=>!!(document.getElementById(id)||{}).checked, n=(id,d)=>{ const v=parseFloat((document.getElementById(id)||{}).value); return isNaN(v)?d:Math.max(0,v); };
   const faltas=on('av-c-faltas'), atraso=on('av-c-atraso'), extra=on('av-c-extra');
-  _avCfg={ponto:faltas||atraso||extra, faltas, atraso, atrasoMin:n('av-c-atrasoMin',30), extra, extraMin:n('av-c-extraMin',120), vendas:on('av-c-vendas'), emb:on('av-c-emb'), embDias:n('av-c-embDias',2), carreg:on('av-c-carreg')};
+  _avCfg={contatos:_avCfg.contatos||{}, ponto:faltas||atraso||extra, faltas, atraso, atrasoMin:n('av-c-atrasoMin',30), extra, extraMin:n('av-c-extraMin',120), vendas:on('av-c-vendas'), emb:on('av-c-emb'), embDias:n('av-c-embDias',2), carreg:on('av-c-carreg')};
   document.getElementById('av-cfg')?.remove();
   _hubxAvisos();
   try{ await setDoc(doc(db,'configuracoes','avisosAdmin'),{..._avCfg, atualizadoEm:agora()}); }catch(e){ alert('Não consegui salvar: '+e.message); }
