@@ -7937,6 +7937,69 @@ function _exdLancamentos(){
   return out;
 }
 
+/* Filtros da tela: lote (todos / sem lote / só lote) e faixa de horário.
+   Valem para os números, a tabela e o relatório de código e quantidade. */
+let _exdLote='todos', _exdDe='', _exdAte='';
+function exdLote(v){ _exdLote=v; renderExpDia(); }
+window.exdLote=exdLote;
+function exdHorario(){
+  const de=(document.getElementById('exd-de')||{}).value||'', ate=(document.getElementById('exd-ate')||{}).value||'';
+  const err=document.getElementById('exd-erro');
+  if(de && ate && de>ate){ if(err) err.textContent='O horário inicial é depois do final.'; return; }
+  _exdDe=de; _exdAte=ate; renderExpDia();
+}
+window.exdHorario=exdHorario;
+function exdLimparHorario(){ _exdDe=''; _exdAte=''; renderExpDia(); }
+window.exdLimparHorario=exdLimparHorario;
+function _exdFiltrados(dia){
+  return _exdLancamentos().filter(x=>x.dia===dia &&
+    (_exdLote==='todos' || (_exdLote==='sem'?!x.lote:x.lote)) &&
+    (!_exdDe || (x.hora && x.hora>=_exdDe)) && (!_exdAte || (x.hora && x.hora<=_exdAte)));
+}
+function _exdFiltroTxt(){
+  return [_exdLote==='sem'?'sem lote':(_exdLote==='so'?'só lote':''),
+    (_exdDe||_exdAte)?((_exdDe||'00:00')+' às '+(_exdAte||'23:59')):''].filter(Boolean).join(' · ');
+}
+/* Relatório: uma linha por código, com a soma do que está filtrado */
+function _exdRelatorio(){
+  const dia=_exdDia||fmtData(new Date());
+  const porCod={};
+  _exdFiltrados(dia).forEach(x=>{
+    // o código sai como está no cadastro ("03", não "3"): é assim que o ELIGO aceita
+    const bruto=String(x.r.cod==null?'':x.r.cod).trim();
+    const cod=(bruto && typeof eligoCodOficial==='function')?eligoCodOficial(bruto):bruto, k=cod||('~'+(x.r.produto||'?'));
+    const o=porCod[k]||(porCod[k]={cod, produto:x.r.produto||'?', qtd:0});
+    o.qtd+=x.pct;
+  });
+  const linhas=Object.values(porCod).sort((a,b)=>{ const na=parseInt(a.cod,10), nb=parseInt(b.cod,10);
+    return (isNaN(na)?1e9:na)-(isNaN(nb)?1e9:nb) || String(a.produto).localeCompare(String(b.produto),'pt-BR'); });
+  return {dia, linhas, filtro:_exdFiltroTxt()};
+}
+async function exdCopiarRel(btn){
+  const r=_exdRelatorio();
+  if(!r.linhas.length){ alert('Nada para copiar com esse filtro.'); return; }
+  const t=r.linhas.map(l=>l.cod+'\t'+Math.round(l.qtd)).join('\n');
+  try{ await navigator.clipboard.writeText(t); }
+  catch(e){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(_){} ta.remove(); }
+  if(btn){ const a=btn.textContent; btn.textContent='✓ Copiado ('+r.linhas.length+' códigos)'; setTimeout(()=>{ if(btn.isConnected) btn.textContent=a; },1800); }
+}
+window.exdCopiarRel=exdCopiarRel;
+async function exdExcelRel(){
+  const r=_exdRelatorio();
+  if(!r.linhas.length){ alert('Nada para exportar com esse filtro.'); return; }
+  // a biblioteca do Excel é carregada só quando precisa, como nas outras exportações
+  try{
+    await new Promise(function(res,rej){ if(window.XLSX){res();return;} var sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js'; sc.onload=res; sc.onerror=rej; document.head.appendChild(sc); });
+  }catch(e){ alert('Não consegui carregar o Excel (sem internet?). Use “Copiar código e quantidade”.'); return; }
+  const aoa=[['Liberado pela expedição em '+r.dia+(r.filtro?(' · '+r.filtro):'')],[],['Código','Produto','Quantidade (pct)']]
+    .concat(r.linhas.map(l=>[l.cod, l.produto, Math.round(l.qtd)]))
+    .concat([[],['','Total', r.linhas.reduce((t,l)=>t+Math.round(l.qtd),0)]]);
+  const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:10},{wch:42},{wch:16}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Liberado');
+  XLSX.writeFile(wb, 'liberado-'+r.dia.split('/').reverse().join('-')+(_exdDe||_exdAte?('-'+(_exdDe||'0000').replace(':','')+'-'+(_exdAte||'2359').replace(':','')):'')+'.xlsx');
+}
+window.exdExcelRel=exdExcelRel;
+
 function renderExpDia(){
   const el=document.getElementById('exp-dia-content'); if(!el) return;
   _ptCss(); el.style.padding='0'; el.style.background='#f5f7fb';
@@ -7944,7 +8007,9 @@ function renderExpDia(){
   const fmt=n=>Math.round(n).toLocaleString('pt-BR');
   const semana=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
   const todos=_exdLancamentos();
-  const doDia=todos.filter(x=>x.dia===dia);
+  const doDiaTudo=todos.filter(x=>x.dia===dia);
+  const doDia=_exdFiltrados(dia);
+  const filtroTxt=_exdFiltroTxt();
 
   // por produto + produção
   const porProd={};
@@ -7974,6 +8039,17 @@ function renderExpDia(){
       '<input class="pt-ctl" type="date" value="'+dia.split('/').reverse().join('-')+'" onchange="if(this.value)exdDia(this.value.split(\'-\').reverse().join(\'/\'))" style="width:170px;">'+
       '<button class="pt-btn" onclick="exdMover(1)">Próximo dia ›</button>'+
       '<button class="pt-btn pri" onclick="exdDia(fmtData(new Date()))">Hoje</button></div></div>';
+  h+='<div class="pt-datas" style="margin-top:-4px;">'+
+    '<div class="pt-seg">'+[['todos','Todos'],['sem','Sem lote'],['so','Só lote']].map(([v,t])=>'<button class="'+(_exdLote===v?'on':'')+'" onclick="exdLote(\''+v+'\')">'+t+'</button>').join('')+'</div>'+
+    '<label style="margin-left:8px;">Das</label><input class="pt-ctl" type="time" id="exd-de" value="'+_exdDe+'" style="width:120px;" onkeydown="if(event.key===\'Enter\')exdHorario()">'+
+    '<label>às</label><input class="pt-ctl" type="time" id="exd-ate" value="'+_exdAte+'" style="width:120px;" onkeydown="if(event.key===\'Enter\')exdHorario()">'+
+    '<button class="pt-btn pri" style="height:40px;padding:0 16px;" onclick="exdHorario()">Aplicar</button>'+
+    ((_exdDe||_exdAte)?'<button class="pt-btn" style="height:40px;" onclick="exdLimparHorario()">Dia inteiro</button>':'')+
+    '<span id="exd-erro" style="font-size:12px;color:#dc2626;font-weight:600;"></span>'+
+    '<span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<button class="pt-btn" style="height:40px;" onclick="exdCopiarRel(this)" title="Código e quantidade, um por linha, para colar no ERP ou numa planilha">📋 Copiar código e quantidade</button>'+
+      '<button class="pt-btn pri" style="height:40px;" onclick="exdExcelRel()">📊 Excel</button></span></div>';
+  if(filtroTxt) h+='<div style="font-size:12.5px;color:#1d4ed8;font-weight:600;margin:-8px 0 14px;">Mostrando: '+filtroTxt+' · '+doDia.length+' de '+doDiaTudo.length+' lançamento(s) do dia</div>';
   h+='<div class="pt-grid pt-g4">'+
     _ptKpi('🚚','blue', fmt(tot), 'Pacotes liberados', linhas.length+' produto(s) · '+doDia.length+' lançamento(s)'+(emLote>0.5?(' · '+fmt(emLote)+' em lote'):''))+
     _ptKpi('📅','violet', diasProd.size, 'Produções diferentes', deOutros>0.5?(fmt(deOutros)+' pct de produções de outros dias'):'todas do próprio dia')+
@@ -7993,12 +8069,13 @@ function renderExpDia(){
           '<td class="c" style="font-weight:800;">'+fmt(x.pct)+'</td>'+
           '<td style="font-size:12px;color:#64748b;">'+x.n+'× · '+x.horas.slice(0,6).join(', ')+(x.horas.length>6?'…':'')+'</td></tr>').join('')+
       '</tbody></table></div>'
-    : '<div class="pt-vazio" style="padding:22px;">Nada liberado neste dia.</div>';
-  h+='<div class="pt-grid">'+_ptCard('O que foi liberado', 'mais antigo primeiro', tab)+'</div>';
+    : '<div class="pt-vazio" style="padding:22px;">'+(filtroTxt&&doDiaTudo.length?'Nada liberado com esse filtro. O dia tem '+doDiaTudo.length+' lançamento(s) no total.':'Nada liberado neste dia.')+'</div>';
+  h+='<div class="pt-grid">'+_ptCard('O que foi liberado', (filtroTxt?(filtroTxt+' · '):'')+'mais antigo primeiro', tab)+'</div>';
   h+='<div class="pt-grid">'+_ptCard('Liberado por dia', 'últimos 14 dias até '+dia.slice(0,5)+' · tracejado = média',
     comVal.length?_ptGrafico([{nome:'Liberado', cor:'#2563eb', vals},{nome:'Média', cor:'#ea8a0c', vals:ult.map(()=>media||null), tracejado:true}], ult.map(d=>d.slice(0,5)), v=>fmt(v), {valores:'todos', id:'exd', largo:1100, alto:240})
       :'<div class="pt-vazio">Sem liberações nesses dias.</div>')+'</div>';
-  h+='<div class="pt-nota">Cada lançamento conta no dia em que foi feito na expedição, não no dia da produção. Em pacotes, como a expedição lança. Liberações apagadas depois não aparecem.</div>';
+  h+='<div class="pt-nota">Cada lançamento conta no dia em que foi feito na expedição, não no dia da produção. Em pacotes, como a expedição lança. Liberações apagadas depois não aparecem. '+
+    'Os filtros de lote e de horário valem para os números de cima, a tabela e o relatório; o gráfico dos 14 dias mostra sempre o dia inteiro.</div>';
   h+='</main></div>';
   el.innerHTML=h;
 }
