@@ -7932,7 +7932,7 @@ function _exdLancamentos(){
     const k=_erUnPorPct(r);
     ps.forEach(p=>{ const q=Number(p.qtd)||0; if(!q) return;
       const dia=_erDataDe(p.hora); if(!dia) return;
-      out.push({dia, hora:String(p.hora||'').slice(11,16), un:q, pct:q/k, r, antecipada:!!p.antecipada}); });
+      out.push({dia, hora:String(p.hora||'').slice(11,16), un:q, pct:q/k, r, antecipada:!!p.antecipada, lote:!!p.emLote}); });
   });
   return out;
 }
@@ -7950,12 +7950,13 @@ function renderExpDia(){
   const porProd={};
   doDia.forEach(x=>{
     const ch=(x.r.produto||'?')+'|'+(x.r.data||'');
-    const o=porProd[ch]||(porProd[ch]={produto:x.r.produto||'?', prod:x.r.data||'', pct:0, un:0, n:0, horas:[], ant:0, g:_erGrupo(x.r)});
-    o.pct+=x.pct; o.un+=x.un; o.n++; if(x.hora) o.horas.push(x.hora); if(x.antecipada) o.ant+=x.pct;
+    const o=porProd[ch]||(porProd[ch]={produto:x.r.produto||'?', prod:x.r.data||'', pct:0, un:0, n:0, horas:[], ant:0, lote:0, g:_erGrupo(x.r)});
+    o.pct+=x.pct; o.un+=x.un; o.n++; if(x.hora) o.horas.push(x.hora); if(x.antecipada) o.ant+=x.pct; if(x.lote) o.lote+=x.pct;
   });
   const linhas=Object.values(porProd).sort((a,b)=>_erNum(a.prod)-_erNum(b.prod)||String(a.produto).localeCompare(String(b.produto),'pt-BR'));
   const tot=linhas.reduce((t,x)=>t+x.pct,0);
   const ant=linhas.reduce((t,x)=>t+x.ant,0);
+  const emLote=linhas.reduce((t,x)=>t+x.lote,0);
   const diasProd=new Set(linhas.map(x=>x.prod));
   const deOutros=linhas.filter(x=>x.prod!==dia).reduce((t,x)=>t+x.pct,0);
   const grupos={}; linhas.forEach(x=>{ const k=x.g.tipo==='outro'?'📦 Outros':((x.g.tipo==='pao'?'🍞 ':'🥐 ')+x.g.classe); grupos[k]=(grupos[k]||0)+x.pct; });
@@ -7974,7 +7975,7 @@ function renderExpDia(){
       '<button class="pt-btn" onclick="exdMover(1)">Próximo dia ›</button>'+
       '<button class="pt-btn pri" onclick="exdDia(fmtData(new Date()))">Hoje</button></div></div>';
   h+='<div class="pt-grid pt-g4">'+
-    _ptKpi('🚚','blue', fmt(tot), 'Pacotes liberados', linhas.length+' produto(s) · '+doDia.length+' lançamento(s)')+
+    _ptKpi('🚚','blue', fmt(tot), 'Pacotes liberados', linhas.length+' produto(s) · '+doDia.length+' lançamento(s)'+(emLote>0.5?(' · '+fmt(emLote)+' em lote'):''))+
     _ptKpi('📅','violet', diasProd.size, 'Produções diferentes', deOutros>0.5?(fmt(deOutros)+' pct de produções de outros dias'):'todas do próprio dia')+
     _ptKpi('📥', ant>0.5?'amber':'gray', fmt(ant), '“Já peguei”', 'pego antes da embalagem terminar')+
     _ptKpi('📊','green', fmt(media), 'Média dos últimos 14 dias', media&&tot?((tot>=media?'+':'')+Math.round((tot/media-1)*100)+'% neste dia'):'dias com liberação')+
@@ -7986,7 +7987,7 @@ function renderExpDia(){
   }
   const tab=linhas.length
     ? '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,760px);"><thead><tr><th>Produto</th><th>Produção</th><th>Grupo</th><th class="c">Liberado</th><th>Lançamentos</th></tr></thead><tbody>'+
-        linhas.map(x=>'<tr><td style="padding-right:30px;"><b style="font-weight:600;">'+x.produto+'</b>'+(x.ant>0.5?' '+_ptPill('já peguei','amber',true):'')+'</td>'+
+        linhas.map(x=>'<tr><td style="padding-right:30px;"><b style="font-weight:600;">'+x.produto+'</b>'+(x.ant>0.5?' '+_ptPill('já peguei','amber',true):'')+(x.lote>0.5?' '+_ptPill('em lote','gray',true):'')+'</td>'+
           '<td style="padding-right:24px;color:'+(x.prod!==dia?'#b45309':'var(--pt-sub)')+';">'+(x.prod?x.prod.slice(0,5):'—')+(x.prod&&x.prod!==dia?' · outro dia':'')+'</td>'+
           '<td style="padding-right:24px;">'+(x.g.tipo==='salgado'?_ptPill(x.g.classe,'blue',true):(x.g.tipo==='pao'?_ptPill(x.g.classe,'amber',true):_ptPill('Outro','gray',true)))+'</td>'+
           '<td class="c" style="font-weight:800;">'+fmt(x.pct)+'</td>'+
@@ -9210,7 +9211,7 @@ function renderExpedicao(){
         ${exp.parciais&&exp.parciais.length>0?`
           <div class="exp-parcial-list">
             ${exp.parciais.map((p,i)=>`<div class="exp-parcial-item" id="parcial-row-${r.firestoreId}-${i}">
-              <span>${p.hora}${p.editadoEm?' <em style="font-size:10px;">(edit. '+p.editadoEm+')</em>':''}</span>
+              <span>${p.hora}${p.emLote?' <em style="font-size:10px;color:#c2410c;">em lote'+(p.por?' · '+p.por:'')+'</em>':''}${p.editadoEm?' <em style="font-size:10px;">(edit. '+p.editadoEm+')</em>':''}</span>
               <div style="display:flex;align-items:center;gap:8px;">
                 <span class="exp-parcial-qtd">+${p.qtd} pct</span>
                 <button onclick="toggleEditParcial('${r.firestoreId}',${i},${p.qtd})" style="background:none;border:1px solid var(--mc-laranja);color:var(--mc-laranja);font-size:11px;padding:2px 8px;border-radius:6px;cursor:pointer;font-family:inherit;">Editar</button>
@@ -9232,6 +9233,32 @@ function renderExpedicao(){
   const paesPend=paes.filter(r=>{const e=r.expedicao||{totalLiberado:0};return e.totalLiberado<(r.embalagem.qtdEmbalada||r.qtd);}).length;
   const salgPend=salgados.filter(r=>{const e=r.expedicao||{totalLiberado:0};return e.totalLiberado<(r.embalagem.qtdEmbalada||r.qtd);}).length;
 
+  /* Pães e salgados em abas separadas. Ao abrir um dia, começa na aba
+     que ainda tem o que liberar; depois fica onde a pessoa escolheu. */
+  if(_expAbaDia!==dataSelExp){ _expAbaDia=dataSelExp; _expAba=(paesPend||!salgados.length)&&paes.length?'pao':'salgado'; }
+  if(_expAba==='pao' && !paes.length) _expAba='salgado';
+  if(_expAba==='salgado' && !salgados.length) _expAba='pao';
+  const aba=(id, ic, nome, lista, pend, cor)=>{
+    const on=_expAba===id;
+    return '<button onclick="expAba(\''+id+'\')" style="flex:1;display:flex;align-items:center;justify-content:center;gap:9px;min-height:54px;border-radius:12px;cursor:pointer;font-family:inherit;'+
+      'border:2px solid '+(on?cor:'var(--border)')+';background:'+(on?cor:'#fff')+';color:'+(on?'#fff':'var(--text-primary)')+';">'+
+      '<span style="font-size:20px;">'+ic+'</span><span style="font-size:15px;font-weight:800;">'+nome+'</span>'+
+      '<span style="font-size:12px;font-weight:800;border-radius:99px;padding:2px 9px;background:'+(on?'rgba(255,255,255,.22)':(pend?'#fef3c7':'#dcfce7'))+';color:'+(on?'#fff':(pend?'#92400e':'#166534'))+';">'+
+        (pend?(pend+' a liberar'):'✓ tudo liberado')+'</span></button>';
+  };
+  const abas=(paes.length && salgados.length)
+    ? '<div style="display:flex;gap:8px;margin-bottom:12px;">'+aba('pao','🍞','Pães',paes,paesPend,'#b45309')+aba('salgado','🥐','Salgados',salgados,salgPend,'#1e40af')+'</div>'
+    : '';
+  const daAba=_expAba==='pao'?paes:salgados;
+  // atalho do admin: liberar um grupo inteiro de uma vez, como o lote da embalagem
+  const loteBtn=(window.adminMode===true && (paesPend||salgPend))
+    ? '<button onclick="expAbrirLote()" style="display:block;width:100%;text-align:left;background:#fff;border:1px dashed var(--mc-laranja,#ea580c);border-radius:11px;padding:11px 14px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+        '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:19px;">🚚</span><span style="flex:1;min-width:0;">'+
+          '<span style="display:block;font-size:13px;font-weight:800;color:#c2410c;">Liberar em lote</span>'+
+          '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:1px;">todos os pães ou todos os salgados deste dia</span></span>'+
+          '<span style="color:#c2410c;font-size:16px;">›</span></div></button>'
+    : '';
+
   el.innerHTML=avisoCtrl+`
     <div class="card" style="margin-bottom:12px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -9251,14 +9278,10 @@ function renderExpedicao(){
         </div>`:''}
       </div>`:''}
     </div>
-    ${paes.length>0?`
-      <div class="section-divider" style="background:rgba(146,64,14,0.1);color:#92400e;border-left:3px solid #92400e;padding:8px 12px;border-radius:8px;margin:14px 0 10px;font-weight:700;">🍞 PÃES (${paes.length})</div>
-      ${paes.map(renderItem).join('')}
-    `:''}
-    ${salgados.length>0?`
-      <div class="section-divider" style="background:rgba(33,123,196,0.1);color:var(--mc-azul);border-left:3px solid var(--mc-azul);padding:8px 12px;border-radius:8px;margin:14px 0 10px;font-weight:700;">🥐 SALGADOS (${salgados.length})</div>
-      ${salgados.map(renderItem).join('')}
-    `:''}
+    ${loteBtn}
+    ${abas}
+    ${abas?'':`<div class="section-divider" style="background:${_expAba==='pao'?'rgba(146,64,14,0.1)':'rgba(33,123,196,0.1)'};color:${_expAba==='pao'?'#92400e':'var(--mc-azul)'};border-left:3px solid ${_expAba==='pao'?'#92400e':'var(--mc-azul)'};padding:8px 12px;border-radius:8px;margin:14px 0 10px;font-weight:700;">${_expAba==='pao'?'🍞 PÃES':'🥐 SALGADOS'} (${daAba.length})</div>`}
+    ${daAba.map(renderItem).join('')}
     ${(()=>{
       // Old code remnant - replaced by paes/salgados above. Keep as no-op
       return '';
@@ -9266,6 +9289,83 @@ function renderExpedicao(){
     <!-- end items -->
   `;
 }
+
+let _expAba='pao', _expAbaDia='';
+function expAba(a){ _expAba=a; renderExpedicao(); document.getElementById('exp-content')?.scrollTo?.(0,0); }
+window.expAba=expAba;
+
+/* ── LIBERAR EM LOTE (admin) ─────────────────────────────────────────
+   Como o "embalar em lote": libera de uma vez tudo o que ainda falta
+   de um grupo no dia. Cada produto recebe um lançamento com o restante,
+   marcado como "em lote" com o nome de quem fez. Produtos já liberados
+   por inteiro e os do contêiner não são tocados. */
+function expLotePendentes(tipo){
+  return (registros||[]).filter(r=>{
+    if(r.data!==dataSelExp || !(r.embalagem&&r.embalagem.feito)) return false;
+    if(typeof libControlado==='function' && libControlado(r)) return false;
+    if((r.origem==='quadra'?'pao':'salgado')!==tipo) return false;
+    const emb=Number(r.embalagem.qtdEmbalada||r.qtd)||0, lib=Number((r.expedicao||{}).totalLiberado)||0;
+    return emb-lib>0;
+  });
+}
+function expAbrirLote(){
+  if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
+  const resto=r=>(Number(r.embalagem.qtdEmbalada||r.qtd)||0)-(Number((r.expedicao||{}).totalLiberado)||0);
+  const bloco=(tipo, icone, nome, cor)=>{
+    const lista=expLotePendentes(tipo), tot=lista.reduce((t,r)=>t+resto(r),0);
+    return '<button '+(lista.length?('onclick="expConfirmarLote(\''+tipo+'\')"'):'disabled')+' '+
+      'style="display:block;width:100%;text-align:left;background:'+(lista.length?'#fff':'var(--bg-page)')+';border:2px solid '+(lista.length?cor:'var(--border)')+';border-radius:11px;padding:13px;margin-bottom:9px;cursor:'+(lista.length?'pointer':'default')+';font-family:inherit;opacity:'+(lista.length?'1':'.55')+';">'+
+      '<div style="display:flex;align-items:center;gap:11px;"><span style="font-size:24px;">'+icone+'</span><span style="flex:1;min-width:0;">'+
+        '<span style="display:block;font-size:15px;font-weight:800;color:'+(lista.length?cor:'var(--text-muted)')+';">Liberar todos os '+nome+'</span>'+
+        '<span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px;">'+
+          (lista.length?(lista.length+' produto(s) com saldo · '+tot+' pacote(s)'):'nada a liberar neste dia')+'</span></span>'+
+        (lista.length?'<span style="color:'+cor+';font-size:18px;">›</span>':'')+'</div></button>';
+  };
+  document.getElementById('exp-lote-modal')?.remove();
+  const ov=document.createElement('div'); ov.id='exp-lote-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);"><div style="font-size:17px;font-weight:800;">🚚 Liberar em lote</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Libera tudo o que ainda falta do grupo, na produção de '+dataSelExp+'.</div></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:14px 16px;">'+
+      bloco('pao','🍞','pães','#b45309')+bloco('salgado','🥐','salgados','#2563eb')+
+      '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:11px 13px;margin-top:6px;">'+
+        '<div style="font-size:12px;font-weight:700;color:#b45309;">⚠️ O que isso faz</div>'+
+        '<div style="font-size:11px;color:#78350f;margin-top:3px;line-height:1.5;">Lança como liberado o saldo de cada produto (embalado − já liberado), sem conferência. O que já foi liberado continua como está. Fica registrado que foi em lote, com seu nome.</div></div></div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);"><button class="btn btn-secondary" style="width:100%;" onclick="document.getElementById(\'exp-lote-modal\').remove()">Fechar</button></div></div>';
+  document.body.appendChild(ov);
+}
+window.expAbrirLote=expAbrirLote;
+async function expConfirmarLote(tipo){
+  if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
+  const lista=expLotePendentes(tipo);
+  if(!lista.length){ alert('Nada a liberar neste grupo.'); return; }
+  const resto=r=>(Number(r.embalagem.qtdEmbalada||r.qtd)||0)-(Number((r.expedicao||{}).totalLiberado)||0);
+  const nome=tipo==='pao'?'pães':'salgados', tot=lista.reduce((t,r)=>t+resto(r),0);
+  const amostra=lista.slice(0,6).map(r=>'• '+r.produto+' — '+resto(r)+' pct').join('\n');
+  if(!confirm('Liberar todos os '+nome+' de '+dataSelExp+'?\n\n'+lista.length+' produto(s) · '+tot+' pacote(s)\n\n'+amostra+
+    (lista.length>6?('\n… e mais '+(lista.length-6)):'')+'\n\nO saldo de cada um será lançado como liberado.')) return;
+  const senha=prompt('Senha do admin para confirmar:');
+  if(senha===null) return;
+  const ok=(typeof _plSenhaAdminOk==='function') ? _plSenhaAdminOk(senha)
+          : (String(senha)===String((typeof PINS!=='undefined'&&PINS)?PINS.admin:''));
+  if(!ok){ alert('Senha incorreta. Nada foi lançado.'); return; }
+  document.getElementById('exp-lote-modal')?.remove();
+  const por=(typeof _demAutor==='function')?_demAutor():'admin';
+  let feitos=0, erros=0;
+  for(const r of lista){
+    const emb=Number(r.embalagem.qtdEmbalada||r.qtd)||0, exp=r.expedicao||{parciais:[],totalLiberado:0};
+    const falta=emb-(Number(exp.totalLiberado)||0); if(falta<=0) continue;
+    try{
+      await updateDoc(doc(db,'registros',r.firestoreId),{expedicao:{
+        parciais:[...(exp.parciais||[]),{qtd:falta, hora:agora(), emLote:true, por}], totalLiberado:emb}});
+      feitos++;
+    }catch(e){ erros++; console.error('lote expedição '+r.produto+':', e); }
+  }
+  alert('✓ '+feitos+' produto(s) liberados.'+(erros?('\n\n'+erros+' com erro — veja o console.'):''));
+  renderExpedicao();
+}
+window.expConfirmarLote=expConfirmarLote;
 
 async function adicionarLiberacao(fid,qtdEmb){
   const val=parseInt(document.getElementById(`exp-input-${fid}`).value)||0;
