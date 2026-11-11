@@ -11352,7 +11352,8 @@ async function gerarExcel(){
 
     // ABA 8: CONTAGEM
     const contRows=[['Data','Hora','Grupo','Código','Produto','Total Contado','Lançamentos Parciais']];
-    contagens.filter(c=>inRange(c.data)).forEach(c=>{
+    // cópias (feitas nos Ajustes de Contagem) não entram: seriam a mesma contagem duas vezes
+    contagens.filter(c=>inRange(c.data)&&!c.copiaDe).forEach(c=>{
       Object.entries(c.itens||{}).forEach(([cod,reg])=>{
         const parcStr=(reg.parciais||[]).map(p=>`${p.hora}: +${p.qtd}`).join(' | ');
         contRows.push([c.data,c.hora,c.grupo,cod,reg.nome,reg.total,parcStr]);
@@ -11527,7 +11528,7 @@ function renderContagemHome(){
     const el=document.getElementById(badgeId);
     if(!el)return;
     const qtdItens=CONTAGEM_ITENS[g]?.length||0;
-    const recHoje=contagens.find(c=>c.grupo===g&&c.data===hoje());
+    const recHoje=contagens.find(c=>c.grupo===g&&c.data===hoje()&&!c.copiaDe);
     if(recHoje){
       const contados=Object.keys(recHoje.itens||{}).length;
       el.textContent='Hoje: '+contados+'/'+qtdItens+' contados';
@@ -11546,7 +11547,8 @@ function abrirContagem(grupo){
   contagemGrupoAtivo=grupo;
   contagemSrch='';
   const hoje2=hoje();
-  const recExist=contagens.find(c=>c.grupo===grupo&&c.data===hoje2);
+  // cópia feita nos Ajustes de Contagem não recebe lançamento: quem conta continua na original
+  const recExist=contagens.find(c=>c.grupo===grupo&&c.data===hoje2&&!c.copiaDe);
   if(recExist){
     contagemAtual={grupo,data:hoje2,firestoreId:recExist.firestoreId,itens:JSON.parse(JSON.stringify(recExist.itens||{}))};
   } else {
@@ -11756,10 +11758,12 @@ async function subtrairContagem(cod){
 function renderContagemHist(){
   const el=document.getElementById('cont-hist-content');
   const sub=document.getElementById('cont-hist-sub');
-  if(sub)sub.textContent=contagens.length+' contagem(ns) salva(s)';
-  if(!contagens.length){el.innerHTML='<div class="empty">Nenhuma contagem realizada ainda.</div>';return;}
+  // as cópias feitas nos Ajustes de Contagem só aparecem lá
+  const reais=contagens.filter(c=>!c.copiaDe);
+  if(sub)sub.textContent=reais.length+' contagem(ns) salva(s)';
+  if(!reais.length){el.innerHTML='<div class="empty">Nenhuma contagem realizada ainda.</div>';return;}
   const porData={};
-  contagens.forEach(function(c){if(!porData[c.data])porData[c.data]=[];porData[c.data].push(c);});
+  reais.forEach(function(c){if(!porData[c.data])porData[c.data]=[];porData[c.data].push(c);});
   const datasOrd=sortDatas(Object.keys(porData));
   let html='';
   datasOrd.forEach(function(data){
@@ -33401,9 +33405,13 @@ function ajContAjustaveis(){
 function ajContAbrirAjuste(){
   if(!eligoPronto()){ alert('A ponte do ELIGO não está configurada.\n\nConfigure em 🔗 ELIGO antes de ajustar.'); return; }
   const linhas=ajContAjustaveis();
-  if(!linhas.length){ alert('Nada a ajustar: ou está tudo batendo, ou já foi marcado como feito.'); return; }
   // quantos vieram do ELIGO mas não foram contados
   const c0=(contagens||[]).find(x=>x.firestoreId===_ajContSel);
+  const desf=_ajElDesfaziveis(c0);
+  if(!linhas.length){
+    if(desf.length) return ajContAbrirDesfazer();      // tudo já ajustado: só resta desfazer
+    alert('Nada a ajustar: ou está tudo batendo, ou já foi marcado como feito.'); return;
+  }
   const foraDoGrupo=c0 ? ajContLinhas(c0).filter(l=>l.semContagem).length : 0;
 
   const entradas=linhas.filter(l=>l.dif>0);
@@ -33454,10 +33462,194 @@ function ajContAbrirAjuste(){
     '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
       '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'ajel-modal\').remove()">Cancelar</button>'+
       '<button class="btn btn-primary" style="flex:1;" onclick="ajContExecutarAjuste()">Ajustar no ELIGO</button></div>'+
+    (desf.length
+      ? '<div style="padding:0 18px 16px;"><button onclick="ajContAbrirDesfazer()" style="width:100%;background:#fff;border:1px solid #fecaca;color:#b91c1c;border-radius:9px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">↩ Desfazer os '+desf.length+' ajuste(s) já feitos</button></div>'
+      : '')+
   '</div>';
   document.body.appendChild(ov);
 }
 window.ajContAbrirAjuste=ajContAbrirAjuste;
+
+/* ── DESFAZER OS AJUSTES NO ELIGO ────────────────────────────────────
+   Cada ajuste que deu certo fica gravado na contagem (ajustesEligo:
+   produto, entrada ou saída, quantidade, data, quem fez). Desfazer é
+   lançar o contrário — quem recebeu entrada de 30 recebe saída de 30 —
+   só nos produtos que foram ajustados de fato. O lançamento original
+   não é apagado: fica marcado como desfeito, com quando e por quem, e
+   o produto volta a aparecer como diferença a resolver.
+   Ajustes feitos antes desta versão não tinham esse registro; para
+   eles vale o último relatório guardado no aparelho, se for desta
+   mesma contagem. */
+function _ajElDesfaziveis(c){
+  if(!c) return [];
+  const d=_ajContDados(c.firestoreId);
+  const log=Array.isArray(d.ajustesEligo)?d.ajustesEligo:[];
+  const doLog=log.map((x,i)=>({...x, _i:i})).filter(x=>!x.desfeito);
+  if(log.length) return doLog;
+  // sem registro: tenta o relatório do aparelho, só o que ainda está marcado como ajustado
+  let rel=_ajEligoRel;
+  if(!rel){ try{ rel=JSON.parse(localStorage.getItem('ajEligoRel')||'null'); }catch(e){} }
+  if(!rel || rel.desfazer || !Array.isArray(rel.ok) || !rel.ok.length || rel.contagem!==c.data) return [];
+  const feitos=d.feitos||{};
+  return rel.ok.filter(o=>Object.keys(feitos).some(k=>_ajContNormCod(k)===_ajContNormCod(o.cod) && feitos[k]===true))
+    .map(o=>({cod:o.cod, nome:o.nome, tipo:o.tipo, qtd:o.qtd, id:o.id||'', data:c.data, quando:rel.quando, por:rel.por, _i:-1, _doAparelho:true}));
+}
+
+function ajContAbrirDesfazer(){
+  if(window.adminMode!==true){ alert('Só o admin desfaz ajustes.'); return; }
+  if(!eligoPronto()){ alert('A ponte do ELIGO não está configurada.'); return; }
+  const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel);
+  const lista=_ajElDesfaziveis(c);
+  if(!lista.length){ alert('Não há ajuste desta contagem para desfazer.'); return; }
+  const d=_ajContDados(c.firestoreId);
+  const jaDesfeitos=(Array.isArray(d.ajustesEligo)?d.ajustesEligo:[]).filter(x=>x.desfeito);
+  window._ajDesfLista=lista;
+  document.getElementById('ajel-modal')?.remove();
+  const ov=document.createElement('div'); ov.id='ajel-modal';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:92vh;display:flex;flex-direction:column;">'+
+    '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
+      '<div style="font-size:17px;font-weight:800;">↩ Desfazer os ajustes no ELIGO</div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;line-height:1.5;">Lança o contrário de cada ajuste: quem recebeu entrada recebe saída do mesmo tanto, e vice-versa. A observação vai como <strong>ESTORNO AJUSTE ESTOQUE</strong>.</div>'+
+      '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:9px 11px;margin-top:9px;font-size:11px;color:#78350f;line-height:1.5;">'+
+        '⚠️ Só os produtos que o app conseguiu ajustar'+(lista[0]._doAparelho?' (pelo último relatório guardado neste aparelho)':'')+'. O ajuste original não é apagado: fica registrado como desfeito.</div>'+
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:11px;cursor:pointer;font-size:12px;font-weight:700;">'+
+        '<input type="checkbox" id="ajel-todos" checked onchange="_ajElMarcarTodos(this.checked)" style="width:18px;height:18px;cursor:pointer;">'+
+        'selecionar todos (<span id="ajel-conta">'+lista.length+'</span> de '+lista.length+')</label></div>'+
+    '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
+      lista.map((l,i)=>{ const eraEnt=l.tipo==='entrada';
+        return '<label class="ajel-item" data-i="'+i+'" style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:var(--bg-page);border-radius:9px;margin-bottom:5px;cursor:pointer;">'+
+          '<input type="checkbox" class="ajel-check" checked onchange="_ajElContar()" style="width:18px;height:18px;cursor:pointer;flex:0 0 auto;">'+
+          '<span style="flex:1;min-width:0;"><span style="display:block;font-size:13px;font-weight:600;">'+l.nome+'</span>'+
+            '<span style="display:block;font-size:11px;color:var(--text-muted);">cód '+l.cod+' · ajustado em '+(l.quando||'')+' · foi '+(eraEnt?'entrada de ':'saída de ')+_fmtKg(l.qtd)+'</span></span>'+
+          '<span style="flex:0 0 auto;text-align:right;white-space:nowrap;"><span style="display:block;font-size:15px;font-weight:900;color:'+(eraEnt?'#dc2626':'#2563eb')+';">'+(eraEnt?'−':'+')+_fmtKg(l.qtd)+'</span>'+
+            '<span style="display:block;font-size:9px;color:var(--text-muted);">'+(eraEnt?'saída':'entrada')+'</span></span></label>'; }).join('')+
+      (jaDesfeitos.length?'<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin:14px 0 6px;">JÁ DESFEITOS ('+jaDesfeitos.length+')</div>'+
+        '<div style="font-size:12px;color:var(--text-muted);line-height:1.8;">'+jaDesfeitos.map(x=>x.nome+' · '+(x.tipo==='entrada'?'+':'−')+_fmtKg(x.qtd)+' · desfeito em '+(x.desfeito.quando||'')+' por '+(x.desfeito.por||'')).join('<br>')+'</div>':'')+
+    '</div>'+
+    '<div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;" onclick="document.getElementById(\'ajel-modal\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;background:#b91c1c;" onclick="ajContExecutarDesfazer()">Desfazer no ELIGO</button></div></div>';
+  document.body.appendChild(ov);
+}
+window.ajContAbrirDesfazer=ajContAbrirDesfazer;
+
+async function ajContExecutarDesfazer(){
+  if(window.adminMode!==true){ alert('Só o admin desfaz ajustes.'); return; }
+  const lista=window._ajDesfLista||[];
+  const alvos=[];
+  document.querySelectorAll('.ajel-item').forEach(el=>{ const ck=el.querySelector('.ajel-check'); if(ck && ck.checked && lista[+el.dataset.i]) alvos.push(lista[+el.dataset.i]); });
+  if(!alvos.length){ alert('Marque ao menos um produto.'); return; }
+  const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel); if(!c) return;
+  const viramSaida=alvos.filter(l=>l.tipo==='entrada').length, viramEntrada=alvos.length-viramSaida;
+  if(!confirm('Desfazer '+alvos.length+' ajuste(s) no ELIGO?\n\n'+viramSaida+' saída(s) · '+viramEntrada+' entrada(s), no mesmo valor do ajuste original.\n\n'+
+    'Cada lançamento vai com a observação ESTORNO AJUSTE ESTOQUE.\nIsso mexe no estoque do ERP de verdade.')) return;
+  const senha=eligoSenha();
+  if(senha===null) return;
+  document.getElementById('ajel-modal')?.remove();
+  _ajElMostrarProgresso(alvos.length);
+  const t=document.querySelector('#ajel-prog div div:nth-child(2)'); if(t) t.textContent='Desfazendo no ELIGO…';
+
+  const ok=[], falhas=[];
+  for(let i=0;i<alvos.length;i++){
+    const l=alvos[i];
+    _ajElProgresso(i+1, alvos.length, l.nome);
+    const tipo=l.tipo==='entrada'?'saida':'entrada', qtd=Math.abs(Number(l.qtd)||0);
+    try{
+      const r=await eligoLancar(String(l.cod), qtd, tipo, l.data||c.data||hoje(), 'ESTORNO AJUSTE ESTOQUE', 'manual');
+      if(r && r.ok) ok.push({...l, tipo, qtd, idEstorno:r.id||''});
+      else falhas.push({...l, tipo, qtd, erro:(r&&(r.erro||r.mensagem))||'sem resposta da ponte'});
+    }catch(e){ falhas.push({...l, tipo, qtd, erro:(e&&e.message)||String(e)}); }
+  }
+
+  // registra o que foi desfeito e devolve os produtos à lista de diferenças
+  if(ok.length){
+    try{
+      const d=_ajContDados(c.firestoreId);
+      const log=(Array.isArray(d.ajustesEligo)?d.ajustesEligo:[]).map(x=>({...x}));
+      const marca={quando:agora(), por:_demAutor()};
+      const feitos={};
+      ok.forEach(o=>{
+        feitos[o.cod]=false;
+        if(o._i>=0 && log[o._i]) log[o._i].desfeito={...marca, id:o.idEstorno};
+        else log.push({cod:o.cod, nome:o.nome, tipo:o.tipo==='entrada'?'saida':'entrada', qtd:o.qtd, id:o.id||'', data:o.data||c.data||'', quando:o.quando||'', por:o.por||'', desfeito:{...marca, id:o.idEstorno}});
+      });
+      ajContDados[c.firestoreId]={...d, ajustesEligo:log, feitos:{...(d.feitos||{}), ...feitos}, desfeitoEligoEm:marca.quando, desfeitoEligoPor:marca.por};
+      await setDoc(doc(db,'ajustesContagem',c.firestoreId),
+        {ajustesEligo:log, feitos, desfeitoEligoEm:marca.quando, desfeitoEligoPor:marca.por},{merge:true});
+    }catch(e){ console.error('registrar desfazer:', e); alert('Os estornos foram lançados no ELIGO, mas não consegui registrar aqui: '+e.message); }
+  }
+  _ajElRelatorio({desfazer:true, quando:agora(), por:_demAutor(), contagem:(c&&c.data)||'', ok, falhas});
+}
+window.ajContExecutarDesfazer=ajContExecutarDesfazer;
+
+/* ── DUPLICAR A CONTAGEM E OBSERVAÇÃO ────────────────────────────────
+   Duplicar cria uma contagem nova com os mesmos produtos e quantidades
+   (inclusive o "lançar a mais"), mas SEM o saldo do ELIGO e sem os
+   ajustes: serve para colar um saldo novo e refazer a comparação sem
+   digitar a contagem de novo. A original fica como está, com todo o
+   histórico. A cópia guarda de qual contagem veio, quando e por quem.
+   A observação é um texto livre de cada contagem; aparece na lista. */
+function _ajContObsModal(titulo, texto, valor, botao, aoSalvar){
+  document.getElementById('ajcont-obs')?.remove();
+  const ov=document.createElement('div'); ov.id='ajcont-obs';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:480px;width:100%;padding:20px;">'+
+    '<div style="font-size:17px;font-weight:800;">'+titulo+'</div>'+
+    '<div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px;line-height:1.5;">'+texto+'</div>'+
+    '<label style="display:block;font-size:12px;font-weight:700;color:var(--text-secondary);margin-top:14px;">Observação</label>'+
+    '<textarea id="ajcont-obs-txt" rows="3" maxlength="300" placeholder="Ex.: refeita porque o primeiro ajuste saiu errado" style="width:100%;margin-top:5px;padding:10px 12px;border:1px solid var(--border-md,#d1d5db);border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical;"></textarea>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-secondary" style="flex:1;margin:0;" onclick="document.getElementById(\'ajcont-obs\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" style="flex:1;margin:0;" id="ajcont-obs-ok">'+botao+'</button></div></div>';
+  document.body.appendChild(ov);
+  const t=document.getElementById('ajcont-obs-txt'); t.value=valor||''; t.focus();
+  document.getElementById('ajcont-obs-ok').onclick=()=>aoSalvar(t.value.trim());
+}
+
+function ajContEditarObs(){
+  const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel); if(!c) return;
+  const d=_ajContDados(c.firestoreId);
+  _ajContObsModal('📝 Observação da contagem', (c.grupo||'')+' · '+(c.data||''), d.obs||'', 'Salvar', async txt=>{
+    document.getElementById('ajcont-obs')?.remove();
+    ajContDados[c.firestoreId]={...d, obs:txt, obsEm:agora(), obsPor:_demAutor()};
+    renderAjCont();
+    try{ await setDoc(doc(db,'ajustesContagem',c.firestoreId),{obs:txt, obsEm:agora(), obsPor:_demAutor()},{merge:true}); }
+    catch(e){ alert('Não consegui salvar a observação: '+e.message); }
+  });
+}
+window.ajContEditarObs=ajContEditarObs;
+
+function ajContDuplicar(){
+  if(window.adminMode!==true){ alert('Só o admin duplica uma contagem.'); return; }
+  const c=(contagens||[]).find(x=>x.firestoreId===_ajContSel); if(!c) return;
+  const n=Object.keys(c.itens||{}).length;
+  _ajContObsModal('📑 Duplicar esta contagem',
+    'Cria uma cópia de <b>'+(c.grupo||'')+' · '+(c.data||'')+'</b> com os mesmos '+n+' produto(s) e quantidades, <b>sem</b> o saldo do ELIGO e sem os ajustes. A original não muda.',
+    '', 'Duplicar', async txt=>{
+      const btn=document.getElementById('ajcont-obs-ok'); if(btn){ btn.disabled=true; btn.textContent='Duplicando…'; }
+      try{
+        const d=_ajContDados(c.firestoreId);
+        const ref=doc(collection(db,'contagens'));
+        const nova={grupo:c.grupo||'', data:c.data||'', itens:JSON.parse(JSON.stringify(c.itens||{})), hora:agora(), timestamp:Date.now(),
+          copiaDe:c.firestoreId, copiaEm:agora(), copiaPor:_demAutor()};
+        await setDoc(ref, nova);
+        // o que vale para a cópia: o "lançar a mais" (faz parte do contado) e a observação
+        const aj={extra:JSON.parse(JSON.stringify(d.extra||{})), obs:txt, obsEm:agora(), obsPor:_demAutor(), copiaDe:c.firestoreId};
+        await setDoc(doc(db,'ajustesContagem',ref.id), aj, {merge:true});
+        // já mostra, sem esperar a volta do servidor
+        if(!(contagens||[]).some(x=>x.firestoreId===ref.id)) contagens.push({firestoreId:ref.id, ...nova});
+        ajContDados[ref.id]={eligo:{}, feitos:{}, ...aj};
+        document.getElementById('ajcont-obs')?.remove();
+        ajContVer(ref.id);
+      }catch(e){
+        console.error('duplicar contagem:', e);
+        alert('Não consegui duplicar: '+((e&&e.message)||e));
+        if(btn){ btn.disabled=false; btn.textContent='Duplicar'; }
+      }
+    });
+}
+window.ajContDuplicar=ajContDuplicar;
+
 
 async function ajContExecutarAjuste(){
   const itens=[];
@@ -33514,8 +33706,13 @@ async function ajContExecutarAjuste(){
     try{
       const feitos={};
       ok.forEach(l=>{ feitos[l.cod]=true; });
+      const dAnt=_ajContDados(c.firestoreId);
+      const marca={quando:agora(), por:_demAutor()};
+      const log=(Array.isArray(dAnt.ajustesEligo)?dAnt.ajustesEligo:[]).concat(
+        ok.map(l=>({cod:String(l.cod), nome:l.nome||'', tipo:l.tipo, qtd:l.qtd, id:l.id||'', data:dataAj, quando:marca.quando, por:marca.por})));
+      ajContDados[c.firestoreId]={...dAnt, ajustesEligo:log, feitos:{...(dAnt.feitos||{}), ...feitos}};
       await setDoc(doc(db,'ajustesContagem',c.firestoreId),
-        {feitos, ajusteEligoEm:agora(), ajusteEligoPor:_demAutor()},{merge:true});
+        {feitos, ajustesEligo:log, ajusteEligoEm:marca.quando, ajusteEligoPor:marca.por},{merge:true});
     }catch(e){ console.error('marcar feitos:', e); }
   }
 
@@ -33564,20 +33761,20 @@ function ajContVerRelatorio(){
   ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
     '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
-      '<div style="font-size:17px;font-weight:800;">'+(rel.falhas.length?'⚠️':'✓')+' Relatório do ajuste</div>'+
+      '<div style="font-size:17px;font-weight:800;">'+(rel.falhas.length?'⚠️':'✓')+' '+(rel.desfazer?'Relatório do desfazer':'Relatório do ajuste')+'</div>'+
       '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+
         (rel.contagem?('contagem de '+rel.contagem+' · '):'')+rel.quando+' · '+rel.por+'</div>'+
       '<div style="display:flex;gap:8px;margin-top:11px;">'+
         '<div style="flex:1;text-align:center;background:#f0fdf4;border-radius:9px;padding:10px;">'+
           '<div style="font-size:21px;font-weight:900;color:#16a34a;">'+rel.ok.length+'</div>'+
-          '<div style="font-size:10px;color:var(--text-secondary);">ajustados</div></div>'+
+          '<div style="font-size:10px;color:var(--text-secondary);">'+(rel.desfazer?'desfeitos':'ajustados')+'</div></div>'+
         '<div style="flex:1;text-align:center;background:'+(rel.falhas.length?'#fef2f2':'var(--bg-page)')+';border-radius:9px;padding:10px;">'+
           '<div style="font-size:21px;font-weight:900;color:'+(rel.falhas.length?'#dc2626':'var(--text-muted)')+';">'+rel.falhas.length+'</div>'+
           '<div style="font-size:10px;color:var(--text-secondary);">com erro</div></div>'+
       '</div></div>'+
     '<div style="flex:1;overflow-y:auto;padding:12px 16px;">'+
       (rel.falhas.length
-        ? '<div style="font-size:11px;font-weight:800;color:#b91c1c;margin-bottom:7px;">NÃO FOI POSSÍVEL AJUSTAR</div>'+
+        ? '<div style="font-size:11px;font-weight:800;color:#b91c1c;margin-bottom:7px;">'+(rel.desfazer?'NÃO FOI POSSÍVEL DESFAZER':'NÃO FOI POSSÍVEL AJUSTAR')+'</div>'+
           rel.falhas.map(f=>'<div class="card" style="margin-bottom:7px;background:#fef2f2;border-color:#fecaca;">'+
             '<div style="display:flex;justify-content:space-between;gap:8px;">'+
               '<span style="flex:1;min-width:0;font-size:13px;font-weight:700;">'+f.nome+'</span>'+
@@ -33587,10 +33784,10 @@ function ajContVerRelatorio(){
           '</div>').join('')
         : '<div style="text-align:center;padding:22px;color:#15803d;">'+
             '<div style="font-size:30px;">✓</div>'+
-            '<div style="font-size:14px;font-weight:700;margin-top:7px;">Todos ajustados</div>'+
-            '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">o ELIGO deve estar batendo com a contagem</div></div>')+
+            '<div style="font-size:14px;font-weight:700;margin-top:7px;">'+(rel.desfazer?'Todos desfeitos':'Todos ajustados')+'</div>'+
+            '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">'+(rel.desfazer?'o ELIGO voltou ao saldo de antes do ajuste':'o ELIGO deve estar batendo com a contagem')+'</div></div>')+
       (rel.ok.length
-        ? '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin:14px 0 7px;">AJUSTADOS ('+rel.ok.length+')</div>'+
+        ? '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);margin:14px 0 7px;">'+(rel.desfazer?'DESFEITOS':'AJUSTADOS')+' ('+rel.ok.length+')</div>'+
           '<div style="font-size:12px;color:var(--text-secondary);line-height:1.8;">'+
             rel.ok.map(o=>o.nome+' <strong style="color:'+(o.tipo==='entrada'?'#2563eb':'#dc2626')+';">'+(o.tipo==='entrada'?'+':'−')+_fmtKg(o.qtd)+'</strong>').join('<br>')+
           '</div>'
@@ -33700,10 +33897,12 @@ function _ajContRenderLista(){
     const nItens=Object.keys(c.itens||{}).length;
     return '<button onclick="ajContVer(\''+escapeJsStr(c.firestoreId)+'\')" class="card" style="display:flex;align-items:center;gap:10px;width:100%;margin-bottom:7px;cursor:pointer;text-align:left;font-family:inherit;">'+
       '<span style="flex:1;min-width:0;">'+
-        '<span style="display:block;font-size:15px;font-weight:800;">'+(c.grupo||'—')+'</span>'+
+        '<span style="display:block;font-size:15px;font-weight:800;">'+(c.grupo||'—')+
+          (c.copiaDe?' <span style="font-size:10.5px;font-weight:700;color:#1d4ed8;background:#eff6ff;border-radius:99px;padding:1px 8px;vertical-align:middle;">cópia</span>':'')+'</span>'+
         '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
           (c.data||'')+' · '+nItens+' produto(s)'+
-          (temEligo?(' · '+comDif.length+' com diferença'):' · <span style="color:#d97706;">sem o ELIGO</span>')+'</span></span>'+
+          (temEligo?(' · '+comDif.length+' com diferença'):' · <span style="color:#d97706;">sem o ELIGO</span>')+'</span>'+
+        (d.obs?'<span style="display:block;font-size:11px;color:#a16207;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📝 '+String(d.obs).replace(/</g,'&lt;')+'</span>':'')+'</span>'+
       (temEligo
         ? '<span style="text-align:right;white-space:nowrap;">'+
             '<span style="display:block;font-size:17px;font-weight:900;color:'+(pend?'#dc2626':'#16a34a')+';">'+(pend||'✓')+'</span>'+
@@ -33850,12 +34049,21 @@ function _ajContRenderTabela(c){
     '<button onclick="ajContColarEligo()" class="btn '+(temEligo?'btn-secondary':'btn-primary')+'" style="width:100%;margin-top:10px;">'+
       (temEligo?'↻ Atualizar o saldo do ELIGO':'📋 Colar o saldo do ELIGO')+'</button>'+
     // ajustar o ERP de uma vez, pela contagem
-    (temEligo && pend.length && (window.adminMode===true)
-      ? '<button onclick="ajContAbrirAjuste()" class="btn btn-primary" style="width:100%;margin-top:7px;background:#1e40af;">🔗 Ajustar o ELIGO pela contagem ('+pend.length+')</button>'
+    (temEligo && (pend.length||_ajElDesfaziveis(c).length) && (window.adminMode===true)
+      ? '<button onclick="ajContAbrirAjuste()" class="btn btn-primary" style="width:100%;margin-top:7px;background:#1e40af;">🔗 Ajustar o ELIGO pela contagem ('+(pend.length?pend.length:('desfazer '+_ajElDesfaziveis(c).length))+')</button>'
       : '')+
+    (d.desfeitoEligoEm?'<div style="font-size:11px;color:#b91c1c;margin-top:6px;">↩ Ajustes desfeitos no ELIGO em '+d.desfeitoEligoEm+(d.desfeitoEligoPor?(' por '+d.desfeitoEligoPor):'')+'</div>':'')+
     (_ajElTemRelatorio()
       ? '<button onclick="ajContVerRelatorio()" style="width:100%;margin-top:7px;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;">📄 Ver o último relatório de ajuste</button>'
       : '')+
+    '<div style="display:flex;gap:7px;margin-top:7px;">'+
+      '<button onclick="ajContEditarObs()" style="flex:1;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;">📝 '+(d.obs?'Editar a observação':'Colocar observação')+'</button>'+
+      (window.adminMode===true?'<button onclick="ajContDuplicar()" style="flex:1;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:9px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit;">📑 Duplicar esta contagem</button>':'')+
+    '</div>'+
+    (c.copiaDe?(()=>{ const o=(contagens||[]).find(x=>x.firestoreId===c.copiaDe);
+        return '<div style="font-size:11px;color:#1d4ed8;margin-top:7px;">📑 Cópia'+(o?(' da contagem de '+(o.data||'')):'')+' · feita em '+(c.copiaEm||'')+(c.copiaPor?(' por '+c.copiaPor):'')+'</div>'; })():'')+
+    (d.obs?'<div style="margin-top:7px;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:9px 11px;font-size:12.5px;color:#78350f;line-height:1.5;">📝 '+String(d.obs).replace(/</g,'&lt;')+
+        (d.obsEm?'<span style="display:block;font-size:10.5px;color:#a16207;margin-top:2px;">'+d.obsEm+(d.obsPor?(' · '+d.obsPor):'')+'</span>':'')+'</div>':'')+
   '</div>';
 
   if(!temEligo){
