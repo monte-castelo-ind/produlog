@@ -783,6 +783,14 @@
       .cf-tab input{ width:56px !important; }
     }
 
+    @media (max-width:560px){
+      .mc-header{ padding:10px 12px; gap:8px; }
+      .mc-brand-logo{ width:62px; height:32px; }
+      .mc-divider-v{ display:none; }
+      .mc-page-title, .mc-page-sub{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .mc-header-actions{ gap:6px; }
+    }
+
     /* O logo é atalho para o início: a mãozinha avisa que dá para clicar */
     .mc-brand-logo{ cursor:pointer; transition:opacity .12s; }
     .mc-brand-logo:hover{ opacity:.75; }
@@ -7735,10 +7743,11 @@ function renderEmbRend(){
   const paoPer=PAO_CLASSES.filter(c=>dias.some(d=>(porDia[d].paoCls[c]||0)>0.5));
 
   // equipe (Controle de Ponto, setor Embalação)
-  if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado && !_pontoCarregando && !_pontoErro){
-    pontoCarregarMeses().then(()=>{ if(document.querySelector('.screen.active')?.id==='s-emb-rend') renderEmbRend(); });
-  }
-  const eqMapa=(typeof _pontoCarregado!=='undefined' && _pontoCarregado) ? _erEquipe() : null;
+  const d30=[]; for(let i=30;i>=0;i--){ const x=new Date(); x.setDate(x.getDate()-i); d30.push(fmtData(x)); }
+  const mesesPonto=pontoMesesDe(dias.concat(d30));
+  const pontoOk=pontoMesesProntos(mesesPonto);
+  if(!pontoOk) pontoGarantirMeses(mesesPonto).then(()=>{ if(document.querySelector('.screen.active')?.id==='s-emb-rend') renderEmbRend(); });
+  const eqMapa=pontoOk ? _erEquipe() : null;
   const eqDia=d=>eqMapa&&eqMapa[d]?{n:eqMapa[d].pessoas.size, min:eqMapa[d].min}:null;
   const eqDias=dias.map(eqDia).filter(Boolean);
   const eqMin=eqDias.reduce((t,x)=>t+x.min,0);
@@ -7918,6 +7927,7 @@ window.renderEmbRend=renderEmbRend;
    lançamento, inclusive o "Já peguei". Em pacotes (a expedição lança
    em unidades, como a embalagem). */
 let _exdDia='';
+window.fmtData=fmtData;   // o botão "Hoje" do Liberado no dia chama direto do HTML
 function expDiaAbrir(){ _exdDia=_exdDia||fmtData(new Date()); goTo('s-exp-dia'); renderExpDia(); }
 window.expDiaAbrir=expDiaAbrir;
 function exdDia(v){ _exdDia=v; renderExpDia(); }
@@ -8105,6 +8115,7 @@ const PPR_SETORES=[
 let _pprSetor='geral', _pprPer='7', _pprDe='', _pprAte='', _pprSerie='vol', _pprAgr='dia';
 let _pprVAba='hoje', _pprVDia='', _pprVDe='', _pprVAte='', _pprVGrupo='salgado';
 let _pprCfg={semanas:4, pct:30, min:20}, _pprCfgLido=false;
+let _pprPontoOk=false;       // o ponto do período já chegou?
 let _pprPontoMapa=null;     // {cozinha:['Cozinha'], ...} escolhido à mão (configuracoes/painelProducao)
 
 /* Regras do painel (vendas fora do padrão e setores do ponto): lidas uma vez */
@@ -8162,7 +8173,7 @@ function _pprPontoCasa(setor, nomeSetorPonto){
 }
 function _pprEquipe(setor){
   const out={};
-  if(typeof pontoMeses==='undefined' || !_pontoCarregado) return null;
+  if(typeof pontoMeses==='undefined' || !_pprPontoOk) return null;
   Object.keys(pontoMeses).forEach(ch=>{
     const ano=ch.slice(0,4);
     ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
@@ -8242,7 +8253,10 @@ function _pprGrupos(dias){
 function renderPpr(){
   const el=document.getElementById('ppr-content'); if(!el) return;
   _ptCss(); el.style.padding='0'; el.style.background='#f5f7fb';
-  if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado && !_pontoCarregando && !_pontoErro) pontoCarregarMeses();
+  // o ponto do período mostrado e do período anterior (a comparação "vs anterior")
+  const _dP=_pprDias(), _mP=pontoMesesDe(_dP.concat(_pprAnterior(_dP)));
+  _pprPontoOk=pontoMesesProntos(_mP);
+  if(!_pprPontoOk) pontoGarantirMeses(_mP).then(()=>{ if(document.querySelector('.screen.active')?.id==='s-ppr') renderPpr(); });
   const nav=(k,ic,nome,sub)=>'<button class="pt-nav'+(_pprSetor===k?' on':'')+'" onclick="pprIr(\''+k+'\')"'+(sub?' style="padding-left:30px;font-size:12.5px;"':'')+'><span class="ic">'+ic+'</span>'+nome+'</button>';
   const vHoje=_pprVendasDia(_pprBR(new Date())).achados.length;
   const menu='<aside class="pt-side"><div class="pt-side-in"><div class="pt-side-tit">PRODUÇÃO</div>'+
@@ -8267,7 +8281,7 @@ function _pprCabecalho(){
   const dias=_pprDias();
   const per=[['1','Hoje'],['7','7 dias'],['30','30 dias'],['mes','Este mês'],['mesant','Mês passado'],['datas','📅 Datas']];
   let h='<div class="pt-head"><div><h1>'+(s?(s.ic+' '+s.nome):'Painel da Produção')+'</h1><p>'+(dias.length?(dias[0]+(dias.length>1?' a '+dias[dias.length-1]:'')):'')+
-      (typeof _pontoCarregado!=='undefined' && !_pontoCarregado?' · carregando o ponto…':'')+'</p></div>'+
+      (!_pprPontoOk?' · carregando o ponto…':'')+'</p></div>'+
     '<div class="pt-filtros"><div class="pt-seg">'+per.map(([v,t])=>'<button class="'+(_pprPer===v?'on':'')+'" onclick="pprPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
   if(_pprPer==='datas') h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="ppr-de" value="'+_pprDe+'"><label>até</label><input class="pt-ctl" type="date" id="ppr-ate" value="'+_pprAte+'">'+
     '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="pprDatas()">Aplicar</button></div>';
@@ -8383,13 +8397,13 @@ function _pprSetorTela(k){
         '<td class="c" style="font-weight:700;">'+(ph?_pprFmt(ph,s.un==='kg'?'kg':'x'):'<span style="color:#cbd5e1;">—</span>')+'</td></tr>'; }).join('')+'</tbody></table></div>';
   h+='<div class="pt-grid pt-g21">'+_ptCard('Dia a dia','produção, equipe e produtividade', diaH)+_ptCard(k==='cozinha'?'Recheios mais produzidos':'Mais produzidos','no período', topH)+'</div>';
   h+='<div class="pt-nota">Volume: '+({cozinha:'recheios lançados pela cozinha (kg)',confeitaria:'produção lançada pela confeitaria (pacotes)',quadra:'produção lançada pela Quadra (pacotes)',embalagem:'pacotes embalados produto a produto — sem o “embalar em lote”'}[k])+
-    '. Pessoas e horas: quem bateu ponto no Símix em '+((_pprPontoMapa&&_pprPontoMapa[k]&&_pprPontoMapa[k].length)?_pprPontoMapa[k].join(', '):(typeof _pontoCarregado!=='undefined'&&_pontoCarregado?(_pprSetoresDoPonto().filter(t=>_pprPontoCasa(k,t)).join(', ')||'nenhum setor encontrado'):'…'))+' (ajuste em ⚙️ Setores do ponto).</div>';
+    '. Pessoas e horas: quem bateu ponto no Símix em '+((_pprPontoMapa&&_pprPontoMapa[k]&&_pprPontoMapa[k].length)?_pprPontoMapa[k].join(', '):(_pprPontoOk?(_pprSetoresDoPonto().filter(t=>_pprPontoCasa(k,t)).join(', ')||'nenhum setor encontrado'):'…'))+' (ajuste em ⚙️ Setores do ponto).</div>';
   return h;
 }
 
 /* ── AJUSTE: quais setores do ponto contam para cada setor ── */
 function _pprConfigTela(){
-  if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado) return '<div class="pt-card pt-vazio">Carregando o ponto…</div>';
+  if(!_pprPontoOk) return '<div class="pt-card pt-vazio">Carregando o ponto…</div>';
   const todos=_pprSetoresDoPonto();
   let h='<div class="pt-head"><div><h1>⚙️ Setores do ponto</h1><p>Quais setores do Símix contam para cada setor do painel (pessoas e horas)</p></div></div>';
   h+='<div class="pt-grid pt-g4">'+PPR_SETORES.map(s=>'<div class="pt-card"><div class="pt-card-h"><h3>'+s.ic+' '+s.nome+'</h3></div>'+
@@ -8548,9 +8562,12 @@ function _pprProdutoTela(mapa){
 
 /* ══ VENDAS FORA DO PADRÃO ══ */
 const _PPR_SEM=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+let _pprMapaDe=null, _pprMapaVal=null;
 function _pprVendasMapa(){
+  const fonte=(typeof carregamentos!=='undefined'?carregamentos:[]);
+  if(_pprMapaDe===fonte && _pprMapaVal) return _pprMapaVal;   // mesma lista: reaproveita
   const m={};   // dia → {cod: {q, nome, c:{nome:q}}}
-  (typeof carregamentos!=='undefined'?carregamentos:[]).forEach(c=>{
+  fonte.forEach(c=>{
     const d=_pprDeBR(c.data); if(!d) return;
     const dia=_pprBR(d);
     const D=m[dia]||(m[dia]={});
@@ -8561,6 +8578,7 @@ function _pprVendasMapa(){
       x.q+=q; const nc=c.nome||'Carregamento'; x.c[nc]=(x.c[nc]||0)+q;
     });
   });
+  _pprMapaDe=fonte; _pprMapaVal=m;
   return m;
 }
 function _pprGrupoProd(cod){
@@ -20172,6 +20190,7 @@ async function iniciarConferencia(id){
   goTo('s-carreg-conf'); renderCarregConf(); _carregFocus();
 }
 window.iniciarConferencia=iniciarConferencia;
+window._carregFocus=()=>_carregFocus();   // usado no botão Fechar da lista de últimos bipes
 function _carregFocus(){ if(_carregSkipFocus) return; setTimeout(()=>{ if(_carregSkipFocus) return; const i=document.getElementById('carreg-bip'); if(i){ i.focus(); i.select&&i.select(); } },120); }
 function carregSetMode(m){ _carregBipMode=m; renderCarregConf(); _carregFocus(); }
 window.carregSetMode=carregSetMode;
@@ -26239,6 +26258,41 @@ let _pontoCarregado=false, _pontoCarregando=false, _pontoErro='';
 function _pontoGestor(){ return window.adminMode===true || window.setorAtual==='rh'; }
 window._pontoGestor=_pontoGestor;
 
+/* ── CARREGAR SÓ ALGUNS MESES ────────────────────────────────────────
+   pontoCarregarMeses() baixa o ponto INTEIRO (todos os meses e anos,
+   dezenas de MB). Isso é necessário só na tela do Controle de Ponto.
+   Os avisos do admin, o Rendimento da Embalagem e o Painel da Produção
+   precisam de 1 ou 2 meses: buscar tudo travava e derrubava a página
+   no celular logo depois de entrar no admin.
+   Aqui cada mês é buscado pelo próprio documento e pelos seus pedaços,
+   uma vez por sessão. Mês que não existe ou que deu erro fica marcado
+   como visto, para a tela não ficar pedindo de novo. */
+const _pontoMesOk={}, _pontoMesPend={};
+function pontoMesesProntos(chs){ return _pontoCarregado || (chs||[]).every(ch=>_pontoMesOk[ch]); }
+async function pontoGarantirMeses(chs){
+  if(_pontoCarregado) return;
+  const falta=[...new Set(chs||[])].filter(ch=>/^\d{4}-\d{2}$/.test(ch) && !_pontoMesOk[ch]);
+  await Promise.all(falta.map(ch=>{
+    if(_pontoMesPend[ch]) return _pontoMesPend[ch];
+    return (_pontoMesPend[ch]=(async()=>{
+      try{
+        const sn=await getDoc(doc(db,'pontoMeses',ch));
+        if(sn.exists()){
+          const m=sn.data();
+          if(m.partesLote && m.partes>0){
+            const ps=await Promise.all(Array.from({length:m.partes},(_,i)=>getDoc(doc(db,'pontoMeses',ch+'_p_'+m.partesLote+'_'+i))));
+            m.ponto=ps.flatMap(x=>x.exists()?(x.data().ponto||[]):[]);
+          }
+          if(!_pontoCarregado) pontoMeses[ch]=m;
+        }
+      }catch(e){ console.warn('ponto do mês '+ch+':', e); }
+      finally{ _pontoMesOk[ch]=true; delete _pontoMesPend[ch]; }
+    })());
+  }));
+}
+/* os meses (AAAA-MM) que cobrem uma lista de dias dd/mm/aaaa */
+function pontoMesesDe(dias){ return [...new Set((dias||[]).map(d=>{ const m=String(d).match(/^\d{2}\/(\d{2})\/(\d{4})$/); return m?(m[2]+'-'+m[1]):''; }).filter(Boolean))]; }
+
 async function pontoCarregarMeses(){
   if(_pontoCarregado || _pontoCarregando) return;
   _pontoCarregando=true;
@@ -28024,6 +28078,7 @@ function _ptCss(){
   .pt-filtros{margin-left:0;width:100%;}
   .pt-filtros>*{flex:1 1 100%;}
   .pt .pt-filtros select.pt-ctl,.pt .pt-busca input.pt-ctl{width:100%;min-width:0;}
+  .pt .pt-ctl{font-size:16px;}   /* abaixo de 16px o iPhone dá zoom na tela ao tocar no campo */
   .pt-g3{grid-template-columns:minmax(0,1fr);}
 }
 @media (max-width:520px){.pt-g4{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;} .pt-kpi{flex-direction:column;align-items:flex-start;gap:8px;} .pt-ico{width:40px;height:40px;flex-basis:40px;font-size:18px;} .pt-kpi .v{font-size:21px;}}
@@ -40155,7 +40210,8 @@ function _hubxCss(){
 @media (max-width:980px){
   .hubx{padding:16px 14px 36px !important;}
 }
-@media (max-width:520px){ .hir kbd{display:none;} }
+@media (max-width:520px){ .hir kbd{display:none;} .hubx>.mc-section-header>span{display:none !important;} }
+@media (max-width:860px){ .hir input, #av-cont input, #av-cfg input, #ajcont-obs-txt, #er-cls-busca{font-size:16px !important;} }
 @media (prefers-reduced-motion:reduce){ .hubx>.mc-sector-card{transition:none;} }
 `;
   document.head.appendChild(st);
@@ -40197,6 +40253,7 @@ function _hubxInit(){
    avisosVistos), então valem em qualquer aparelho do admin. */
 let _avCfg={ponto:true, faltas:true, atraso:true, atrasoMin:30, extra:true, extraMin:120, vendas:true, emb:true, embDias:2, carreg:true};
 let _avVistos={dia:'', ids:[], enviados:{}}, _avLido=false, _avAbertos={}, _avMostrarVistos=false;
+let _avFechado=(typeof window!=='undefined' && window.innerWidth<=700);   // no celular os avisos abrem recolhidos
 let _avEnvios={};      // por área: a lista do último dia fechado, pronta para mandar
 const AV_AREAS={pao:{ic:'🍞', nome:'Pães', titulo:'Pães'}, salgado:{ic:'🥐', nome:'Salgados', titulo:'Salgados'}};
 /* pão ou salgado: pelo cadastro; produto fora dos dois cadastros vai pelo código (abaixo de 200 = Quadra) */
@@ -40241,10 +40298,15 @@ window.avMais=avMais;
 function avVerVistos(){ _avMostrarVistos=!_avMostrarVistos; _hubxAvisos(); }
 window.avVerVistos=avVerVistos;
 
+function _avPontoMeses(){
+  const h=new Date(), a=new Date(h.getFullYear(), h.getMonth()-1, 1);
+  const ch=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  return [ch(a), ch(h)];
+}
 /* Ponto: último dia com marcação, só setores de produção */
 function _avPonto(){
   const out=[]; let info='';
-  if(typeof pontoMeses==='undefined' || !_pontoCarregado) return {lista:out, info:'carregando o ponto…'};
+  if(typeof pontoMeses==='undefined' || !pontoMesesProntos(_avPontoMeses())) return {lista:out, info:'carregando o ponto…'};
   const hojeN=_erNum(fmtData(new Date()));
   const ehProd=nome=>PPR_SETORES.some(s=>_pprPontoCasa(s.k, nome));
   const pessoas=[];   // {p, ch, ano, setor}
@@ -40285,7 +40347,9 @@ function _avMontar(){
   const grupos=[];   // {g, ic, nome, info, lista}
   // ponto
   if(_avCfg.ponto && (_avCfg.faltas||_avCfg.atraso||_avCfg.extra)){
-    if(typeof _pontoCarregado!=='undefined' && !_pontoCarregado && !_pontoCarregando && !_pontoErro) pontoCarregarMeses();
+    // só o mês atual e o anterior: o último dia com ponto está sempre num dos dois
+    const nec=_avPontoMeses();
+    if(!pontoMesesProntos(nec)) pontoGarantirMeses(nec).then(()=>{ if(document.querySelector('.screen.active')?.id==='s-adm-hub') hubxAtualizar(); });
     const r=_avPonto(); grupos.push({g:'ponto', ic:'🕐', nome:'Ponto da produção', info:r.info, lista:r.lista});
   }
   // vendas: último dia fechado + hoje
@@ -40436,9 +40500,10 @@ function _hubxAvisos(){
       '<button class="av-tx" onclick="'+a.acao+'"><span class="n">'+a.nome+'</span><span class="s">'+(a.tag?'<span class="tg" style="color:'+a.cor+';">'+a.tag+'</span>':'')+a.sub+'</span></button></div>'; };
   let h='<div class="av"><div class="av-top"><b>Avisos</b>'+
     '<span class="av-res">'+(total?(novos?('<b>'+novos+'</b> para ver'+(vistos?(' · '+vistos+' já visto'+(vistos>1?'s':'')):'')):'tudo visto por hoje ✓'):'nada pedindo atenção agora')+'</span>'+
-    '<span class="av-dir">'+(vistos?'<button class="av-lk" onclick="avVerVistos()">'+(_avMostrarVistos?'Esconder vistos':'Mostrar vistos')+'</button>':'')+
-      '<button class="av-lk" onclick="avPersonalizar()">⚙ Personalizar</button></span></div>';
-  if(grupos.length){
+    '<span class="av-dir">'+(vistos&&!_avFechado?'<button class="av-lk" onclick="avVerVistos()">'+(_avMostrarVistos?'Esconder vistos':'Mostrar vistos')+'</button>':'')+
+      (!_avFechado?'<button class="av-lk" onclick="avPersonalizar()">⚙ Personalizar</button>':'')+
+      '<button class="av-lk" onclick="avAbrirFechar()">'+(_avFechado?'Abrir ▾':'Recolher ▴')+'</button></span></div>';
+  if(grupos.length && !_avFechado){
     h+='<div class="av-cols">'+grupos.map(g=>{
       const novosG=g.lista.filter(a=>!_avVisto(a.id)), vistosG=g.lista.filter(a=>_avVisto(a.id));
       const aberta=!!_avAbertos[g.g], LIM=4;
@@ -40459,10 +40524,14 @@ function _hubxAvisos(){
 function hubxAtualizar(){
   _hubxInit();
   _avCarregar();
+  /* Ao entrar, dezenas de coleções chegam em sequência e cada uma pede
+     para redesenhar. Espera assentar e desenha uma vez só. */
   clearTimeout(_hubxTimer);
-  _hubxTimer=setTimeout(_hubxAvisos, 250);
+  _hubxTimer=setTimeout(_hubxAvisos, document.getElementById('adm-linha')?.firstChild?700:250);
 }
 window.hubxAtualizar=hubxAtualizar;
+function avAbrirFechar(){ _avFechado=!_avFechado; _hubxAvisos(); }
+window.avAbrirFechar=avAbrirFechar;
 
 /* ⚙ Personalizar: o que aparece nos avisos */
 function avPersonalizar(){
