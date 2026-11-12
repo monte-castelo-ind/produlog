@@ -266,7 +266,7 @@
     .op-stat-lbl { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
     .emb-data-badge { background: rgba(255,255,255,0.18); border-radius: 8px; padding: 3px 12px; font-size: 12px; color: white; margin-left: auto; cursor: pointer; border: none; font-family: inherit; }
 
-    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(43,47,168,0.92); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; }
+    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #262a96; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; }
     .loading-spinner { width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-text { color: white; font-size: 14px; opacity: 0.85; }
@@ -832,6 +832,8 @@
   <div class="loading-overlay" id="loading">
     <div class="loading-spinner"></div>
     <div class="loading-text">Conectando ao servidor...</div>
+    <!-- se o app morrer ainda carregando, o relatório tem de estar ao alcance aqui mesmo -->
+    <div id="pl-diag-carga" style="position:absolute;left:0;right:0;bottom:18px;text-align:center;font-size:12px;"></div>
   </div>
 
   <!-- TELA INICIAL -->
@@ -854,6 +856,7 @@
 
     <div style="flex:1;padding:18px 16px;background:var(--bg-page);overflow-y:auto;">
       <div class="agenda-aviso" style="display:none;"></div>
+      <div id="pl-diag-aviso"></div>
       <div class="mc-welcome">
         <div class="mc-welcome-title">Bom trabalho hoje! 👋</div>
         <div class="mc-welcome-sub">Selecione seu setor para começar</div>
@@ -999,6 +1002,7 @@
       </div>
       <div id="mc-exibicao-box" style="margin-top:22px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;"></div>
       <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted);">Monte Castelo Panificadora · v6.0</div>
+      <div id="pl-diag-rodape" style="text-align:center;margin-top:4px;font-size:11px;color:var(--text-muted);"></div>
       <div id="pl-conta" style="text-align:center;margin-top:6px;font-size:11px;color:var(--text-muted);"></div>
     </div>
   </div>
@@ -5570,7 +5574,114 @@
   <!-- PLANEJAMENTO - IMPORTAR VENDAS -->
   
   <!-- PLANEJAMENTO - IMPORTAR ESTOQUE -->
-  <script type="module">
+  <script>
+/* ══ DIAGNÓSTICO DE TRAVAMENTO ══════════════════════════════════════
+   No celular não dá para abrir o console, e quando a aba morre nada
+   fica na tela. Este bloco anota, a cada passo, o que o app estava
+   fazendo — e grava na hora no aparelho. Se a aba fechar sozinha, na
+   próxima abertura o app percebe e guarda essas anotações como
+   "relatório do travamento", com botão de copiar/compartilhar.
+   Fica fora do módulo principal de propósito: funciona mesmo que o
+   resto do app não chegue a carregar. Não envia nada para lugar
+   nenhum; só guarda no próprio aparelho. */
+(function(){
+  var VERSAO='12/11/2026 · 3';
+  var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0};
+  var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
+  function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
+  function gravar(k,v){ try{ if(LS) LS.setItem(k,v); }catch(e){} }
+  function seg(){ return ((Date.now()-t0)/1000).toFixed(1); }
+  function aparelho(){
+    var n=navigator, m=(n.deviceMemory?(' · memória '+n.deviceMemory+' GB'):'');
+    return (n.userAgent||'')+' · tela '+window.innerWidth+'x'+window.innerHeight+m;
+  }
+  // a sessão anterior terminou sem avisar? então a aba morreu
+  var travou=false;
+  if(ler('pl_diag_viva')==='1'){
+    travou=true;
+    gravar('pl_diag_travou', JSON.stringify({quando:new Date().toLocaleString('pt-BR'), versao:ler('pl_diag_versao')||'?',
+      pulso:ler('pl_diag_pulso')||'', log:ler('pl_diag_log')||'[]', vezes:(function(){ try{ return (JSON.parse(ler('pl_diag_travou')||'{}').vezes||0)+1; }catch(e){ return 1; } })()}));
+  }
+  gravar('pl_diag_viva','1'); gravar('pl_diag_versao',VERSAO); gravar('pl_diag_log','[]'); gravar('pl_diag_pulso','');
+  function saiuLimpo(){ gravar('pl_diag_viva','0'); }
+  window.addEventListener('pagehide', saiuLimpo);
+  document.addEventListener('visibilitychange', function(){ gravar('pl_diag_viva', document.visibilityState==='hidden'?'0':'1'); });
+
+  function anotar(msg){
+    log.push(seg()+'s  '+msg);
+    if(log.length>90) log.splice(0, log.length-90);
+    gravar('pl_diag_log', JSON.stringify(log));
+  }
+  function pulso(){
+    var tela=''; try{ tela=(document.querySelector('.screen.active')||{}).id||''; }catch(e){}
+    var mem=''; try{ if(performance && performance.memory) mem=' · JS '+Math.round(performance.memory.usedJSHeapSize/1048576)+' MB'; }catch(e){}
+    gravar('pl_diag_pulso', 'viveu '+seg()+'s · tela '+tela+' · '+cont.colecoes+' listas ('+cont.docs+' docs) · '+cont.atualizacoes+' atualizações de tela'+mem);
+  }
+  setInterval(pulso, 1500);
+  window.addEventListener('error', function(e){ anotar('ERRO: '+(e.message||'')+' ('+String(e.filename||'').split('/').pop()+':'+(e.lineno||'')+')'); });
+  window.addEventListener('unhandledrejection', function(e){ var r=e.reason; anotar('ERRO (promessa): '+((r&&(r.message||String(r)))||'sem detalhe')); });
+
+  window.plDiag=anotar;
+  window.plDiagCont=cont;
+  window.plDiagTravou=travou;
+  window.plDiagVersao=VERSAO;
+  window.plDiagTexto=function(){
+    var L=['PRODULOG — DIAGNÓSTICO', 'versão '+VERSAO+' · '+new Date().toLocaleString('pt-BR'), aparelho(), ''];
+    var tr=null; try{ tr=JSON.parse(ler('pl_diag_travou')||'null'); }catch(e){}
+    if(tr){
+      L.push('=== ÚLTIMO TRAVAMENTO ('+tr.quando+' · versão '+tr.versao+' · já são '+(tr.vezes||1)+') ===', 'último sinal: '+(tr.pulso||'—'));
+      try{ JSON.parse(tr.log||'[]').forEach(function(x){ L.push('  '+x); }); }catch(e){}
+      L.push('');
+    } else L.push('Nenhum travamento registrado neste aparelho.', '');
+    L.push('=== SESSÃO ATUAL ===', 'viveu '+seg()+'s · '+cont.colecoes+' listas ('+cont.docs+' docs) · '+cont.atualizacoes+' atualizações de tela');
+    log.forEach(function(x){ L.push('  '+x); });
+    return L.join('\n');
+  };
+  window.plDiagAbrir=function(){
+    var velho=document.getElementById('pl-diag-ov'); if(velho) velho.remove();
+    var ov=document.createElement('div'); ov.id='pl-diag-ov';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:14px;';
+    var txt=window.plDiagTexto();
+    ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:620px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;font-family:inherit;">'+
+      '<div style="padding:16px 18px 8px;"><div style="font-size:17px;font-weight:800;">🩺 Diagnóstico do app</div>'+
+      '<div style="font-size:12.5px;color:#64748b;margin-top:4px;line-height:1.5;">Mostra o que o app estava fazendo quando fechou sozinho. Toque em <b>Compartilhar</b> ou <b>Copiar</b> e mande para o Claude.</div></div>'+
+      '<textarea id="pl-diag-txt" readonly style="flex:1;min-height:220px;margin:0 18px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;font-family:monospace;font-size:11px;line-height:1.45;white-space:pre;overflow:auto;"></textarea>'+
+      '<div style="display:flex;gap:8px;padding:12px 18px 16px;flex-wrap:wrap;">'+
+        '<button id="pl-diag-comp" style="flex:1 1 120px;border:none;background:#1e40af;color:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">Compartilhar</button>'+
+        '<button id="pl-diag-cop" style="flex:1 1 120px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">📋 Copiar</button>'+
+        '<button id="pl-diag-fec" style="flex:1 1 120px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">Fechar</button></div></div>';
+    document.body.appendChild(ov);
+    var ta=document.getElementById('pl-diag-txt'); ta.value=txt;
+    document.getElementById('pl-diag-fec').onclick=function(){ ov.remove(); };
+    document.getElementById('pl-diag-cop').onclick=function(){
+      var b=this, ok=function(){ b.textContent='✓ Copiado'; setTimeout(function(){ b.textContent='📋 Copiar'; },1600); };
+      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, function(){ ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){} });
+      else { ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){} }
+    };
+    var comp=document.getElementById('pl-diag-comp');
+    if(navigator.share) comp.onclick=function(){ navigator.share({title:'Diagnóstico ProduLog', text:txt}).catch(function(){}); };
+    else comp.style.display='none';
+  };
+  // rodapé e aviso na tela inicial, quando a página estiver montada
+  function pintar(){
+    var rod=document.getElementById('pl-diag-rodape');
+    if(rod) rod.innerHTML='versão '+VERSAO+' · <a href="#" onclick="plDiagAbrir();return false;" style="color:inherit;">diagnóstico</a>';
+    var cg=document.getElementById('pl-diag-carga');
+    if(cg) cg.innerHTML=(ler('pl_diag_travou')
+        ? '<button onclick="plDiagAbrir()" style="border:1.5px solid rgba(255,255,255,.75);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:9px 14px;font-family:inherit;font-size:13px;font-weight:700;margin-bottom:8px;">⚠️ O app fechou sozinho · ver o relatório</button><br>'
+        : '')+
+      '<a href="#" onclick="plDiagAbrir();return false;" style="color:rgba(255,255,255,.6);">versão '+VERSAO+' · diagnóstico</a>';
+    var av=document.getElementById('pl-diag-aviso');
+    if(av && ler('pl_diag_travou')){
+      av.innerHTML='<button onclick="plDiagAbrir()" style="display:block;width:100%;text-align:left;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-family:inherit;font-size:13px;line-height:1.45;cursor:pointer;">'+
+        '<b>⚠️ O app fechou sozinho da última vez.</b><br>Toque aqui para ver o relatório e mandar para o Claude.</button>';
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', pintar); else pintar();
+  anotar('página abriu · '+aparelho());
+})();
+</script>
+<script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -5622,11 +5733,107 @@ var _plLogado=false, _plAuthPronto=false, _plFila=[];   // _plLogado = logado E 
 var _plUser=null, _plConta=null, _plContaUnsub=null, _plCriando=false;
 var _plEstado={ modo:'espera', texto:'Verificando acesso…', sair:false };
 window._plLogado=false;
+/* ── CARGA INICIAL ───────────────────────────────────────────────────
+   Ao entrar, o app liga dezenas de listas do banco de uma vez. Antes,
+   a tela aparecia em 4 segundos mesmo que metade ainda não tivesse
+   chegado — e os números mudavam enquanto a pessoa olhava. Agora a
+   tela de carregamento fica até TODAS as listas do início responderem
+   (ou darem erro), mostrando o andamento. Enquanto isso o app não
+   redesenha nada: desenha uma vez, no fim, com tudo no lugar.
+   Internet lenta: depois de 20 s aparece "Entrar assim mesmo".
+   O Painel TV (?tv=1) não espera: lá o importante é a tela não ficar
+   parada. */
+const _carga={total:0, chegou:0, pronta:false, fechada:false, pend:{}, t0:0, seq:0};
+function _cargaChegou(id){
+  if(!_carga.pend[id]) return;
+  delete _carga.pend[id]; _carga.chegou++;
+  if(_carga.fechada && !_carga.pronta){
+    if(_carga.chegou>=_carga.total) _cargaTerminar('completa');
+    else _cargaPintar();
+  }
+}
+function _cargaPintar(){
+  const t=document.querySelector('#loading .loading-text');
+  if(t) t.textContent='Carregando os dados… '+_carga.chegou+' de '+_carga.total;
+}
+function _cargaComecar(){
+  _carga.fechada=true; _carga.t0=Date.now();
+  if(window._tvLinkMode || !_carga.total || _carga.chegou>=_carga.total){ _cargaTerminar('direto'); return; }
+  const ld=document.getElementById('loading'); if(ld) ld.style.display='';
+  _cargaPintar();
+  // internet lenta: oferece entrar mesmo sem tudo, mas continua esperando
+  setTimeout(()=>{
+    if(_carga.pronta) return;
+    const ld2=document.getElementById('loading'); if(!ld2 || document.getElementById('loading-extra')) return;
+    const faltam=Object.values(_carga.pend).slice(0,6).join(', ');
+    const d=document.createElement('div'); d.id='loading-extra';
+    d.style.cssText='margin-top:18px;text-align:center;color:#fff;font-size:13px;line-height:1.5;max-width:320px;padding:0 20px;';
+    d.innerHTML='A internet está lenta: ainda faltam '+(_carga.total-_carga.chegou)+' lista(s).'+
+      '<div style="font-size:11px;opacity:.7;margin-top:3px;">'+faltam+'</div>'+
+      '<button onclick="cargaEntrarAssim()" style="margin-top:12px;border:1.5px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">Entrar assim mesmo</button>';
+    ld2.appendChild(d);
+    try{ if(window.plDiag) window.plDiag('carga lenta: faltam '+(_carga.total-_carga.chegou)+' ('+faltam+')'); }catch(e){}
+  }, 20000);
+}
+function _cargaTerminar(como){
+  if(_carga.pronta) return;
+  _carga.pronta=true;
+  try{ if(window.plDiag && como!=='direto') window.plDiag('carga '+como+': '+_carga.chegou+' de '+_carga.total+' listas em '+((Date.now()-_carga.t0)/1000).toFixed(1)+'s'); }catch(e){}
+  document.getElementById('loading-extra')?.remove();
+  const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
+  try{ atualizarTela(); }catch(e){ console.error('primeiro desenho:', e); }
+}
+window.cargaEntrarAssim=function(){ _cargaTerminar('incompleta (a pessoa escolheu entrar)'); };
+
+/* Embrulha a função de cada escuta: conta a primeira resposta (para a
+   carga inicial) e anota no diagnóstico as listas grandes. */
+function _diagEscuta(ref, args){
+  try{
+    const i=args.findIndex(a=>typeof a==='function'); if(i<0) return args;
+    const f=args[i], nome=String((ref&&ref.path)||'consulta').replace(/^pl_/,'');
+    const c=args.slice();
+    // só as escutas criadas antes de a conta ser liberada fazem parte da carga inicial
+    const id=(!_carga.fechada)?('e'+(++_carga.seq)):null;
+    if(id){ _carga.pend[id]=nome; _carga.total++; }
+    let visto=false;
+    c[i]=function(snap){
+      const primeira=!visto; visto=true;
+      if(primeira){
+        try{
+          const docs=snap&&snap.docs;
+          if(docs && window.plDiagCont){
+            let am=0; const n=Math.min(docs.length,6);
+            for(let k=0;k<n;k++){ try{ am+=JSON.stringify(docs[Math.floor(k*docs.length/n)].data()).length; }catch(e){} }
+            const kb=n?Math.round(am/n*docs.length/1024):0;
+            window.plDiagCont.colecoes++; window.plDiagCont.docs+=docs.length;
+            if(docs.length>=200 || kb>=300) window.plDiag('lista '+nome+': '+docs.length+' docs · ~'+(kb>=1024?(kb/1024).toFixed(1)+' MB':kb+' KB'));
+          }
+        }catch(e){}
+      }
+      try{ return f.apply(this, arguments); }
+      finally{ if(primeira && id) _cargaChegou(id); }
+    };
+    // erro (sem permissão, por exemplo) também conta como "respondeu", senão a carga nunca terminaria
+    const iErr=args.findIndex((a,k)=>k>i && typeof a==='function');
+    const fErr=iErr>=0?args[iErr]:null;
+    const aoErrar=function(err){
+      try{ if(window.plDiag) window.plDiag('lista '+nome+' deu erro: '+((err&&(err.code||err.message))||err)); }catch(e){}
+      try{ if(fErr) return fErr.apply(this, arguments); else console.error('leitura '+nome+':', err); }
+      finally{ if(id) _cargaChegou(id); }
+    };
+    if(iErr>=0) c[iErr]=aoErrar; else c.splice(i+1,0,aoErrar);
+    c.__cargaId=id;      // para o porteiro avisar a carga se a escuta for cancelada antes de responder
+    return c;
+  }catch(e){ return args; }
+}
 function onSnapshot(ref, ...args){
+  args=_diagEscuta(ref, args);
+  const cargaId=args.__cargaId;
   if(_plLogado) return _fbOnSnapshot(ref, ...args);
   const item={ ref, args, unsub:null, cancelado:false };
   _plFila.push(item);
-  return function(){ item.cancelado=true; if(item.unsub){ try{ item.unsub(); }catch(e){} } };
+  // escuta cancelada antes de responder não pode segurar a carga inicial
+  return function(){ item.cancelado=true; if(cargaId) _cargaChegou(cargaId); if(item.unsub){ try{ item.unsub(); }catch(e){} } };
 }
 function _plLigarFila(){
   const fila=_plFila; _plFila=[];
@@ -5737,10 +5944,11 @@ function _plEscutarConta(user){
       _plLogado=true; window._plLogado=true;
       _plAplicarConta();
       if(primeira){
+        try{ if(window.plDiag) window.plDiag('conta liberada: ligando as listas do banco'); }catch(e){}
         _plLigarFila();
-        const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
-        if(window._tvLinkMode){ window._tvLinkIniciado=false; _entrarModoTvLink(); }
+        if(window._tvLinkMode){ const ld=document.getElementById('loading'); if(ld) ld.style.display='none'; window._tvLinkIniciado=false; _entrarModoTvLink(); }
         else { const t=_navTelaAtual(); if(!t || t==='s-login') goTo('s-inicio', true); }
+        _cargaComecar();     // a tela de carregamento fica até todas as listas responderem
       }
     } else {
       if(_plLogado){ location.reload(); return; }   // bloqueada durante o uso
@@ -5932,6 +6140,7 @@ if(window._tvLinkMode){
 
 // Fallback: show app after 4s even if Firebase is slow
 setTimeout(()=>{
+  if(_plLogado && !_carga.pronta) return;      // carregando os dados: quem tira a tela de espera é a carga
   const loading=document.getElementById('loading');
   if(loading.style.display!=='none'){
     loading.style.display='none';
@@ -5940,6 +6149,8 @@ setTimeout(()=>{
 },4000);
 
 function atualizarTela(){
+  if(_plLogado && !_carga.pronta) return;      // carga inicial: desenha uma vez só, quando tudo chegar
+  try{ if(window.plDiagCont) window.plDiagCont.atualizacoes++; }catch(e){}
   document.getElementById('loading').style.display='none';
   if(window._tvLinkMode && !window._tvLinkIniciado){ _entrarModoTvLink(); return; }
   const tela=document.querySelector('.screen.active')?.id;
@@ -6169,6 +6380,7 @@ window.voltar=voltar;
 
 function goTo(id, semHistorico){
   if(!_plLogado && id!=='s-login'){ id='s-login'; semHistorico=true; }   // sem login, só a tela de login
+  try{ if(window.plDiag){ window.plDiagCont.telas++; window.plDiag('tela '+id+(window.adminMode?' (admin)':'')); } }catch(e){}
   const atual=_navTelaAtual();
   // guarda de onde veio, para o voltar saber o caminho
   if(!semHistorico && atual && atual!==id){
@@ -8272,6 +8484,7 @@ function renderPpr(){
 window.renderPpr=renderPpr;
 function _pprBadge(){
   const el=document.getElementById('ppr-hub-badge'); if(!el) return;
+  if(window.innerWidth<=700 || window.plDiagTravou===true){ el.innerHTML=''; return; }   // modo leve
   try{ const n=_pprVendasDia(_pprBR(new Date())).achados.length;
     el.innerHTML=n?'<span style="background:#fee2e2;color:#b91c1c;border-radius:99px;padding:1px 8px;font-size:11px;font-weight:800;margin-left:4px;">📈 '+n+' hoje</span>':''; }catch(e){}
 }
@@ -26272,6 +26485,7 @@ function pontoMesesProntos(chs){ return _pontoCarregado || (chs||[]).every(ch=>_
 async function pontoGarantirMeses(chs){
   if(_pontoCarregado) return;
   const falta=[...new Set(chs||[])].filter(ch=>/^\d{4}-\d{2}$/.test(ch) && !_pontoMesOk[ch]);
+  try{ if(falta.length && window.plDiag) window.plDiag('ponto: buscando '+falta.join(', ')); }catch(e){}
   await Promise.all(falta.map(ch=>{
     if(_pontoMesPend[ch]) return _pontoMesPend[ch];
     return (_pontoMesPend[ch]=(async()=>{
@@ -26297,6 +26511,7 @@ async function pontoCarregarMeses(){
   if(_pontoCarregado || _pontoCarregando) return;
   _pontoCarregando=true;
   _pontoErro='';
+  try{ if(window.plDiag) window.plDiag('ponto: buscando TODOS os meses'); }catch(e){}
   try{
     // sem resposta em 60 s, desiste e oferece tentar de novo
     const snap=await Promise.race([
@@ -40253,7 +40468,8 @@ function _hubxInit(){
    avisosVistos), então valem em qualquer aparelho do admin. */
 let _avCfg={ponto:true, faltas:true, atraso:true, atrasoMin:30, extra:true, extraMin:120, vendas:true, emb:true, embDias:2, carreg:true};
 let _avVistos={dia:'', ids:[], enviados:{}}, _avLido=false, _avAbertos={}, _avMostrarVistos=false;
-let _avFechado=(typeof window!=='undefined' && window.innerWidth<=700);   // no celular os avisos abrem recolhidos
+// no celular — e na sessão seguinte a um travamento — os avisos ficam recolhidos e NADA é calculado até abrir
+let _avFechado=(typeof window!=='undefined' && (window.innerWidth<=700 || window.plDiagTravou===true));
 let _avEnvios={};      // por área: a lista do último dia fechado, pronta para mandar
 const AV_AREAS={pao:{ic:'🍞', nome:'Pães', titulo:'Pães'}, salgado:{ic:'🥐', nome:'Salgados', titulo:'Salgados'}};
 /* pão ou salgado: pelo cadastro; produto fora dos dois cadastros vai pelo código (abaixo de 200 = Quadra) */
@@ -40490,7 +40706,15 @@ window.avContatosSalvar=avContatosSalvar;
 
 function _hubxAvisos(){
   const el=document.getElementById('adm-linha'); if(!el) return;
+  if(_avFechado){
+    // recolhido: não busca ponto nem calcula vendas — o painel fica tão leve quanto era antes dos avisos
+    if(!el.querySelector('.av-rec')) el.innerHTML='<div class="av av-rec"><div class="av-top"><b>Avisos</b><span class="av-res">ponto, vendas e embalagem</span>'+
+      '<span class="av-dir"><button class="av-lk" onclick="avAbrirFechar()">Abrir ▾</button></span></div></div>';
+    return;
+  }
+  const _t0=Date.now();
   let grupos; try{ grupos=_avMontar(); }catch(e){ console.error('avisos',e); el.innerHTML=''; return; }
+  try{ const dt=Date.now()-_t0; if(dt>150 && window.plDiag) window.plDiag('avisos: cálculo levou '+dt+' ms'); }catch(e){}
   window._avLista=grupos.flatMap(g=>g.lista);
   const envPend=grupos.filter(g=>g.envio && g.envio.itens.length && !g.envio.enviado).length;
   const total=window._avLista.length+grupos.filter(g=>g.envio && g.envio.itens.length).length;
