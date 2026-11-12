@@ -5585,8 +5585,8 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='12/11/2026 · 3';
-  var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0};
+  var VERSAO='12/11/2026 · 4';
+  var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
   function gravar(k,v){ try{ if(LS) LS.setItem(k,v); }catch(e){} }
@@ -5596,26 +5596,38 @@
     return (n.userAgent||'')+' · tela '+window.innerWidth+'x'+window.innerHeight+m;
   }
   // a sessão anterior terminou sem avisar? então a aba morreu
-  var travou=false;
+  var travou=false, pular=[];
+  try{ pular=JSON.parse(ler('pl_pular')||'[]')||[]; }catch(e){ pular=[]; }
   if(ler('pl_diag_viva')==='1'){
     travou=true;
+    // o que estava chegando ou sendo processado na hora em que a aba morreu
+    var voo=[]; try{ voo=JSON.parse(ler('pl_diag_voo')||'[]')||[]; }catch(e){}
+    var proc=ler('pl_diag_proc')||'', serie=ler('pl_diag_serie')==='1';
+    /* Se a sessão que morreu já estava carregando UMA lista por vez, a
+       lista que estava em andamento é a suspeita: neste aparelho ela
+       passa a ser pulada, para o app conseguir abrir. Fica avisado na
+       tela inicial, com botão para tentar carregar tudo de novo. */
+    var culpada=proc || (serie && voo.length===1 ? voo[0] : '');
+    if(serie && culpada && pular.indexOf(culpada)<0){ pular.push(culpada); gravar('pl_pular', JSON.stringify(pular)); }
     gravar('pl_diag_travou', JSON.stringify({quando:new Date().toLocaleString('pt-BR'), versao:ler('pl_diag_versao')||'?',
-      pulso:ler('pl_diag_pulso')||'', log:ler('pl_diag_log')||'[]', vezes:(function(){ try{ return (JSON.parse(ler('pl_diag_travou')||'{}').vezes||0)+1; }catch(e){ return 1; } })()}));
+      pulso:ler('pl_diag_pulso')||'', log:ler('pl_diag_log')||'[]', voo:voo, proc:proc, serie:serie,
+      vezes:(function(){ try{ return (JSON.parse(ler('pl_diag_travou')||'{}').vezes||0)+1; }catch(e){ return 1; } })()}));
   }
   gravar('pl_diag_viva','1'); gravar('pl_diag_versao',VERSAO); gravar('pl_diag_log','[]'); gravar('pl_diag_pulso','');
+  gravar('pl_diag_voo','[]'); gravar('pl_diag_proc',''); gravar('pl_diag_serie','0');
   function saiuLimpo(){ gravar('pl_diag_viva','0'); }
   window.addEventListener('pagehide', saiuLimpo);
   document.addEventListener('visibilitychange', function(){ gravar('pl_diag_viva', document.visibilityState==='hidden'?'0':'1'); });
 
   function anotar(msg){
     log.push(seg()+'s  '+msg);
-    if(log.length>90) log.splice(0, log.length-90);
+    if(log.length>260) log.splice(0, log.length-260);
     gravar('pl_diag_log', JSON.stringify(log));
   }
   function pulso(){
     var tela=''; try{ tela=(document.querySelector('.screen.active')||{}).id||''; }catch(e){}
     var mem=''; try{ if(performance && performance.memory) mem=' · JS '+Math.round(performance.memory.usedJSHeapSize/1048576)+' MB'; }catch(e){}
-    gravar('pl_diag_pulso', 'viveu '+seg()+'s · tela '+tela+' · '+cont.colecoes+' listas ('+cont.docs+' docs) · '+cont.atualizacoes+' atualizações de tela'+mem);
+    gravar('pl_diag_pulso', 'viveu '+seg()+'s · tela '+tela+' · '+cont.colecoes+' listas ('+cont.docs+' docs, ~'+(cont.kb/1024).toFixed(1)+' MB) · '+cont.atualizacoes+' atualizações de tela'+mem);
   }
   setInterval(pulso, 1500);
   window.addEventListener('error', function(e){ anotar('ERRO: '+(e.message||'')+' ('+String(e.filename||'').split('/').pop()+':'+(e.lineno||'')+')'); });
@@ -5624,16 +5636,20 @@
   window.plDiag=anotar;
   window.plDiagCont=cont;
   window.plDiagTravou=travou;
+  window.plDiagPular=pular;
+  window.plDiagRecarregarTudo=function(){ gravar('pl_pular','[]'); gravar('pl_diag_viva','0'); location.reload(); };
   window.plDiagVersao=VERSAO;
   window.plDiagTexto=function(){
     var L=['PRODULOG — DIAGNÓSTICO', 'versão '+VERSAO+' · '+new Date().toLocaleString('pt-BR'), aparelho(), ''];
     var tr=null; try{ tr=JSON.parse(ler('pl_diag_travou')||'null'); }catch(e){}
     if(tr){
-      L.push('=== ÚLTIMO TRAVAMENTO ('+tr.quando+' · versão '+tr.versao+' · já são '+(tr.vezes||1)+') ===', 'último sinal: '+(tr.pulso||'—'));
+      L.push('=== ÚLTIMO TRAVAMENTO ('+tr.quando+' · versão '+tr.versao+' · já são '+(tr.vezes||1)+') ===', 'último sinal: '+(tr.pulso||'—'),
+        'modo: '+(tr.serie?'uma lista por vez':'várias listas juntas')+' · chegando na hora: '+((tr.voo||[]).join(', ')||'—')+' · sendo processada: '+(tr.proc||'—'));
       try{ JSON.parse(tr.log||'[]').forEach(function(x){ L.push('  '+x); }); }catch(e){}
       L.push('');
     } else L.push('Nenhum travamento registrado neste aparelho.', '');
-    L.push('=== SESSÃO ATUAL ===', 'viveu '+seg()+'s · '+cont.colecoes+' listas ('+cont.docs+' docs) · '+cont.atualizacoes+' atualizações de tela');
+    if(pular.length) L.push('LISTAS PULADAS NESTE APARELHO: '+pular.join(', '), '');
+    L.push('=== SESSÃO ATUAL ===', 'viveu '+seg()+'s · '+cont.colecoes+' listas ('+cont.docs+' docs, ~'+(cont.kb/1024).toFixed(1)+' MB) · '+cont.atualizacoes+' atualizações de tela');
     log.forEach(function(x){ L.push('  '+x); });
     return L.join('\n');
   };
@@ -5672,7 +5688,13 @@
         : '')+
       '<a href="#" onclick="plDiagAbrir();return false;" style="color:rgba(255,255,255,.6);">versão '+VERSAO+' · diagnóstico</a>';
     var av=document.getElementById('pl-diag-aviso');
-    if(av && ler('pl_diag_travou')){
+    if(av && pular.length){
+      av.innerHTML='<div style="background:#fffbeb;border:1px solid #fde68a;color:#78350f;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.5;">'+
+        '<b>⚠️ Neste aparelho, '+pular.length+' lista(s) não foram carregadas</b> porque derrubavam o app: <b>'+pular.join(', ')+'</b>. O que depende delas aparece vazio aqui.'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px;">'+
+          '<button onclick="plDiagAbrir()" style="border:1px solid #d97706;background:#fff;color:#92400e;border-radius:9px;padding:8px 12px;font-family:inherit;font-size:13px;font-weight:700;">Ver o relatório</button>'+
+          '<button onclick="plDiagRecarregarTudo()" style="border:1px solid #d97706;background:#fff;color:#92400e;border-radius:9px;padding:8px 12px;font-family:inherit;font-size:13px;font-weight:700;">Tentar carregar tudo</button></div></div>';
+    } else if(av && ler('pl_diag_travou')){
       av.innerHTML='<button onclick="plDiagAbrir()" style="display:block;width:100%;text-align:left;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:12px;padding:12px 14px;margin-bottom:12px;font-family:inherit;font-size:13px;line-height:1.45;cursor:pointer;">'+
         '<b>⚠️ O app fechou sozinho da última vez.</b><br>Toque aqui para ver o relatório e mandar para o Claude.</button>';
     }
@@ -5743,10 +5765,11 @@ window._plLogado=false;
    Internet lenta: depois de 20 s aparece "Entrar assim mesmo".
    O Painel TV (?tv=1) não espera: lá o importante é a tela não ficar
    parada. */
-const _carga={total:0, chegou:0, pronta:false, fechada:false, pend:{}, t0:0, seq:0};
+const _carga={total:0, chegou:0, pronta:false, fechada:false, pend:{}, aoChegar:{}, t0:0, seq:0, ultimo:0};
 function _cargaChegou(id){
   if(!_carga.pend[id]) return;
-  delete _carga.pend[id]; _carga.chegou++;
+  delete _carga.pend[id]; _carga.chegou++; _carga.ultimo=Date.now();
+  const fn=_carga.aoChegar[id]; if(fn){ delete _carga.aoChegar[id]; try{ fn(); }catch(e){} }
   if(_carga.fechada && !_carga.pronta){
     if(_carga.chegou>=_carga.total) _cargaTerminar('completa');
     else _cargaPintar();
@@ -5756,14 +5779,24 @@ function _cargaPintar(){
   const t=document.querySelector('#loading .loading-text');
   if(t) t.textContent='Carregando os dados… '+_carga.chegou+' de '+_carga.total;
 }
+function _lsDiag(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 function _cargaComecar(){
   _carga.fechada=true; _carga.t0=Date.now();
   if(window._tvLinkMode || !_carga.total || _carga.chegou>=_carga.total){ _cargaTerminar('direto'); return; }
   const ld=document.getElementById('loading'); if(ld) ld.style.display='';
   _cargaPintar();
-  // internet lenta: oferece entrar mesmo sem tudo, mas continua esperando
-  setTimeout(()=>{
-    if(_carga.pronta) return;
+  _carga.ultimo=Date.now();
+  if(window.plDiagTravou===true && ld && !document.getElementById('loading-seg')){
+    const m=document.createElement('div'); m.id='loading-seg';
+    m.style.cssText='margin-top:10px;text-align:center;color:rgba(255,255,255,.8);font-size:12px;line-height:1.5;max-width:300px;padding:0 20px;';
+    m.textContent='Modo de segurança: o app fechou sozinho da última vez, então está carregando uma lista por vez. Demora um pouco mais.';
+    ld.appendChild(m);
+  }
+  // sem andamento por 20 s: oferece entrar mesmo sem tudo, mas continua esperando
+  const vigia=setInterval(()=>{
+    if(_carga.pronta){ clearInterval(vigia); return; }
+    if(Date.now()-_carga.ultimo<20000) return;
+    clearInterval(vigia);
     const ld2=document.getElementById('loading'); if(!ld2 || document.getElementById('loading-extra')) return;
     const faltam=Object.values(_carga.pend).slice(0,6).join(', ');
     const d=document.createElement('div'); d.id='loading-extra';
@@ -5772,14 +5805,14 @@ function _cargaComecar(){
       '<div style="font-size:11px;opacity:.7;margin-top:3px;">'+faltam+'</div>'+
       '<button onclick="cargaEntrarAssim()" style="margin-top:12px;border:1.5px solid rgba(255,255,255,.7);background:transparent;color:#fff;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">Entrar assim mesmo</button>';
     ld2.appendChild(d);
-    try{ if(window.plDiag) window.plDiag('carga lenta: faltam '+(_carga.total-_carga.chegou)+' ('+faltam+')'); }catch(e){}
-  }, 20000);
+    try{ if(window.plDiag) window.plDiag('carga parada há 20 s: faltam '+(_carga.total-_carga.chegou)+' ('+faltam+')'); }catch(e){}
+  }, 2000);
 }
 function _cargaTerminar(como){
   if(_carga.pronta) return;
   _carga.pronta=true;
   try{ if(window.plDiag && como!=='direto') window.plDiag('carga '+como+': '+_carga.chegou+' de '+_carga.total+' listas em '+((Date.now()-_carga.t0)/1000).toFixed(1)+'s'); }catch(e){}
-  document.getElementById('loading-extra')?.remove();
+  document.getElementById('loading-extra')?.remove(); document.getElementById('loading-seg')?.remove();
   const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
   try{ atualizarTela(); }catch(e){ console.error('primeiro desenho:', e); }
 }
@@ -5790,7 +5823,9 @@ window.cargaEntrarAssim=function(){ _cargaTerminar('incompleta (a pessoa escolhe
 function _diagEscuta(ref, args){
   try{
     const i=args.findIndex(a=>typeof a==='function'); if(i<0) return args;
-    const f=args[i], nome=String((ref&&ref.path)||'consulta').replace(/^pl_/,'');
+    let caminho=ref&&ref.path;
+    if(!caminho){ try{ caminho=ref._query.path.segments.join('/'); }catch(e){} }
+    const f=args[i], nome=String(caminho||'consulta').replace(/^pl_/,'');
     const c=args.slice();
     // só as escutas criadas antes de a conta ser liberada fazem parte da carga inicial
     const id=(!_carga.fechada)?('e'+(++_carga.seq)):null;
@@ -5798,20 +5833,31 @@ function _diagEscuta(ref, args){
     let visto=false;
     c[i]=function(snap){
       const primeira=!visto; visto=true;
+      let t1=0;
       if(primeira){
         try{
           const docs=snap&&snap.docs;
-          if(docs && window.plDiagCont){
-            let am=0; const n=Math.min(docs.length,6);
-            for(let k=0;k<n;k++){ try{ am+=JSON.stringify(docs[Math.floor(k*docs.length/n)].data()).length; }catch(e){} }
-            const kb=n?Math.round(am/n*docs.length/1024):0;
-            window.plDiagCont.colecoes++; window.plDiagCont.docs+=docs.length;
-            if(docs.length>=200 || kb>=300) window.plDiag('lista '+nome+': '+docs.length+' docs · ~'+(kb>=1024?(kb/1024).toFixed(1)+' MB':kb+' KB'));
+          if(window.plDiagCont){
+            let kb=0;
+            if(docs){
+              let am=0; const n=Math.min(docs.length,6);
+              for(let k=0;k<n;k++){ try{ am+=JSON.stringify(docs[Math.floor(k*docs.length/n)].data()).length; }catch(e){} }
+              kb=n?Math.round(am/n*docs.length/1024):0;
+              window.plDiagCont.colecoes++; window.plDiagCont.docs+=docs.length; window.plDiagCont.kb+=kb;
+            }
+            window.plDiag('chegou '+nome+(docs?(': '+docs.length+' docs · ~'+(kb>=1024?(kb/1024).toFixed(1)+' MB':kb+' KB')):''));
+            _lsDiag('pl_diag_proc', nome); t1=Date.now();
           }
         }catch(e){}
       }
       try{ return f.apply(this, arguments); }
-      finally{ if(primeira && id) _cargaChegou(id); }
+      finally{
+        if(primeira){
+          _lsDiag('pl_diag_proc','');
+          try{ const dt=Date.now()-t1; if(t1 && dt>120 && window.plDiag) window.plDiag('   processar '+nome+' levou '+dt+' ms'); }catch(e){}
+          if(id) _cargaChegou(id);
+        }
+      }
     };
     // erro (sem permissão, por exemplo) também conta como "respondeu", senão a carga nunca terminaria
     const iErr=args.findIndex((a,k)=>k>i && typeof a==='function');
@@ -5835,12 +5881,42 @@ function onSnapshot(ref, ...args){
   // escuta cancelada antes de responder não pode segurar a carga inicial
   return function(){ item.cancelado=true; if(cargaId) _cargaChegou(cargaId); if(item.unsub){ try{ item.unsub(); }catch(e){} } };
 }
+/* Liga as listas do banco AOS POUCOS, em vez de todas de uma vez:
+   12 por vez no uso normal; uma por vez na sessão seguinte a um
+   travamento (aí o relatório mostra exatamente qual lista estava
+   chegando quando a aba morreu, e ela passa a ser pulada neste
+   aparelho). Uma lista que demora mais de 10 s não segura a fila: a
+   próxima é ligada e ela continua chegando no tempo dela. */
 function _plLigarFila(){
   const fila=_plFila; _plFila=[];
-  fila.forEach(it=>{
-    if(it.cancelado) return;
-    try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }catch(e){ console.error('leitura:', e); }
-  });
+  const pular=Array.isArray(window.plDiagPular)?window.plDiagPular:[];
+  const serie=window.plDiagTravou===true;
+  const K=serie?1:12;
+  const voo={};
+  const gravaVoo=()=>_lsDiag('pl_diag_voo', JSON.stringify(Object.values(voo)));
+  _lsDiag('pl_diag_serie', serie?'1':'0');
+  let i=0, ativos=0;
+  const proximo=()=>{
+    while(ativos<K && i<fila.length){
+      const it=fila[i++];
+      if(it.cancelado) continue;
+      const id=it.args.__cargaId, nome=id?_carga.pend[id]:'';
+      if(id && nome && pular.includes(nome)){
+        try{ if(window.plDiag) window.plDiag('PULADA neste aparelho: '+nome); }catch(e){}
+        _cargaChegou(id); continue;
+      }
+      if(!id || !nome){ try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }catch(e){ console.error('leitura:', e); } continue; }
+      ativos++; voo[id]=nome; gravaVoo();
+      let liberou=false;
+      const liberar=()=>{ if(liberou) return; liberou=true; clearTimeout(tm); ativos--; proximo(); };
+      _carga.aoChegar[id]=()=>{ delete voo[id]; gravaVoo(); liberar(); };
+      const tm=setTimeout(()=>{ try{ if(window.plDiag) window.plDiag('demorando mais de 10 s: '+nome); }catch(e){} liberar(); }, 10000);
+      try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }
+      catch(e){ console.error('leitura:', e); _cargaChegou(id); }
+    }
+  };
+  try{ if(window.plDiag) window.plDiag('ligando '+fila.length+' listas, '+(serie?'UMA por vez (modo de segurança)':K+' por vez')); }catch(e){}
+  proximo();
 }
 /* tela s-login tem três jeitos: formulário, mensagem de espera, ou mensagem + desconectar */
 function _plMostrarLogin(){
