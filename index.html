@@ -5585,7 +5585,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='12/11/2026 · 4';
+  var VERSAO='13/11/2026 · 6';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -5640,7 +5640,7 @@
   window.plDiagRecarregarTudo=function(){ gravar('pl_pular','[]'); gravar('pl_diag_viva','0'); location.reload(); };
   window.plDiagVersao=VERSAO;
   window.plDiagTexto=function(){
-    var L=['PRODULOG — DIAGNÓSTICO', 'versão '+VERSAO+' · '+new Date().toLocaleString('pt-BR'), aparelho(), ''];
+    var L=['PRODULOG — DIAGNÓSTICO', 'versão '+VERSAO+' · '+new Date().toLocaleString('pt-BR'), aparelho(), 'conexão com o banco: '+(window.plConexao||'?'), ''];
     var tr=null; try{ tr=JSON.parse(ler('pl_diag_travou')||'null'); }catch(e){}
     if(tr){
       L.push('=== ÚLTIMO TRAVAMENTO ('+tr.quando+' · versão '+tr.versao+' · já são '+(tr.vezes||1)+') ===', 'último sinal: '+(tr.pulso||'—'),
@@ -5665,10 +5665,15 @@
       '<div style="display:flex;gap:8px;padding:12px 18px 16px;flex-wrap:wrap;">'+
         '<button id="pl-diag-comp" style="flex:1 1 120px;border:none;background:#1e40af;color:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">Compartilhar</button>'+
         '<button id="pl-diag-cop" style="flex:1 1 120px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">📋 Copiar</button>'+
-        '<button id="pl-diag-fec" style="flex:1 1 120px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">Fechar</button></div></div>';
+        '<button id="pl-diag-fec" style="flex:1 1 120px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">Fechar</button></div>'+
+      '<div style="padding:0 18px 14px;font-size:12px;color:#64748b;line-height:1.5;">Conexão com o banco: <b>'+(String(window.plConexao||'').indexOf('compat')===0?'compatível':'normal')+'</b>'+
+        (ler('pl_conexao')?' (escolhida neste aparelho)':' (automática)')+' · '+
+        '<a href="#" id="pl-diag-con" style="color:#1d4ed8;font-weight:700;">trocar para '+(String(window.plConexao||'').indexOf('compat')===0?'normal':'compatível')+'</a></div></div>';
     document.body.appendChild(ov);
     var ta=document.getElementById('pl-diag-txt'); ta.value=txt;
     document.getElementById('pl-diag-fec').onclick=function(){ ov.remove(); };
+    document.getElementById('pl-diag-con').onclick=function(ev){ ev.preventDefault();
+      gravar('pl_conexao', String(window.plConexao||'').indexOf('compat')===0?'normal':'compat'); gravar('pl_diag_viva','0'); location.reload(); };
     document.getElementById('pl-diag-cop').onclick=function(){
       var b=this, ok=function(){ b.textContent='✓ Copiado'; setTimeout(function(){ b.textContent='📋 Copiar'; },1600); };
       if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok, function(){ ta.select(); try{ document.execCommand('copy'); ok(); }catch(e){} });
@@ -5705,7 +5710,7 @@
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // MODO TV VIA LINK (?tv=1): detectado logo no início, antes de qualquer snapshot do Firebase
@@ -5723,7 +5728,36 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+/* ── MODO DE CONEXÃO COM O BANCO ─────────────────────────────────────
+   O Firestore normalmente fala com o servidor por uma conexão que fica
+   aberta, recebendo os dados aos poucos ("streaming"). No iPhone
+   (medido em 13/11/2026, Safari 26 / iOS 18.7) essa conexão segura as
+   respostas e só entrega em pacotes, a cada ~10 segundos: 14 MB de
+   dados levavam 45 s para chegar.
+   No modo "compatível" (long polling) cada resposta vem num pedido
+   próprio, que fecha e entrega na hora. É o recomendado pelo Firebase
+   para redes e navegadores que seguram o streaming.
+   Automático: compatível no iPhone/iPad, normal no resto. Dá para
+   trocar em Diagnóstico → Conexão, e a escolha fica no aparelho. */
+function _plConexaoEscolha(){
+  let pref=''; try{ pref=localStorage.getItem('pl_conexao')||''; }catch(e){}
+  if(pref==='compat' || pref==='normal') return pref;
+  const ua=navigator.userAgent||'';
+  const ios=/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints>1);
+  return ios?'compat':'normal';
+}
+const db = (()=>{
+  let modo=_plConexaoEscolha();
+  let d=null;
+  if(modo==='compat'){
+    try{ d=initializeFirestore(app, { experimentalForceLongPolling:true }); }
+    catch(e){ console.warn('modo compatível não ligou:', e); modo='normal (o compatível falhou: '+((e&&e.message)||e)+')'; }
+  }
+  if(!d) d=getFirestore(app);
+  window.plConexao=modo;
+  try{ if(window.plDiag) window.plDiag('conexão com o banco: '+modo); }catch(e){}
+  return d;
+})();
 
 // ===== PREFIXO pl_ =====
 // No banco do Comodato, toda coleção do Produlog leva o prefixo pl_
@@ -5776,8 +5810,15 @@ function _cargaChegou(id){
   }
 }
 function _cargaPintar(){
+  if(_carga.pronta || !_carga.fechada) return;
   const t=document.querySelector('#loading .loading-text');
   if(t) t.textContent='Carregando os dados… '+_carga.chegou+' de '+_carga.total;
+  // qual lista está sendo esperada agora (quando são poucas)
+  let e=document.getElementById('loading-esp');
+  const ld=document.getElementById('loading'); if(!ld) return;
+  if(!e){ e=document.createElement('div'); e.id='loading-esp'; e.style.cssText='margin-top:6px;color:rgba(255,255,255,.6);font-size:12px;text-align:center;padding:0 20px;min-height:16px;'; ld.insertBefore(e, document.getElementById('pl-diag-carga')); }
+  const v=_carga.esperando||[];
+  e.textContent=v.length && v.length<=3 ? ('aguardando: '+v.join(', ')) : '';
 }
 function _lsDiag(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 function _cargaComecar(){
@@ -5812,7 +5853,7 @@ function _cargaTerminar(como){
   if(_carga.pronta) return;
   _carga.pronta=true;
   try{ if(window.plDiag && como!=='direto') window.plDiag('carga '+como+': '+_carga.chegou+' de '+_carga.total+' listas em '+((Date.now()-_carga.t0)/1000).toFixed(1)+'s'); }catch(e){}
-  document.getElementById('loading-extra')?.remove(); document.getElementById('loading-seg')?.remove();
+  document.getElementById('loading-extra')?.remove(); document.getElementById('loading-seg')?.remove(); document.getElementById('loading-esp')?.remove();
   const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
   try{ atualizarTela(); }catch(e){ console.error('primeiro desenho:', e); }
 }
@@ -5891,32 +5932,57 @@ function _plLigarFila(){
   const fila=_plFila; _plFila=[];
   const pular=Array.isArray(window.plDiagPular)?window.plDiagPular:[];
   const serie=window.plDiagTravou===true;
-  const K=serie?1:12;
+  /* Uso normal: todas de uma vez. A medição no iPhone (13/11/2026)
+     mostrou que os dados são poucos — 16 mil documentos, 14 MB — e que
+     a demora vinha da conexão, não do volume; ligar aos poucos só
+     multiplicava a espera.
+     Modo de segurança (sessão seguinte a um travamento): uma por vez,
+     cadastros primeiro e histórico por último, para ficar gravado
+     exatamente em qual lista a aba morreu. */
+  const PESADAS=['registros','carregamentos','contagens','estoqueCtrlMov','containerMovs','controleProducao','qualidade','ajustesContagem'];
+  const nomeDe=it=>{ const id=it.args.__cargaId; return id?(_carga.pend[id]||''):''; };
+  const leves=fila.filter(it=>PESADAS.indexOf(nomeDe(it))<0), pesadas=fila.filter(it=>PESADAS.indexOf(nomeDe(it))>=0)
+    .sort((a,b)=>PESADAS.indexOf(nomeDe(b))-PESADAS.indexOf(nomeDe(a)));     // "registros", a maior suspeita, por último
   const voo={};
-  const gravaVoo=()=>_lsDiag('pl_diag_voo', JSON.stringify(Object.values(voo)));
-  _lsDiag('pl_diag_serie', serie?'1':'0');
-  let i=0, ativos=0;
-  const proximo=()=>{
-    while(ativos<K && i<fila.length){
-      const it=fila[i++];
-      if(it.cancelado) continue;
-      const id=it.args.__cargaId, nome=id?_carga.pend[id]:'';
-      if(id && nome && pular.includes(nome)){
-        try{ if(window.plDiag) window.plDiag('PULADA neste aparelho: '+nome); }catch(e){}
-        _cargaChegou(id); continue;
+  const gravaVoo=()=>{ const v=Object.values(voo); _lsDiag('pl_diag_voo', JSON.stringify(v)); _carga.esperando=v; _cargaPintar(); };
+  const rodar=(lista, K, umaPorVez, aoFim)=>{
+    _lsDiag('pl_diag_serie', umaPorVez?'1':'0');
+    let i=0, ativos=0, acabou=false;
+    const fim=()=>{ if(!acabou && i>=lista.length && ativos===0){ acabou=true; aoFim&&aoFim(); } };
+    const proximo=()=>{
+      while(ativos<K && i<lista.length){
+        const it=lista[i++];
+        if(it.cancelado) continue;
+        const id=it.args.__cargaId, nome=nomeDe(it);
+        if(id && nome && pular.includes(nome)){
+          try{ if(window.plDiag) window.plDiag('PULADA neste aparelho: '+nome); }catch(e){}
+          _cargaChegou(id); continue;
+        }
+        if(!id || !nome){ try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }catch(e){ console.error('leitura:', e); } continue; }
+        ativos++; voo[id]=nome; gravaVoo();
+        if(umaPorVez){ try{ if(window.plDiag) window.plDiag('pedindo '+nome); }catch(e){} }
+        let liberou=false;
+        const liberar=()=>{ if(liberou) return; liberou=true; clearTimeout(tm); ativos--; proximo(); fim(); };
+        _carga.aoChegar[id]=()=>{ delete voo[id]; gravaVoo(); liberar(); };
+        // lista leve que demora não segura a fila; lista pesada tem mais prazo (é grande mesmo)
+        const tm=umaPorVez ? setTimeout(()=>{ try{ if(window.plDiag) window.plDiag('demorando mais de 45 s: '+nome); }catch(e){} liberar(); }, 45000) : 0;
+        try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }
+        catch(e){ console.error('leitura:', e); _cargaChegou(id); }
       }
-      if(!id || !nome){ try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }catch(e){ console.error('leitura:', e); } continue; }
-      ativos++; voo[id]=nome; gravaVoo();
-      let liberou=false;
-      const liberar=()=>{ if(liberou) return; liberou=true; clearTimeout(tm); ativos--; proximo(); };
-      _carga.aoChegar[id]=()=>{ delete voo[id]; gravaVoo(); liberar(); };
-      const tm=setTimeout(()=>{ try{ if(window.plDiag) window.plDiag('demorando mais de 10 s: '+nome); }catch(e){} liberar(); }, 10000);
-      try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }
-      catch(e){ console.error('leitura:', e); _cargaChegou(id); }
-    }
+      fim();
+    };
+    proximo();
   };
-  try{ if(window.plDiag) window.plDiag('ligando '+fila.length+' listas, '+(serie?'UMA por vez (modo de segurança)':K+' por vez')); }catch(e){}
-  proximo();
+  if(!serie){
+    try{ if(window.plDiag) window.plDiag('ligando '+fila.length+' listas de uma vez'); }catch(e){}
+    rodar(fila, fila.length, false, null);
+    return;
+  }
+  try{ if(window.plDiag) window.plDiag('ligando '+fila.length+' listas UMA por vez (modo de segurança): '+leves.length+' cadastros, depois '+pesadas.length+' de histórico'); }catch(e){}
+  rodar(leves, 1, true, ()=>{
+    try{ if(window.plDiag) window.plDiag('cadastros prontos; agora as listas de histórico'); }catch(e){}
+    rodar(pesadas, 1, true, null);
+  });
 }
 /* tela s-login tem três jeitos: formulário, mensagem de espera, ou mensagem + desconectar */
 function _plMostrarLogin(){
