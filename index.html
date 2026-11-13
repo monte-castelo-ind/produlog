@@ -5585,7 +5585,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='13/11/2026 · 7';
+  var VERSAO='13/11/2026 · 8';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -20311,8 +20311,32 @@ function carregToggleLog(cod){
   _carregRenderMantendoScroll();
 }
 window.carregToggleLog=carregToggleLog;
+/* ── ARQUIVO DO REGISTRO DE BIPAGEM ──────────────────────────────────
+   Cada bip fica anotado dentro do carregamento (hora, quem, quanto).
+   Medido em 13/11/2026: isso faz a lista de carregamentos pesar 10,6 MB
+   dos 17 MB que o app baixa toda vez que abre. O arquivo tira esse
+   registro dos carregamentos JÁ CONCLUÍDOS e guarda em outra coleção
+   (carregamentosLog), que só é lida quando alguém abre o histórico de
+   um produto. As quantidades (solicitado e bipado) não mudam, então
+   vendas, estoque e relatórios continuam iguais. */
+const _carregArq={};          // id do carregamento → {código:[lançamentos]} | null (falhou) | undefined (não buscado)
+async function _carregBuscarArq(id){
+  if(_carregArq[id]!==undefined) return;
+  _carregArq[id]=false;       // buscando
+  try{ const sn=await getDoc(doc(db,'carregamentosLog',id)); _carregArq[id]=sn.exists()?(sn.data().itens||{}):{}; }
+  catch(e){ console.error('arquivo de bipagem:', e); _carregArq[id]=null; }
+  if(document.querySelector('.screen.active')?.id==='s-carreg-conf') _carregRenderMantendoScroll();
+}
 function _carregLogHtml(it){
-  const log=Array.isArray(it.log)?it.log:[];
+  let log=Array.isArray(it.log)?it.log:[];
+  const cAt=_carregConf;
+  if(cAt && cAt.logArquivado && cAt.firestoreId){
+    const arq=_carregArq[cAt.firestoreId];
+    if(arq===undefined){ _carregBuscarArq(cAt.firestoreId); }
+    if(arq===undefined || arq===false) return '<div style="margin-top:8px;background:#f8fafc;border-radius:8px;padding:10px;font-size:12px;color:#64748b;">Buscando o histórico arquivado…</div>';
+    if(arq===null) return '<div style="margin-top:8px;background:#fef2f2;border-radius:8px;padding:10px;font-size:12px;color:#b91c1c;">Não consegui buscar o histórico arquivado. Confira a internet e toque de novo.</div>';
+    log=(arq[String(it.codigo)]||[]).concat(log);
+  }
   if(!log.length) return '<div style="margin-top:8px;background:#f8fafc;border-radius:8px;padding:10px;font-size:12px;color:#64748b;">Nenhum lançamento registrado ainda.</div>';
   const icone=v=> v==='bip'?'📡':(v==='manual'?'✋':'⌨️');
   const rot=v=> v==='bip'?'bipado':(v==='manual'?'ajuste manual':'código digitado');
@@ -20377,6 +20401,68 @@ function _carregStatusInfo(s, pausado){
   return {label:'Aberto',cor:'#2563eb',bg:'rgba(37,99,235,.1)',emoji:'📝'};
 }
 function _carregAbertos(){ return carregamentos.filter(c=>c.status!=='concluido').length; }
+
+/* Carregamentos concluídos (não os de hoje) que ainda carregam o registro de bipagem */
+function _carregArquivaveis(){
+  const hj=hoje();
+  return (carregamentos||[]).filter(c=>c.status==='concluido' && c.firestoreId &&
+    String(c.concluidoEm||'').slice(0,10)!==hj && c.data!==hj &&
+    (c.itens||[]).some(it=>Array.isArray(it.log) && it.log.length));
+}
+function _carregArqResumo(lista){
+  let n=0, bytes=0;
+  lista.forEach(c=>(c.itens||[]).forEach(it=>{ if(Array.isArray(it.log)){ n+=it.log.length; try{ bytes+=JSON.stringify(it.log).length; }catch(e){} } }));
+  return {n, mb:bytes/1048576};
+}
+async function carregArquivarLogs(){
+  if(window.adminMode!==true){ alert('Só o admin arquiva.'); return; }
+  const lista=_carregArquivaveis();
+  if(!lista.length){ alert('Nada para arquivar.'); return; }
+  const r=_carregArqResumo(lista);
+  if(!confirm('Arquivar o registro de bipagem de '+lista.length+' carregamento(s) concluído(s)?\n\n'+
+    r.n.toLocaleString('pt-BR')+' lançamentos · cerca de '+r.mb.toFixed(1).replace('.',',')+' MB\n\n'+
+    'O que muda: o histórico bip a bip sai de dentro do carregamento e vai para um arquivo à parte. Continua aparecendo ao tocar no produto.\n'+
+    'O que NÃO muda: quantidades solicitadas e bipadas, vendas, estoque e relatórios.\n\n'+
+    'Leva alguns minutos. Deixe esta tela aberta até terminar.')) return;
+  const ov=document.createElement('div'); ov.id='carreg-arq-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:24px;text-align:center;"><div style="font-size:30px;">🗜️</div>'+
+    '<div style="font-size:16px;font-weight:800;margin-top:6px;">Arquivando…</div><div id="carreg-arq-txt" style="font-size:13px;color:#64748b;margin-top:6px;">0 de '+lista.length+'</div>'+
+    '<div style="height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-top:12px;"><div id="carreg-arq-bar" style="height:100%;width:0;background:#1e40af;"></div></div>'+
+    '<div style="font-size:11px;color:#94a3b8;margin-top:10px;">não feche esta tela</div></div>';
+  document.body.appendChild(ov);
+  const conta=o=>Object.values(o||{}).reduce((t,a)=>t+(Array.isArray(a)?a.length:0),0);
+  let feitos=0, erro='';
+  for(const c of lista){
+    try{
+      // 1. junta o que sai do carregamento com o que já estava arquivado (se já foi arquivado antes e reaberto)
+      const novos={};
+      (c.itens||[]).forEach(it=>{ if(Array.isArray(it.log) && it.log.length){ const k=String(it.codigo); novos[k]=(novos[k]||[]).concat(it.log); } });
+      const ref=doc(db,'carregamentosLog',c.firestoreId);
+      let base={};
+      if(c.logArquivado){ const ant=await getDoc(ref); if(ant.exists()) base=ant.data().itens||{}; }
+      const junto={...base};
+      Object.keys(novos).forEach(k=>{ junto[k]=(base[k]||[]).concat(novos[k]); });
+      // 2. grava o arquivo e CONFERE antes de mexer no carregamento
+      await setDoc(ref,{itens:junto, nome:c.nome||'', data:c.data||'', total:conta(junto), arquivadoEm:agora(), por:_demAutor()});
+      const conf=await getDoc(ref);
+      if(!conf.exists() || conta(conf.data().itens)!==conta(junto)) throw new Error('o arquivo não conferiu');
+      // 3. só então tira o registro de dentro do carregamento (as quantidades ficam)
+      const itens=(c.itens||[]).map(it=>{ const {log, ...resto}=it; const q=(parseInt(it.logArq)||0)+(Array.isArray(log)?log.length:0); return q?{...resto, logArq:q}:resto; });
+      await updateDoc(doc(db,'carregamentos',c.firestoreId),{itens, logArquivado:true});
+      _carregArq[c.firestoreId]=junto;
+      feitos++;
+    }catch(e){ erro=(c.nome||c.firestoreId)+': '+((e&&(e.code||e.message))||e); console.error('arquivar bipagem', e); break; }
+    const t=document.getElementById('carreg-arq-txt'), b=document.getElementById('carreg-arq-bar');
+    if(t) t.textContent=feitos+' de '+lista.length; if(b) b.style.width=Math.round(feitos/lista.length*100)+'%';
+  }
+  ov.remove();
+  try{ if(window.plDiag) window.plDiag('arquivo de bipagem: '+feitos+' de '+lista.length+(erro?' · parou em '+erro:'')); }catch(e){}
+  alert(erro ? ('Arquivei '+feitos+' de '+lista.length+' e parei num erro:\n\n'+erro+'\n\nNada foi perdido: o carregamento que deu erro continua como estava. Me mande esta mensagem.')
+             : ('✓ '+feitos+' carregamento(s) arquivado(s).\n\nO app fica mais leve a partir da próxima abertura.'));
+  if(document.querySelector('.screen.active')?.id==='s-carreg') renderCarreg();
+}
+window.carregArquivarLogs=carregArquivarLogs;
 function _carregAtualizarBadge(){ if(typeof _hubContadores==='function')_hubContadores(); const n=_carregAbertos(); document.querySelectorAll('.carreg-badge').forEach(b=>{ b.textContent=n; b.style.display=n>0?'inline-flex':'none'; }); }
 
 // ---------- HUB ----------
@@ -20389,6 +20475,17 @@ function renderCarreg(){
   if(typeof pfAvisoCarregHtml==='function') html+=pfAvisoCarregHtml();
   if(typeof pfAtualizarBadge==='function') setTimeout(pfAtualizarBadge,0);
   if(podeGerenciar) html+='<button class="btn btn-primary" style="width:100%;margin-bottom:12px;" onclick="novoCarreg()">+ Novo carregamento</button>';
+  if(isAdmin){
+    const arqv=_carregArquivaveis();
+    if(arqv.length>=5){
+      const ra=_carregArqResumo(arqv);
+      html+='<button onclick="carregArquivarLogs()" style="display:block;width:100%;text-align:left;background:#fff;border:1px dashed #1e40af;border-radius:11px;padding:11px 14px;margin-bottom:12px;cursor:pointer;font-family:inherit;">'+
+        '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:19px;">🗜️</span><span style="flex:1;min-width:0;">'+
+        '<span style="display:block;font-size:13px;font-weight:800;color:#1e40af;">Arquivar o registro de bipagem dos concluídos</span>'+
+        '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:1px;">'+arqv.length+' carregamento(s) · cerca de '+ra.mb.toFixed(1).replace('.',',')+' MB que o app baixa toda vez que abre</span></span>'+
+        '<span style="color:#1e40af;font-size:16px;">›</span></div></button>';
+    }
+  }
   if(!carregamentos.length){ el.innerHTML=html+'<div class="empty" style="padding:24px;">Nenhum carregamento. '+(isAdmin?'Crie um para a expedição conferir.':'Aguarde o admin criar um carregamento.')+'</div>'; return; }
   const _dtKey=(c)=>{ const p=String(c.data||'').split('/'); return (p.length===3)? (p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0')) : '00000000'; };
   const lista=carregamentos.slice().sort((a,b)=>{ const k=_dtKey(b).localeCompare(_dtKey(a)); if(k!==0) return k; return (b.timestamp||0)-(a.timestamp||0); });
@@ -20919,7 +21016,7 @@ function renderCarregConf(){
     const cor=excedeu?'#dc2626':(completo?'#16a34a':(zero?'#94a3b8':'#2563eb'));
     const bg=completo?'rgba(22,163,74,.07)':(excedeu?'rgba(220,38,38,.06)':'transparent');
     const logAberto=_carregLogAberto===String(it.codigo);
-    const nLog=Array.isArray(it.log)?it.log.length:0;
+    const nLog=(Array.isArray(it.log)?it.log.length:0)+(parseInt(it.logArq)||0);   // inclui os já arquivados
     return '<div style="padding:10px;border-radius:10px;margin-bottom:6px;background:'+bg+';border-left:5px solid '+cor+';">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
         '<div onclick="carregToggleLog(\''+escapeJsStr(it.codigo)+'\')" style="flex:1;min-width:0;cursor:pointer;"><div style="font-size:15px;font-weight:700;'+(completo?'color:#16a34a;':'')+'">'+(completo?'✅ ':'')+it.nome+' <span style="font-size:12px;color:#94a3b8;">'+(logAberto?'▾':'▸')+(nLog?' 🕐'+nLog:'')+'</span></div>'+
