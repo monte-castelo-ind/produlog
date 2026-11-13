@@ -5585,7 +5585,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='13/11/2026 · 6';
+  var VERSAO='13/11/2026 · 7';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -5640,7 +5640,7 @@
   window.plDiagRecarregarTudo=function(){ gravar('pl_pular','[]'); gravar('pl_diag_viva','0'); location.reload(); };
   window.plDiagVersao=VERSAO;
   window.plDiagTexto=function(){
-    var L=['PRODULOG — DIAGNÓSTICO', 'versão '+VERSAO+' · '+new Date().toLocaleString('pt-BR'), aparelho(), 'conexão com o banco: '+(window.plConexao||'?'), ''];
+    var L=['PRODULOG — DIAGNÓSTICO', 'versão '+VERSAO+' · '+new Date().toLocaleString('pt-BR'), aparelho(), 'conexão com o banco: '+(window.plConexao||'?')+' · abertura rápida: '+(window.plCache?'ligada':'desligada'), ''];
     var tr=null; try{ tr=JSON.parse(ler('pl_diag_travou')||'null'); }catch(e){}
     if(tr){
       L.push('=== ÚLTIMO TRAVAMENTO ('+tr.quando+' · versão '+tr.versao+' · já são '+(tr.vezes||1)+') ===', 'último sinal: '+(tr.pulso||'—'),
@@ -5668,10 +5668,14 @@
         '<button id="pl-diag-fec" style="flex:1 1 120px;border:1px solid #cbd5e1;background:#fff;border-radius:10px;padding:11px;font-weight:700;font-family:inherit;font-size:14px;">Fechar</button></div>'+
       '<div style="padding:0 18px 14px;font-size:12px;color:#64748b;line-height:1.5;">Conexão com o banco: <b>'+(String(window.plConexao||'').indexOf('compat')===0?'compatível':'normal')+'</b>'+
         (ler('pl_conexao')?' (escolhida neste aparelho)':' (automática)')+' · '+
-        '<a href="#" id="pl-diag-con" style="color:#1d4ed8;font-weight:700;">trocar para '+(String(window.plConexao||'').indexOf('compat')===0?'normal':'compatível')+'</a></div></div>';
+        '<a href="#" id="pl-diag-con" style="color:#1d4ed8;font-weight:700;">trocar para '+(String(window.plConexao||'').indexOf('compat')===0?'normal':'compatível')+'</a>'+
+        '<br>Abertura rápida (guarda os dados neste aparelho): <b>'+(window.plCache?'ligada':'desligada')+'</b> · '+
+        '<a href="#" id="pl-diag-cache" style="color:#1d4ed8;font-weight:700;">'+(window.plCache?'desligar':'ligar')+'</a></div></div>';
     document.body.appendChild(ov);
     var ta=document.getElementById('pl-diag-txt'); ta.value=txt;
     document.getElementById('pl-diag-fec').onclick=function(){ ov.remove(); };
+    document.getElementById('pl-diag-cache').onclick=function(ev){ ev.preventDefault();
+      gravar('pl_cache', window.plCache?'0':'1'); gravar('pl_diag_viva','0'); location.reload(); };
     document.getElementById('pl-diag-con').onclick=function(ev){ ev.preventDefault();
       gravar('pl_conexao', String(window.plConexao||'').indexOf('compat')===0?'normal':'compat'); gravar('pl_diag_viva','0'); location.reload(); };
     document.getElementById('pl-diag-cop').onclick=function(){
@@ -5710,7 +5714,7 @@
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, initializeFirestore, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // MODO TV VIA LINK (?tv=1): detectado logo no início, antes de qualquer snapshot do Firebase
@@ -5746,16 +5750,31 @@ function _plConexaoEscolha(){
   const ios=/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints>1);
   return ios?'compat':'normal';
 }
+/* ── ABERTURA RÁPIDA (dados guardados no aparelho) ───────────────────
+   Medido em 13/11/2026: o app carrega 16 mil documentos (14 MB) toda
+   vez que abre, e isso leva 18 s no iPhone. Com a abertura rápida, o
+   Firestore guarda os dados no próprio aparelho: da segunda vez em
+   diante o app abre com o que já tinha e busca do servidor só o que
+   mudou. Enquanto confere com o servidor, um aviso no topo mostra o
+   andamento ("Atualizando… 37 de 91").
+   É ligada por aparelho, em Diagnóstico. Desligada, nada muda. */
+let _plCacheLigado=false; try{ _plCacheLigado=localStorage.getItem('pl_cache')==='1'; }catch(e){}
 const db = (()=>{
   let modo=_plConexaoEscolha();
+  const opc={};
+  if(modo==='compat') opc.experimentalForceLongPolling=true;
+  if(_plCacheLigado){
+    try{ opc.localCache=persistentLocalCache({ tabManager:persistentMultipleTabManager(), cacheSizeBytes:200*1024*1024 }); }
+    catch(e){ console.warn('abertura rápida não ligou:', e); _plCacheLigado=false; }
+  }
   let d=null;
-  if(modo==='compat'){
-    try{ d=initializeFirestore(app, { experimentalForceLongPolling:true }); }
-    catch(e){ console.warn('modo compatível não ligou:', e); modo='normal (o compatível falhou: '+((e&&e.message)||e)+')'; }
+  if(Object.keys(opc).length){
+    try{ d=initializeFirestore(app, opc); }
+    catch(e){ console.warn('opções da conexão não ligaram:', e); modo='normal (as opções falharam: '+((e&&e.message)||e)+')'; _plCacheLigado=false; }
   }
   if(!d) d=getFirestore(app);
-  window.plConexao=modo;
-  try{ if(window.plDiag) window.plDiag('conexão com o banco: '+modo); }catch(e){}
+  window.plConexao=modo; window.plCache=_plCacheLigado;
+  try{ if(window.plDiag) window.plDiag('conexão com o banco: '+modo+' · abertura rápida: '+(_plCacheLigado?'ligada':'desligada')); }catch(e){}
   return d;
 })();
 
@@ -5856,14 +5875,43 @@ function _cargaTerminar(como){
   document.getElementById('loading-extra')?.remove(); document.getElementById('loading-seg')?.remove(); document.getElementById('loading-esp')?.remove();
   const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
   try{ atualizarTela(); }catch(e){ console.error('primeiro desenho:', e); }
+  _sinc.ultimo=Date.now(); _sincPintar();       // com a abertura rápida, mostra o que ainda falta conferir
 }
 window.cargaEntrarAssim=function(){ _cargaTerminar('incompleta (a pessoa escolheu entrar)'); };
+
+/* Conferência com o servidor (só com a abertura rápida ligada) */
+const _sinc={total:0, ok:0, pend:{}, t0:Date.now(), fim:false, ultimo:Date.now()};
+function _sincChegou(id){
+  if(!_sinc.pend[id]) return;
+  delete _sinc.pend[id]; _sinc.ok++; _sinc.ultimo=Date.now();
+  _sincPintar();
+}
+function _sincPintar(){
+  if(!_plCacheLigado || _sinc.fim) return;
+  let el=document.getElementById('pl-sinc');
+  if(_sinc.ok>=_sinc.total){
+    _sinc.fim=true; if(el) el.remove();
+    try{ if(window.plDiag) window.plDiag('conferido com o servidor: '+_sinc.ok+' de '+_sinc.total+' listas em '+((Date.now()-_sinc.t0)/1000).toFixed(1)+'s'); }catch(e){}
+    return;
+  }
+  if(!_carga.pronta) return;                    // durante a tela de carregamento não precisa
+  if(!el){
+    el=document.createElement('div'); el.id='pl-sinc';
+    el.style.cssText='position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:900;background:#1e3a8a;color:#fff;border-radius:99px;padding:6px 14px;font-size:12px;font-weight:700;box-shadow:0 4px 14px rgba(15,23,42,.25);white-space:nowrap;max-width:92vw;overflow:hidden;text-overflow:ellipsis;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  const parado=Date.now()-_sinc.ultimo>25000;
+  el.style.background=parado?'#b45309':'#1e3a8a';
+  el.textContent=parado ? '⚠️ Sem resposta do servidor: mostrando os dados guardados no aparelho'
+                        : '🔄 Atualizando com o servidor… '+_sinc.ok+' de '+_sinc.total;
+}
+setInterval(()=>{ if(_plCacheLigado && !_sinc.fim) _sincPintar(); }, 3000);
 
 /* Embrulha a função de cada escuta: conta a primeira resposta (para a
    carga inicial) e anota no diagnóstico as listas grandes. */
 function _diagEscuta(ref, args){
   try{
-    const i=args.findIndex(a=>typeof a==='function'); if(i<0) return args;
+    let i=args.findIndex(a=>typeof a==='function'); if(i<0) return args;
     let caminho=ref&&ref.path;
     if(!caminho){ try{ caminho=ref._query.path.segments.join('/'); }catch(e){} }
     const f=args[i], nome=String(caminho||'consulta').replace(/^pl_/,'');
@@ -5871,9 +5919,34 @@ function _diagEscuta(ref, args){
     // só as escutas criadas antes de a conta ser liberada fazem parte da carga inicial
     const id=(!_carga.fechada)?('e'+(++_carga.seq)):null;
     if(id){ _carga.pend[id]=nome; _carga.total++; }
-    let visto=false;
+    /* Abertura rápida: a escuta passa a avisar também quando o servidor
+       confirma os dados (sem mudança nenhuma). O app só é chamado quando
+       algo mudou de fato — igual a antes; a confirmação serve só para o
+       aviso "Atualizando…". Quem já pedia esses avisos continua recebendo. */
+    let queriaMeta=false;
+    if(_plCacheLigado){
+      const iOp=c.findIndex((a,k)=>k<i && a && typeof a==='object');
+      if(iOp>=0){ queriaMeta=!!c[iOp].includeMetadataChanges; c[iOp]={...c[iOp], includeMetadataChanges:true}; }
+      else { c.splice(i,0,{includeMetadataChanges:true}); i++; }
+      if(id){ _sinc.total++; _sinc.pend[id]=nome; }
+    }
+    let visto=false, ultimoDoc=null;
     c[i]=function(snap){
       const primeira=!visto; visto=true;
+      if(_plCacheLigado){
+        const doServidor=!(snap && snap.metadata && snap.metadata.fromCache);
+        let mudou=primeira || queriaMeta;
+        if(!mudou){
+          try{
+            if(snap && typeof snap.docChanges==='function') mudou=snap.docChanges().length>0;
+            else { const j=JSON.stringify([snap.exists&&snap.exists(), snap.data&&snap.data()]); mudou=(j!==ultimoDoc); ultimoDoc=j; }
+          }catch(e){ mudou=true; }
+        } else if(snap && typeof snap.docChanges!=='function'){
+          try{ ultimoDoc=JSON.stringify([snap.exists&&snap.exists(), snap.data&&snap.data()]); }catch(e){}
+        }
+        if(doServidor && id) _sincChegou(id);
+        if(!mudou) return;                       // só confirmação do servidor: nada a redesenhar
+      }
       let t1=0;
       if(primeira){
         try{
@@ -5901,12 +5974,12 @@ function _diagEscuta(ref, args){
       }
     };
     // erro (sem permissão, por exemplo) também conta como "respondeu", senão a carga nunca terminaria
-    const iErr=args.findIndex((a,k)=>k>i && typeof a==='function');
-    const fErr=iErr>=0?args[iErr]:null;
+    const iErr=c.findIndex((a,k)=>k>i && typeof a==='function');
+    const fErr=iErr>=0?c[iErr]:null;
     const aoErrar=function(err){
       try{ if(window.plDiag) window.plDiag('lista '+nome+' deu erro: '+((err&&(err.code||err.message))||err)); }catch(e){}
       try{ if(fErr) return fErr.apply(this, arguments); else console.error('leitura '+nome+':', err); }
-      finally{ if(id) _cargaChegou(id); }
+      finally{ if(id){ _cargaChegou(id); if(_plCacheLigado) _sincChegou(id); } }
     };
     if(iErr>=0) c[iErr]=aoErrar; else c.splice(i+1,0,aoErrar);
     c.__cargaId=id;      // para o porteiro avisar a carga se a escuta for cancelada antes de responder
