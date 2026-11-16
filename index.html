@@ -5613,7 +5613,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='16/11/2026 · 13';
+  var VERSAO='16/11/2026 · 14';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -8496,6 +8496,13 @@ function _erNovo(el){
    podem ser trazidos para hoje.
    Guarda em configuracoes/embPlano: { itens: { id: {...} } }. */
 let _plnItens={}, _plnOuvindo=false, _plnSem='', _plnSel='', _plnBusca='', _plnClasse='', _plnArr=false;
+/* Classes que NÃO entram no plano da semana (ex.: o Pão Francês, que é
+   embalado no dia e ninguém planeja). Ficam fora da lista, dos totais
+   e da capacidade desta tela. Escolhido em "Classes do plano"; vale
+   para todos. Enquanto ninguém escolher, o Pão Francês já fica fora. */
+let _plnFora=['Pão Francês'];
+const _plnNomeClasse=x=>x.tipo==='outro'?'Outros':(x.classe||'Sem classe');
+const _plnNoPlano=x=>_plnFora.indexOf(_plnNomeClasse(x))<0;
 function embPlanoAbrir(){ _erVista='plano'; goTo('s-emb-rend'); renderEmbRend(); }
 window.embPlanoAbrir=embPlanoAbrir;
 function _plnEscutar(){
@@ -8503,6 +8510,7 @@ function _plnEscutar(){
   onSnapshot(doc(db,'configuracoes','embPlano'), snap=>{
     try{
       _plnItens=(snap.exists() && snap.data().itens) ? snap.data().itens : {};
+      if(snap.exists() && Array.isArray(snap.data().foraClasses)) _plnFora=snap.data().foraClasses;
       if(document.querySelector('.screen.active')?.id==='s-emb-rend' && _erVista==='plano' && !_plnArr) renderEmbRend();
     }catch(e){ console.error('embPlano:', e); }
   }, err=>console.error('embPlano err:', err));
@@ -8511,7 +8519,7 @@ async function _plnSalvar(){
   // limpeza: item concluído há mais de 14 dias sai do registro
   const lim=new Date(); lim.setDate(lim.getDate()-14); const limN=_erNum(fmtData(lim));
   Object.keys(_plnItens).forEach(id=>{ if(_erNum(_plnItens[id].dia)<limN) delete _plnItens[id]; });
-  try{ await setDoc(doc(db,'configuracoes','embPlano'),{itens:_plnItens, atualizadoEm:agora(), por:_demAutor()}); }
+  try{ await setDoc(doc(db,'configuracoes','embPlano'),{itens:_plnItens, foraClasses:_plnFora, atualizadoEm:agora(), por:_demAutor()}); }
   catch(e){ alert('Não consegui salvar o plano: '+((e&&e.message)||e)); }
 }
 const _plnId=()=>'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -8539,19 +8547,23 @@ function _plnEstado(){
     const r=regPorId[reg], fechado=!r || !!(r.embalagem&&r.embalagem.feito);
     let resto=fechado?Infinity:Math.max(0,_plnEmb(r)-Math.min(...l.map(x=>Number(x.base)||0)));
     l.forEach(it=>{ const q=Number(it.qtd)||0, f=Math.min(q,resto); resto-=f;
-      itens.push({...it, feito:f, pronto:f>=q-0.001, atrasado:_erNum(it.dia)<hojeN && f<q-0.001}); });
+      if(_plnNoPlano(it)) itens.push({...it, feito:f, pronto:f>=q-0.001, atrasado:_erNum(it.dia)<hojeN && f<q-0.001}); });
   });
   // o que ainda não tem dia: falta do produto menos o que está planejado e ainda não foi feito
-  const pend=_erPendentes().map(p=>{
+  const todosPend=_erPendentes();
+  const foraPct=todosPend.filter(p=>!_plnNoPlano(p)).reduce((t,p)=>t+p.falta,0);
+  const pend=todosPend.filter(_plnNoPlano).map(p=>{
     const plan=itens.filter(it=>it.reg===p.r.firestoreId).reduce((t,it)=>t+Math.max(0,(Number(it.qtd)||0)-it.feito),0);
     return {...p, livre:Math.max(0,p.falta-plan)};
   });
-  return {itens, pend, hojeS, hojeN};
+  return {itens, pend, hojeS, hojeN, foraPct};
 }
 /* capacidade: média diária do que a embalagem lançou nos últimos 15 dias com lançamento */
 function _plnCapacidade(){
   const lim=new Date(); lim.setDate(lim.getDate()-15); const limN=_erNum(fmtData(lim)), hojeN=_erNum(fmtData(new Date()));
-  const d={}; _erEventos().ev.forEach(x=>{ const n=_erNum(x.dia); if(n>=limN && n<hojeN) d[x.dia]=(d[x.dia]||0)+x.pct; });
+  const d={}; _erEventos().ev.forEach(x=>{ const n=_erNum(x.dia); if(n<limN || n>=hojeN) return;
+    const g=x.r.manual?{tipo:'outro',classe:''}:_erGrupo(x.r); if(!_plnNoPlano(g)) return;      // classe fora do plano não conta na capacidade do plano
+    d[x.dia]=(d[x.dia]||0)+x.pct; });
   const v=Object.values(d).filter(x=>x>0.5);
   return v.length?Math.round(v.reduce((t,x)=>t+x,0)/v.length):0;
 }
@@ -8629,6 +8641,33 @@ async function plnAtrasados(){
   renderEmbRend(); await _plnSalvar();
 }
 window.plnAtrasados=plnAtrasados;
+function plnClasses(){
+  document.getElementById('pln-cls')?.remove();
+  const ordem=[...PAO_CLASSES, ...(typeof classesProducao!=='undefined'?classesProducao:[]), 'Sem classe', 'Outros'];
+  const qtd={}; _erPendentes().forEach(p=>{ const n=_plnNomeClasse(p); qtd[n]=(qtd[n]||0)+p.falta; });
+  const nomes=[...new Set(ordem.concat(Object.keys(qtd)).concat(_plnFora))].filter(n=>qtd[n]>0.5 || _plnFora.includes(n) || PAO_CLASSES.includes(n) || (typeof classesProducao!=='undefined' && classesProducao.includes(n)));
+  const ov=document.createElement('div'); ov.id='pln-cls';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;color:#0f172a;border-radius:18px;max-width:440px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;">'+
+    '<div style="padding:20px 20px 10px;"><div style="font-size:18px;font-weight:800;">Classes do plano</div>'+
+      '<div style="font-size:13px;color:#64748b;margin-top:4px;line-height:1.5;">Desligue as classes que não entram no plano da semana. Elas saem da lista, dos totais e da capacidade desta tela. No Rendimento continuam aparecendo.</div></div>'+
+    '<div style="overflow:auto;padding:0 20px;">'+nomes.map(n=>{ const on=!_plnFora.includes(n);
+      return '<button onclick="plnClasseAlternar(\''+n.replace(/'/g,"\\'")+'\')" role="switch" aria-checked="'+on+'" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:none;border-top:1px solid #f1f5f9;background:none;padding:11px 0;cursor:pointer;font-family:inherit;color:inherit;">'+
+        '<span style="flex:1;"><span style="display:block;font-size:14px;font-weight:650;">'+n+'</span><span style="display:block;font-size:12px;color:#64748b;">'+(qtd[n]>0.5?(Math.round(qtd[n]).toLocaleString('pt-BR')+' pacotes pendentes'):'nada pendente agora')+'</span></span>'+
+        '<span style="font-size:12px;font-weight:700;color:'+(on?'#1e40af':'#94a3b8')+';min-width:86px;text-align:right;">'+(on?'no plano':'fora do plano')+'</span>'+
+        '<span style="flex:0 0 38px;height:22px;border-radius:99px;background:'+(on?'#1e40af':'#cbd5e1')+';position:relative;"><span style="position:absolute;top:2px;left:'+(on?'18px':'2px')+';width:18px;height:18px;border-radius:50%;background:#fff;"></span></span></button>'; }).join('')+'</div>'+
+    '<div style="padding:14px 20px 18px;"><button class="btn btn-primary" style="width:100%;margin:0;" onclick="document.getElementById(\'pln-cls\').remove()">Pronto</button></div></div>';
+  document.body.appendChild(ov);
+}
+window.plnClasses=plnClasses;
+async function plnClasseAlternar(n){
+  const i=_plnFora.indexOf(n);
+  _plnFora=i>=0?_plnFora.filter(x=>x!==n):_plnFora.concat([n]);
+  if(_plnClasse===n) _plnClasse='';
+  renderEmbRend(); plnClasses();
+  await _plnSalvar();
+}
+window.plnClasseAlternar=plnClasseAlternar;
 async function plnLimpar(){
   const seg=_plnSem?new Date(_plnSem+'T12:00:00'):_plnSegunda(new Date());
   const dias=new Set(); for(let i=0;i<5;i++){ const d=new Date(seg); d.setDate(seg.getDate()+i); dias.add(fmtData(d)); }
@@ -8683,11 +8722,12 @@ function _erPlanoTela(el){
   const NOME=['Segunda','Terça','Quarta','Quinta','Sexta'];
   const corTipo=t=>t==='pao'?'var(--pao)':(t==='salgado'?'var(--salg)':'var(--mut)');
   const q=_normNome(_plnBusca||'').trim();
-  const passa=x=>(!q || _normNome(x.produto||'').includes(q)) && (!_plnClasse || (x.classe||'Outros')===_plnClasse);
+  const passa=x=>(!q || _normNome(x.produto||'').includes(q)) && (!_plnClasse || _plnNomeClasse(x)===_plnClasse);
   const livres=E.pend.filter(p=>p.livre>0.5).sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)||b.livre-a.livre);
-  const livresF=livres.filter(p=>passa({produto:p.r.produto, classe:p.tipo==='outro'?'Outros':p.classe}));
+  const livresF=livres.filter(p=>passa({produto:p.r.produto, tipo:p.tipo, classe:p.classe}));
   const daSemana=E.itens.filter(it=>dias.includes(it.dia));
-  const classes=[...new Set(E.pend.map(p=>p.tipo==='outro'?'Outros':p.classe).concat(daSemana.map(it=>it.classe||'Outros')))].filter(Boolean);
+  const classes=[...new Set(E.pend.map(_plnNomeClasse).concat(daSemana.map(_plnNomeClasse)))].filter(Boolean);
+  if(_plnClasse && !classes.includes(_plnClasse)) _plnClasse='';
   const totFalta=E.pend.reduce((t,p)=>t+p.falta,0), totLivre=livres.reduce((t,p)=>t+p.livre,0);
   const planSem=daSemana.reduce((t,it)=>t+(Number(it.qtd)||0),0), feitoSem=daSemana.reduce((t,it)=>t+it.feito,0);
   const atrasados=E.itens.filter(it=>it.atrasado);
@@ -8697,10 +8737,10 @@ function _erPlanoTela(el){
     '<div class="nx-acoes"><button class="nx-btn" onclick="erVista(\'rend\')">‹ Voltar ao rendimento</button>'+
       '<div class="nx-pills"><button onclick="plnSemana(-1)" aria-label="Semana anterior">‹</button><button class="'+(ehAtual?'on':'')+'" onclick="plnSemana(0)">Esta semana</button><button onclick="plnSemana(1)" aria-label="Próxima semana">›</button></div>'+
       '<button class="nx-btn pri" onclick="plnSugerir()" title="Distribui o que está sem encaixe, do mais antigo para o mais novo, até a capacidade do dia">✨ Sugerir</button>'+
-      '<button class="nx-btn" onclick="plnLimpar()">Limpar a semana</button>'+_erNxTemaBtn()+'</div></div>';
+      '<button class="nx-btn" onclick="plnLimpar()">Limpar a semana</button><button class="nx-btn" onclick="plnClasses()">Classes do plano</button>'+_erNxTemaBtn()+'</div></div>';
 
   h+='<div class="nx-g nx-g4i">'+
-    '<div class="nx-card"><div class="nx-rot">Falta embalar<span class="ax">agora</span></div><div class="nx-num">'+fmt(totFalta)+'<small>pacotes</small></div><div class="nx-sub">'+E.pend.length+' produto(s) pendente(s)</div></div>'+
+    '<div class="nx-card"><div class="nx-rot">Falta embalar<span class="ax">agora</span></div><div class="nx-num">'+fmt(totFalta)+'<small>pacotes</small></div><div class="nx-sub">'+E.pend.length+' produto(s) pendente(s)'+(_plnFora.length?(' · sem '+_plnFora.join(', ')+(E.foraPct>0.5?(' ('+fmt(E.foraPct)+' pct)'):'')):'')+'</div></div>'+
     '<div class="nx-card"><div class="nx-rot">Sem encaixe<span class="ax">ainda sem dia</span></div><div class="nx-num"'+(totLivre>0.5?' style="color:var(--or);"':'')+'>'+fmt(totLivre)+'<small>pacotes</small></div><div class="nx-sub">'+(totLivre>0.5?(livres.length+' produto(s) esperando um dia'):'tudo o que falta já tem dia')+'</div></div>'+
     '<div class="nx-card"><div class="nx-rot">Planejado na semana<span class="ax">'+semTxt+'</span></div><div class="nx-num">'+fmt(planSem)+'<small>pacotes</small></div><div class="nx-sub">'+(cap?('capacidade de uns '+fmt(cap)+' por dia · '+fmt(cap*5)+' na semana'):'sem histórico para estimar a capacidade')+'</div></div>'+
     '<div class="nx-card"><div class="nx-rot">Andamento do plano<span class="ax">ao vivo</span></div><div class="nx-num" style="color:var(--tl);">'+(planSem?Math.round(feitoSem/planSem*100):0)+'<small>%</small></div><div class="pl-bar" style="height:8px;margin-top:10px;"><i style="width:'+(planSem?Math.min(100,feitoSem/planSem*100):0)+'%;"></i></div><div class="nx-sub">'+fmt(feitoSem)+' de '+fmt(planSem)+' pacotes embalados</div></div>'+
