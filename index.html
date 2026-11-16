@@ -5613,7 +5613,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='16/11/2026 · 14';
+  var VERSAO='16/11/2026 · 15';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -8591,6 +8591,53 @@ async function plnColocar(k, dia){
   _plnSel=''; renderEmbRend(); await _plnSalvar();
 }
 window.plnColocar=plnColocar;
+/* o "+" no fim de cada dia: coloca ali o produto que estiver selecionado */
+function plnMais(dia){
+  if(_plnSel){ plnColocar(_plnSel, dia); return; }
+  const m='Toque primeiro num produto da lista “Sem encaixe” (ou num item do plano) e depois no +.';
+  if(typeof _ptAviso==='function') _ptAviso(m); else alert(m);
+}
+window.plnMais=plnMais;
+/* Ordem dentro do dia. "antesDe" = id do item que deve ficar logo abaixo;
+   vazio = vai para o fim. Serve para arrastar um item sobre outro e para
+   as setas ↑ ↓ (que funcionam também no tablet). */
+async function plnOrdenar(id, dia, antesDe){
+  const it=_plnItens[id]; if(!it) return;
+  // se veio de outro dia e o produto já tem cartão no dia de destino, junta
+  const ja=Object.keys(_plnItens).find(x=>x!==id && _plnItens[x].reg===it.reg && _plnItens[x].dia===dia);
+  if(it.dia!==dia && ja){ _plnItens[ja].qtd=Math.round((Number(_plnItens[ja].qtd)||0)+(Number(it.qtd)||0)); _plnItens[ja].base=Math.min(Number(_plnItens[ja].base)||0, Number(it.base)||0); delete _plnItens[id]; }
+  else {
+    it.dia=dia;
+    const ids=Object.keys(_plnItens).filter(x=>_plnItens[x].dia===dia && x!==id).sort((a,b)=>(_plnItens[a].ord||0)-(_plnItens[b].ord||0));
+    const pos=antesDe?ids.indexOf(antesDe):-1;
+    if(pos>=0) ids.splice(pos,0,id); else ids.push(id);
+    ids.forEach((x,i)=>{ _plnItens[x].ord=(i+1)*10; });
+  }
+  _plnSel=''; renderEmbRend(); await _plnSalvar();
+}
+async function plnMover(id, passo){
+  const it=_plnItens[id]; if(!it) return;
+  const ids=Object.keys(_plnItens).filter(x=>_plnItens[x].dia===it.dia).sort((a,b)=>(_plnItens[a].ord||0)-(_plnItens[b].ord||0));
+  const i=ids.indexOf(id), j=i+passo; if(j<0 || j>=ids.length) return;
+  [ids[i],ids[j]]=[ids[j],ids[i]];
+  ids.forEach((x,k)=>{ _plnItens[x].ord=(k+1)*10; });
+  renderEmbRend(); await _plnSalvar();          // o item continua selecionado, para subir/descer várias vezes
+}
+window.plnMover=plnMover;
+/* soltou sobre um item do plano: entra naquele dia, logo acima dele */
+async function plnSoltarEm(ev, alvoId){
+  ev.preventDefault(); ev.stopPropagation(); _plnArr=false;
+  let k=''; try{ k=ev.dataTransfer.getData('text/plain'); }catch(e){}
+  const alvo=_plnItens[alvoId]; if(!k || !alvo){ renderEmbRend(); return; }
+  if(k.startsWith('i:')){ const id=k.slice(2); if(id===alvoId){ renderEmbRend(); return; } await plnOrdenar(id, alvo.dia, alvoId); }
+  else if(k.startsWith('p:')){
+    const antes=new Set(Object.keys(_plnItens));
+    await plnColocar(k, alvo.dia);
+    const novo=Object.keys(_plnItens).find(x=>!antes.has(x));      // se somou num cartão que já existia, não há o que reordenar
+    if(novo) await plnOrdenar(novo, alvo.dia, alvoId);
+  }
+}
+window.plnSoltarEm=plnSoltarEm;
 async function plnTirar(id){ if(!_plnItens[id]) return; delete _plnItens[id]; _plnSel=''; renderEmbRend(); await _plnSalvar(); }
 window.plnTirar=plnTirar;
 async function plnQtd(id){
@@ -8702,7 +8749,15 @@ function _plnCss(){
 .pl-c .s{font-size:11px;color:var(--mut);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
 .pl-c .q{position:absolute;top:8px;right:9px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;}
 .pl-c .ac{display:flex;gap:6px;margin-top:7px;}
-.pl-mini{border:1px solid var(--bd);background:var(--card);color:var(--tx);font-family:inherit;font-size:11px;font-weight:600;border-radius:99px;padding:3px 9px;cursor:pointer;}
+.pl-mini{border:1px solid var(--bd);background:var(--card);color:var(--tx);font-family:inherit;font-size:11px;font-weight:600;border-radius:99px;padding:4px 10px;cursor:pointer;}
+.pl-mini:disabled{opacity:.3;cursor:default;}
+.pl-c .ac{flex-wrap:wrap;}
+.pl-c.acima{box-shadow:0 -3px 0 0 var(--or);}
+.pl-mais{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;min-height:44px;border:1.5px dashed var(--bd);background:none;color:var(--mut);border-radius:13px;font-family:inherit;font-size:22px;font-weight:400;line-height:1;cursor:pointer;flex:0 0 auto;padding:8px;}
+.pl-mais span{font-size:11px;font-weight:500;}
+.pl-mais:hover{color:var(--tx);border-color:var(--mut);}
+.pl-dia.pode .pl-mais{border-color:var(--or);color:var(--or);background:color-mix(in srgb,var(--or) 9%,transparent);}
+.pl-mais:focus-visible{outline:2px solid var(--or);outline-offset:2px;}
 .pl-vz{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11.5px;color:var(--mut);border:1px dashed var(--bd);border-radius:12px;padding:14px 8px;min-height:70px;}
 .pl-busca{width:100%;background:var(--pill) !important;border:1px solid var(--bd) !important;color:var(--tx) !important;border-radius:12px !important;padding:9px 11px !important;font-family:inherit;font-size:14px;margin-top:10px;box-shadow:none !important;}
 .pl-busca::placeholder{color:var(--mut);}
@@ -8764,7 +8819,7 @@ function _erPlanoTela(el){
 
   // direita: os cinco dias
   const colunas=dias.map((d,i)=>{
-    const its=daSemana.filter(it=>it.dia===d).sort((a,b)=>(a.pronto?1:0)-(b.pronto?1:0)||(a.ord||0)-(b.ord||0));
+    const its=daSemana.filter(it=>it.dia===d).sort((a,b)=>(a.ord||0)-(b.ord||0));
     const itsF=its.filter(passa);
     const plan=its.reduce((t,it)=>t+(Number(it.qtd)||0),0), feito=its.reduce((t,it)=>t+it.feito,0);
     const passou=_erNum(d)<E.hojeN, hoje=d===E.hojeS, acima=cap && plan>cap*1.1;
@@ -8774,18 +8829,25 @@ function _erPlanoTela(el){
       '<div class="pl-bar"><i style="width:'+(plan?Math.min(100,feito/plan*100):0)+'%;"></i></div>'+
       '<div class="pl-its">'+
         (itsF.length?itsF.map(it=>{ const k='i:'+it.id, pc=it.qtd?Math.min(100,it.feito/it.qtd*100):0;
-          return '<div class="pl-c'+(_plnSel===k?' sel':'')+(it.atrasado?' atr':'')+(it.pronto?' ok':'')+'" draggable="true" ondragstart="plnDragIni(event,\''+k+'\')" ondragend="plnDragFim()" onclick="event.stopPropagation();plnSelecionar(\''+k+'\')">'+
+          const pos=its.indexOf(it);
+          return '<div class="pl-c'+(_plnSel===k?' sel':'')+(it.atrasado?' atr':'')+(it.pronto?' ok':'')+'" draggable="true" ondragstart="plnDragIni(event,\''+k+'\')" ondragend="plnDragFim()" '+
+            'ondragover="event.preventDefault();event.stopPropagation();this.classList.add(\'acima\')" ondragleave="this.classList.remove(\'acima\')" ondrop="plnSoltarEm(event,\''+it.id+'\')" onclick="event.stopPropagation();plnSelecionar(\''+k+'\')">'+
             '<span class="n" style="display:block;">'+(it.pronto?'✓ ':'')+it.produto+'</span><span class="q">'+fmt(it.qtd)+'</span>'+
             '<span class="s"><span class="nx-pt" style="background:'+corTipo(it.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(it.classe||'Outro')+' · prod. '+String(it.dataProd||'').slice(0,5)+(it.atrasado?' <b style="color:var(--bad);font-weight:600;">· atrasado</b>':'')+'</span>'+
             '<div class="pl-bar"><i style="width:'+pc+'%;'+(it.pronto?'background:var(--ok);':'')+'"></i></div>'+
             '<span class="s" style="margin-top:4px;">'+fmt(it.feito)+' de '+fmt(it.qtd)+' embalados</span>'+
-            (_plnSel===k?'<div class="ac"><button class="pl-mini" onclick="event.stopPropagation();plnQtd(\''+it.id+'\')">Mudar quantidade</button><button class="pl-mini" onclick="event.stopPropagation();plnTirar(\''+it.id+'\')">Tirar do plano</button></div>':'')+
+            (_plnSel===k?'<div class="ac">'+
+              '<button class="pl-mini" onclick="event.stopPropagation();plnMover(\''+it.id+'\',-1)"'+(pos<=0?' disabled':'')+' aria-label="Subir na ordem do dia">↑</button>'+
+              '<button class="pl-mini" onclick="event.stopPropagation();plnMover(\''+it.id+'\',1)"'+(pos>=its.length-1?' disabled':'')+' aria-label="Descer na ordem do dia">↓</button>'+
+              '<button class="pl-mini" onclick="event.stopPropagation();plnQtd(\''+it.id+'\')">Quantidade</button><button class="pl-mini" onclick="event.stopPropagation();plnTirar(\''+it.id+'\')">Tirar</button></div>':'')+
           '</div>'; }).join('')
-          :'<div class="pl-vz">'+(its.length?'Nada com esse filtro.':(_plnSel?'Toque para colocar aqui':(passou?'Dia já passou':'Arraste um produto para cá')))+'</div>')+
+          :(its.length?'<div class="pl-vz">Nada com esse filtro.</div>':''))+
+        '<button class="pl-mais" onclick="event.stopPropagation();plnMais(\''+d+'\')" aria-label="Colocar o produto selecionado em '+NOME[i]+'" title="'+(_plnSel?'Colocar aqui':'Selecione um produto e toque aqui')+'">+'+
+          (its.length?'':'<span>'+(_plnSel?'colocar aqui':(passou?'dia já passou':'arraste ou toque no +'))+'</span>')+'</button>'+
       '</div></div>'; }).join('');
   h+='<div class="pl-wrap">'+esq+'<div class="pl-dias">'+colunas+'</div></div>';
   h+='<div class="nx-nota" style="margin-top:14px;">A barra de cada item anda conforme a embalagem lança o produto: o que for embalado depois de entrar no plano preenche os dias na ordem. '+
-    'A capacidade do dia é a média do que a embalagem lançou nos últimos 15 dias. Toque num item do plano para mudar a quantidade ou tirar. O plano é salvo sozinho e aparece igual para todos.</div></div>';
+    'A capacidade do dia é a média do que a embalagem lançou nos últimos 15 dias. Toque num item do plano para mudar a quantidade, tirar ou subir e descer na ordem do dia (↑ ↓); no computador dá também para arrastar um item para cima de outro. O plano é salvo sozinho e aparece igual para todos.</div></div>';
   el.innerHTML=h;
 }
 
