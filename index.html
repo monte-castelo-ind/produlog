@@ -2114,6 +2114,26 @@
     <div style="flex:1;padding:0;background:#f5f7fb;overflow-y:auto;" id="exp-dia-content"></div>
   </div>
 
+  <!-- ABAS POR SETOR (admin) -->
+  <div class="screen" id="s-adm-acessos">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Administrativo</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">🧩 Abas por setor</div>
+        <div class="mc-page-sub">Quais telas cada setor enxerga</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:0;background:#f5f7fb;overflow-y:auto;" id="acx-content"></div>
+  </div>
+
   <!-- PAINEL DA PRODUÇÃO (admin) -->
   <div class="screen" id="s-ppr">
     <div class="mc-header">
@@ -3597,6 +3617,14 @@
         <span class="mc-sector-arrow">›</span>
       </button>
       <div class="mc-section-header" style="margin-top:18px;">🗂️ Gestão e cadastros<span style="display:block;font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-top:1px;">equipe, relatórios e configuração</span></div>
+      <button class="mc-sector-card" onclick="acxAbrirGestao()">
+        <div class="mc-sector-icon" style="background:#e0e7ff;">🧩</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Abas por setor</div>
+          <div class="mc-sector-desc">Liberar telas para cada setor · quem enxerga o quê</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
       <button class="mc-sector-card" onclick="pautaAbrir()">
         <div class="mc-sector-icon" style="background:#fef3c7;">📋</div>
         <div class="mc-sector-info">
@@ -5585,7 +5613,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='13/11/2026 · 8';
+  var VERSAO='16/11/2026 · 13';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -6595,6 +6623,12 @@ window.voltar=voltar;
 
 function goTo(id, semHistorico){
   if(!_plLogado && id!=='s-login'){ id='s-login'; semHistorico=true; }   // sem login, só a tela de login
+  /* Os MENUS do admin são só do admin. Com as abas liberadas por setor,
+     um setor pode estar numa tela do admin; se um botão de voltar antigo
+     apontar para o menu, ele volta para a tela inicial do próprio setor. */
+  if(window.adminMode!==true && /^s-adm-(hub|g-[\w-]+|cadastros|acessos)$/.test(id)){
+    id=(window.setorAtual && window.setorAtual!=='admin' && DESTINOS[window.setorAtual]) || 's-inicio';
+  }
   try{ if(window.plDiag){ window.plDiagCont.telas++; window.plDiag('tela '+id+(window.adminMode?' (admin)':'')); } }catch(e){}
   const atual=_navTelaAtual();
   // guarda de onde veio, para o voltar saber o caminho
@@ -6608,6 +6642,7 @@ function goTo(id, semHistorico){
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
   if(id==='s-login') _plMostrarLogin();
+  if(typeof acxPintarSetor==='function') acxPintarSetor(id);
   if(typeof mcGarantirTelaCheia==='function') mcGarantirTelaCheia();
   if(id==='s-mp-precos') mppRender();
   if(id==='s-emb') embRender();
@@ -7847,7 +7882,7 @@ function _erEventos(){
     (e.parciais||[]).forEach(p=>{
       const q=Number(p.qtd)||0; if(!q) return;
       explicado+=q;
-      const dia=_erDataDe(p.hora); if(dia) ev.push({dia, pct:q/k, r});
+      const dia=_erDataDe(p.hora); if(dia){ const hr=_erHoraDe(p.hora); ev.push({dia, pct:q/k, r, hora:hr, turno:_erTurnoDe(hr)}); }
     });
     const ultParcial=(e.parciais||[]).map(p=>_erDataDe(p.hora)).filter(Boolean).pop();
     const diaFim=_erDataDe(e.horaFeito)||(e.emLote&&_erDataDe(e.emLote.em))||ultParcial||r.data;
@@ -7858,19 +7893,22 @@ function _erEventos(){
       if(resto>0.001 && diaFim) lote.push({dia:diaFim, pct:resto, r});
       return;
     }
+    // ajustes e fechamento entram na hora em que o produto foi finalizado
+    const hrFim=_erHoraDe(e.horaFeito);
     (e.alteracoes||[]).forEach(a=>{
       const q=Number(a.diff)||0; if(!q) return;
       explicado+=q;
-      if(diaFim) ev.push({dia:diaFim, pct:q/k, r});
+      if(diaFim) ev.push({dia:diaFim, pct:q/k, r, hora:hrFim, turno:_erTurnoDe(hrFim)});
     });
     if(e.feito){
       const resto=(Number(e.qtdEmbalada)||0)-explicado;
-      if(Math.abs(resto)>0.001 && diaFim) ev.push({dia:diaFim, pct:resto/k, r});
+      if(Math.abs(resto)>0.001 && diaFim) ev.push({dia:diaFim, pct:resto/k, r, hora:hrFim, turno:_erTurnoDe(hrFim)});
     }
   });
   (typeof embManual!=='undefined'?embManual:[]).forEach(m=>{
     const q=Number(m.qtdEmbalada)||0; if(!q) return;
-    ev.push({dia:_erDataDe(m.hora)||m.data, pct:q, r:{produto:m.produto, data:m.data, cod:'', manual:true}});
+    const hrM=_erHoraDe(m.hora);
+    ev.push({dia:_erDataDe(m.hora)||m.data, pct:q, r:{produto:m.produto, data:m.data, cod:'', manual:true}, hora:hrM, turno:_erTurnoDe(hrM)});
   });
   return {ev, lote};
 }
@@ -7904,31 +7942,11 @@ function erDatas(){
   _erDe=de; _erAte=ate; _erDia=''; renderEmbRend();
 }
 window.erDatas=erDatas;
-function erPendVer(k){ _erPendSel=(_erPendSel===k?'':k); renderEmbRend(); if(_erPendSel) setTimeout(()=>document.getElementById('er-pend-lista')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
+function erPendVer(k){ _erPendSel=(k && _erPendSel===k)?'':(k||''); renderEmbRend(); }
 window.erPendVer=erPendVer;
 
 /* Equipe da embalagem por dia, pelo Controle de Ponto: quem bateu ponto
    no setor de embalagem e quantas horas trabalhou. */
-function _erEquipe(){
-  const out={};
-  if(typeof pontoMeses==='undefined') return out;
-  Object.keys(pontoMeses).forEach(ch=>{
-    const ano=ch.slice(0,4);
-    ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
-      const setor=_normNome((typeof _pmesSetorDe==='function'?_pmesSetorDe(p,ch):'')||p.setor||'');
-      if(setor.indexOf('EMBALA')<0) return;
-      (p.dias||[]).forEach(d=>{
-        if(!d.batidas || !d.batidas.length) return;
-        const dia=d.data+'/'+ano;
-        let min=Number(d.minTrab)||0;
-        if(!min && typeof _pjDia==='function'){ const j=_pjDia(d); if(j) min=j.trab; }
-        const o=out[dia]||(out[dia]={pessoas:new Set(), min:0});
-        o.pessoas.add(String(p.codigo||p.nome)); o.min+=min;
-      });
-    });
-  });
-  return out;
-}
 
 /* Classes dos pães: marcar os de Pão Francês sem abrir produto por produto */
 function erClassesPao(){
@@ -7968,7 +7986,7 @@ async function erClasseTrocar(fid, classe){
 }
 window.erClasseTrocar=erClasseTrocar;
 
-function erVerDia(d){ _erDia=(_erDia===d?'':d); renderEmbRend(); if(_erDia) setTimeout(()=>document.getElementById('er-detalhe')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
+function erVerDia(d){ _erDia=d; renderEmbRend(); }
 window.erVerDia=erVerDia;
 
 
@@ -7986,7 +8004,7 @@ function erVista(v){ _erVista=v; _erSaldoDia=''; renderEmbRend(); document.getEl
 window.erVista=erVista;
 function erSaldoGrupo(g){ _erSaldoGrupo=g; renderEmbRend(); }
 window.erSaldoGrupo=erSaldoGrupo;
-function erSaldoDia(d){ _erSaldoDia=(_erSaldoDia===d?'':d); renderEmbRend(); if(_erSaldoDia) setTimeout(()=>document.getElementById('er-saldo-det')?.scrollIntoView({behavior:'smooth',block:'start'}),60); }
+function erSaldoDia(d){ _erSaldoDia=d; renderEmbRend(); }
 window.erSaldoDia=erSaldoDia;
 
 /* Linha do tempo de um registro, em pacotes: o que entrou e o que saiu do "falta embalar" */
@@ -8008,16 +8026,177 @@ function _erLinhaTempo(r){
   return out;
 }
 
-function _erSaldoTela(){
-  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
-  const semana=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
-  // dias: os do período do gráfico
+/* ══ RENDIMENTO DA EMBALAGEM ════════════════════════════════════════
+   Painel com cartões, em modo escuro ou claro (a pessoa escolhe; fica
+   salvo no aparelho). Recorte por TURNO: manhã (lançado até 11:59) e
+   tarde (12:00 em diante). O turno vem da hora de cada lançamento na
+   embalagem; as horas trabalhadas de cada turno vêm das batidas do
+   ponto (o trecho de cada jornada antes e depois do meio-dia).
+   Embaixo, lado a lado: o que falta embalar e o que foi embalado no
+   dia escolhido — sem abrir nada "lá embaixo".
+   O "Início e fim do dia" (admin) usa o mesmo visual. */
+let _erTurno='todos';
+let _erTema='escuro'; try{ _erTema=localStorage.getItem('er_tema')==='claro'?'claro':'escuro'; }catch(e){}
+function erTurno(t){ _erTurno=t; renderEmbRend(); }
+window.erTurno=erTurno;
+function erTema(){ _erTema=(_erTema==='claro'?'escuro':'claro'); try{ localStorage.setItem('er_tema',_erTema); }catch(e){} renderEmbRend(); }
+window.erTema=erTema;
+function erDiaMover(n){ const l=window._erDiasTela||[]; const i=l.indexOf(_erDia); const j=Math.min(l.length-1, Math.max(0, (i<0?l.length-1:i)+n)); if(l[j]){ _erDia=l[j]; renderEmbRend(); } }
+window.erDiaMover=erDiaMover;
+
+function _erNxCss(){
+  if(document.getElementById('nx-css')) return;
+  const st=document.createElement('style'); st.id='nx-css';
+  st.textContent=`
+.nx{--bg:#0a100e;--g1:rgba(45,212,191,.17);--g2:rgba(255,122,26,.15);--card:rgba(255,255,255,.045);--sombra:none;--bd:rgba(255,255,255,.09);--tx:#f2f5f3;--sub:rgba(242,245,243,.64);--mut:rgba(242,245,243,.4);
+  --or:#ff7a1a;--or-tx:#1a0d02;--tl:#2dd4bf;--tl-tx:#03201c;--ok:#4ade80;--bad:#fb7185;--pao:#fbbf24;--salg:#60a5fa;--sem:rgba(255,255,255,.28);
+  --trk:rgba(255,255,255,.08);--pill:rgba(255,255,255,.06);--on-bg:#ffffff;--on-tx:#0a100e;--hover:rgba(255,255,255,.05);--sel:rgba(255,255,255,.08);--rot:#0f1614;
+  min-height:100%;box-sizing:border-box;color:var(--tx);padding:22px 24px 44px;font-family:inherit;
+  background:radial-gradient(900px 520px at 88% -8%,var(--g1),transparent 62%),radial-gradient(760px 520px at -8% 108%,var(--g2),transparent 60%),var(--bg);}
+.nx.claro{--bg:#f2f5f3;--g1:rgba(15,148,136,.10);--g2:rgba(232,89,12,.08);--card:#ffffff;--sombra:0 1px 2px rgba(13,21,18,.04),0 10px 28px rgba(13,21,18,.05);--bd:rgba(13,21,18,.09);--tx:#0d1512;--sub:rgba(13,21,18,.66);--mut:rgba(13,21,18,.44);
+  --or:#e8590c;--or-tx:#ffffff;--tl:#0f9488;--tl-tx:#ffffff;--ok:#15803d;--bad:#be123c;--pao:#d97706;--salg:#2563eb;--sem:rgba(13,21,18,.22);
+  --trk:rgba(13,21,18,.08);--pill:rgba(13,21,18,.05);--on-bg:#0d1512;--on-tx:#ffffff;--hover:rgba(13,21,18,.04);--sel:rgba(13,21,18,.07);--rot:#ffffff;}
+.nx *{box-sizing:border-box;}
+.nx-top{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:18px;}
+.nx-top h1{margin:0;font-size:27px;font-weight:600;letter-spacing:-.02em;line-height:1.1;color:var(--tx);}
+.nx-top p{margin:5px 0 0;font-size:13px;color:var(--sub);}
+.nx-acoes{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:flex-end;}
+.nx-pills{display:inline-flex;background:var(--pill);border:1px solid var(--bd);border-radius:99px;padding:4px;gap:2px;flex-wrap:wrap;}
+.nx-pills button{border:none;background:none;color:var(--sub);font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:99px;cursor:pointer;white-space:nowrap;}
+.nx-pills button:hover{color:var(--tx);}
+.nx-pills button.on{background:var(--on-bg);color:var(--on-tx);}
+.nx-pills button.on.or{background:var(--or);color:var(--or-tx);}
+.nx-pills button.on.tl{background:var(--tl);color:var(--tl-tx);}
+.nx-pills button i{font-style:normal;opacity:.6;margin-left:5px;font-weight:500;}
+.nx-btn{border:1px solid var(--bd);background:var(--pill);color:var(--tx);font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:99px;cursor:pointer;white-space:nowrap;}
+.nx-btn:hover{background:var(--sel);}
+.nx-btn.pri{background:var(--on-bg);color:var(--on-tx);border-color:var(--on-bg);}
+.nx-btn.ic{padding:8px 11px;}
+.nx-btn:disabled{opacity:.35;cursor:default;}
+.nx-btn:focus-visible,.nx-pills button:focus-visible,.nx-bar:focus-visible{outline:2px solid var(--or);outline-offset:2px;}
+.nx-g{display:grid;gap:14px;margin-bottom:14px;}
+.nx-g4{grid-template-columns:1.2fr 1.35fr 1fr 1fr;}
+.nx-g4i{grid-template-columns:repeat(4,minmax(0,1fr));}
+.nx-g2{grid-template-columns:1.6fr 1fr;}
+.nx-g3{grid-template-columns:1.5fr 1fr;}
+.nx-card{background:var(--card);border:1px solid var(--bd);border-radius:22px;padding:18px 20px;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);min-width:0;box-shadow:var(--sombra);}
+.nx-rot{font-size:12.5px;color:var(--sub);font-weight:600;display:flex;align-items:center;gap:8px;}
+.nx-rot .ax{margin-left:auto;font-weight:500;color:var(--mut);}
+.nx-num{font-size:46px;font-weight:600;letter-spacing:-.035em;line-height:1;margin-top:12px;font-variant-numeric:tabular-nums;}
+.nx-num small{font-size:13px;font-weight:500;letter-spacing:0;color:var(--sub);margin-left:7px;}
+.nx-sub{font-size:12px;color:var(--sub);margin-top:8px;line-height:1.5;}
+.nx-chip{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:3px 9px;font-size:11.5px;font-weight:700;background:var(--trk);color:var(--tx);}
+.nx-chip.up{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok);} .nx-chip.dn{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);}
+.nx-pt{width:9px;height:9px;border-radius:50%;display:inline-block;flex:0 0 9px;}
+.nx-tn{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;}
+.nx-tn .v{font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
+.nx-tn .l{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:7px;margin-bottom:8px;font-weight:600;}
+.nx-tn .s{font-size:11.5px;color:var(--mut);margin-top:6px;}
+.nx-div{height:10px;border-radius:99px;overflow:hidden;display:flex;margin-top:14px;background:var(--trk);}
+.nx-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.nx-h b{font-size:15px;font-weight:600;} .nx-h span{font-size:12px;color:var(--mut);} .nx-h .dir{margin-left:auto;display:flex;gap:10px;font-size:11.5px;color:var(--sub);align-items:center;}
+.nx-bars{display:flex;align-items:flex-end;gap:8px;height:210px;position:relative;}
+.nx-bar{flex:1;min-width:16px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;color:inherit;border-radius:12px;}
+.nx-bar:hover .pil{filter:brightness(1.12);} .nx-bar.sel{background:var(--sel);}
+.nx-bar .n{font-size:11px;font-weight:700;color:var(--tx);margin-bottom:5px;font-variant-numeric:tabular-nums;}
+.nx-bar .n.z{color:var(--mut);font-weight:500;}
+.nx-bar .pil{width:64%;max-width:34px;border-radius:9px;overflow:hidden;display:flex;flex-direction:column;}
+.nx-bar .d{font-size:10.5px;color:var(--mut);margin-top:7px;white-space:nowrap;}
+.nx-bar.sel .d{color:var(--tx);font-weight:700;}
+.nx-tab{width:100%;border-collapse:collapse;font-size:13px;}
+.nx-tab th{font-size:11px;font-weight:600;color:var(--mut);text-align:right;padding:8px 10px;border-bottom:1px solid var(--bd);white-space:nowrap;position:sticky;top:0;background:var(--rot);z-index:1;}
+.nx-tab th:first-child,.nx-tab td:first-child{text-align:left;}
+.nx-tab td{padding:9px 10px;border-bottom:1px solid var(--trk);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.nx-tab td.e,.nx-tab th.e{text-align:left;}
+.nx-tab tr.cl{cursor:pointer;} .nx-tab tr.cl:hover td{background:var(--hover);} .nx-tab tr.sel td{background:var(--sel);}
+.nx-tab .m{color:var(--mut);}
+.nx-tr{height:6px;border-radius:99px;background:var(--trk);overflow:hidden;} .nx-tr i{display:block;height:100%;border-radius:99px;}
+.nx-duo{display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1fr);gap:0 22px;}
+.nx-duo>.sep{background:var(--bd);}
+.nx-duo>div{min-width:0;}
+.nx-rol{max-height:400px;overflow:auto;margin:0 -4px;padding:0 4px;}
+.nx-vazio{color:var(--sub);font-size:13px;padding:26px 0;text-align:center;}
+.nx-nota{font-size:11.5px;color:var(--mut);line-height:1.6;margin-top:6px;}
+.nx-datas{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:-6px 0 16px;font-size:12.5px;color:var(--sub);}
+.nx-datas input{background:var(--pill) !important;border:1px solid var(--bd) !important;color:var(--tx) !important;border-radius:12px !important;padding:8px 10px !important;font-family:inherit;font-size:14px;color-scheme:dark;width:auto !important;}
+.nx.claro .nx-datas input{color-scheme:light;}
+.nx-scroll{overflow-x:auto;}
+#s-emb-rend.nx-on .mc-header{background:#0a100e;border-bottom-color:rgba(255,255,255,.08);box-shadow:none;}
+#s-emb-rend.nx-on .mc-page-title,#s-emb-rend.nx-on .mc-brand-name{color:#f2f5f3;}
+#s-emb-rend.nx-on .mc-page-sub,#s-emb-rend.nx-on .mc-brand-sub{color:rgba(242,245,243,.55);}
+#s-emb-rend.nx-on .mc-header-back{background:rgba(255,255,255,.08);color:#f2f5f3;border-color:rgba(255,255,255,.1);}
+#s-emb-rend.nx-on .mc-divider-v{background:rgba(255,255,255,.12);}
+@media (max-width:1180px){ .nx-g4,.nx-g4i{grid-template-columns:1fr 1fr;} .nx-g2,.nx-g3{grid-template-columns:1fr;} }
+@media (max-width:860px){ .nx-duo{grid-template-columns:minmax(0,1fr);gap:18px 0;} .nx-duo>.sep{height:1px;} }
+@media (max-width:640px){ .nx{padding:16px 12px 36px;} .nx-g4,.nx-g4i{grid-template-columns:1fr;} .nx-num{font-size:38px;} .nx-acoes{margin-left:0;justify-content:flex-start;} .nx-bars{gap:4px;} .nx-datas input{font-size:16px;} }
+`;
+  document.head.appendChild(st);
+}
+/* liga o visual na tela: fundo, cabeçalho escuro só no modo escuro */
+function _erNxLigar(el){
+  _erNxCss();
+  const tela=document.getElementById('s-emb-rend');
+  if(tela) tela.classList.toggle('nx-on', _erTema!=='claro');
+  el.style.padding='0'; el.style.background=_erTema==='claro'?'#f2f5f3':'#0a100e';
+}
+const _erNxTemaBtn=()=>'<button class="nx-btn" onclick="erTema()" title="Trocar entre modo claro e escuro">'+(_erTema==='claro'?'🌙 Escuro':'☀️ Claro')+'</button>';
+function _erNxDias(){
   const dias=[];
   if(_erPer==='datas' && _erDe && _erAte){
     const a=new Date(_erDe+'T12:00:00'), b=new Date(_erAte+'T12:00:00');
     for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) dias.push(fmtData(d));
-  } else { const n=parseInt(_erPer)||7; for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); dias.push(fmtData(d)); } }
-  if(!dias.length) return '<div class="pt-card pt-vazio">Escolha o período.</div>';
+  } else if(_erPer!=='datas'){
+    const n=parseInt(_erPer)||7;
+    for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); dias.push(fmtData(d)); }
+  }
+  return dias;
+}
+const _erNxPer=()=>'<div class="nx-pills" role="group" aria-label="Período">'+[['1','Hoje'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['datas','Datas']].map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div>';
+const _erNxDatas=()=>_erPer==='datas'?('<div class="nx-datas">De <input type="date" id="er-de" value="'+(_erDe||'')+'"> até <input type="date" id="er-ate" value="'+(_erAte||'')+'">'+
+  '<button class="nx-btn pri" onclick="erDatas()">Aplicar</button><span id="er-datas-erro" style="color:var(--bad);font-weight:600;"></span></div>'):'';
+
+/* hora "HH:MM" de um carimbo "dd/mm/aaaa HH:MM" (ou com vírgula) */
+function _erHoraDe(txt){ const m=String(txt||'').match(/\d{4}[,\s]+(\d{1,2}):(\d{2})/); return m?(m[1].padStart(2,'0')+':'+m[2]):''; }
+const _erTurnoDe=h=>!h?'':(h<'12:00'?'manha':'tarde');
+
+/* Minutos trabalhados antes e depois do meio-dia, pelas batidas (entrada/saída em pares) */
+function _erMinTurnos(batidas){
+  const b=(batidas||[]).map(_pontoMin).filter(x=>x!==null);
+  for(let i=1;i<b.length;i++) if(b[i]<b[i-1]) b[i]+=1440;     // virou a meia-noite
+  let m=0,t=0;
+  for(let i=0;i+1<b.length;i+=2){ const a=b[i], f=b[i+1]; m+=Math.max(0,Math.min(f,720)-a); t+=Math.max(0,f-Math.max(a,720)); }
+  return {m,t};
+}
+function _erEquipeTurnos(){
+  const out={};
+  if(typeof pontoMeses==='undefined') return out;
+  Object.keys(pontoMeses).forEach(ch=>{
+    const ano=ch.slice(0,4);
+    ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+      const setor=_normNome((typeof _pmesSetorDe==='function'?_pmesSetorDe(p,ch):'')||p.setor||'');
+      if(setor.indexOf('EMBALA')<0) return;
+      (p.dias||[]).forEach(d=>{
+        if(!d.batidas || !d.batidas.length) return;
+        const o=out[d.data+'/'+ano]||(out[d.data+'/'+ano]={pes:new Set(), pesM:new Set(), pesT:new Set(), min:0, minM:0, minT:0});
+        const x=_erMinTurnos(d.batidas), id=String(p.codigo||p.nome);
+        let tot=Number(d.minTrab)||0; if(!tot) tot=x.m+x.t;
+        o.pes.add(id); o.min+=tot; o.minM+=x.m; o.minT+=x.t;
+        if(x.m>0) o.pesM.add(id); if(x.t>0) o.pesT.add(id);
+      });
+    });
+  });
+  return out;
+}
+
+/* ── INÍCIO E FIM DO DIA, no visual do painel ── */
+function _erSaldoNovo(el){
+  _erNxLigar(el);
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const semana=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
+  const dias=_erNxDias();
+  let h='<div class="nx'+(_erTema==='claro'?' claro':'')+'"><div class="nx-top"><div><h1>Início e fim do dia</h1><p>'+(dias.length?(dias[0]+(dias.length>1?' a '+dias[dias.length-1]:'')):'escolha as datas')+' · fim = início + produzido − embalado − baixas</p></div>'+
+    '<div class="nx-acoes"><button class="nx-btn" onclick="erVista(\'rend\')">‹ Voltar ao rendimento</button>'+_erNxPer()+_erNxTemaBtn()+'</div></div>'+_erNxDatas();
+  if(!dias.length){ el.innerHTML=h+'<div class="nx-card nx-vazio">Escolha o período e toque em Aplicar.</div></div>'; return; }
   const ini=_erNum(dias[0]);
   const lim=_erDate(dias[0]); lim.setDate(lim.getDate()-30);
   const limN=_erNum(fmtData(lim));
@@ -8025,16 +8204,14 @@ function _erSaldoTela(){
   // grupo de cada registro: 'pao:Classe' / 'salg:Classe' / 'outro'
   const chaveG=g=>g.tipo==='pao'?('pao:'+g.classe):(g.tipo==='salgado'?('salg:'+g.classe):'outro');
   const regs=(registros||[]).filter(r=>(Number(r.qtd)||0)>0 && _erNum(r.data)>=limN && _erNum(r.data)<=_erNum(dias[dias.length-1]));
-  const grupos=new Set();
-  const mov={};   // dia → grupo → {prod, emb, baixa}
-  const antes={}; // grupo → saldo antes do primeiro dia
+  const grupos=new Set(), mov={}, antes={};
   const add=(dia,g,campo,v)=>{ const n=_erNum(dia);
     if(n<ini){ antes[g]=(antes[g]||0)+(campo==='prod'?v:-v); return; }
     if(!mov[dia]) mov[dia]={}; const o=mov[dia][g]||(mov[dia][g]={prod:0,emb:0,baixa:0}); o[campo]+=v; };
   regs.forEach(r=>{
     const g=chaveG(_erGrupo(r)); grupos.add(g);
     add(r.data, g, 'prod', Number(r.qtd)||0);
-    _erLinhaTempo(r).forEach(x=>{ if(_erNum(x.dia)>=_erNum(r.data)||true) add(x.dia, g, x.t==='emb'?'emb':'baixa', x.pct); });
+    _erLinhaTempo(r).forEach(x=>add(x.dia, g, x.t==='emb'?'emb':'baixa', x.pct));
   });
   const ordemCls=[...(typeof classesProducao!=='undefined'?classesProducao:[]),'Sem classe'];
   const lista=[...grupos].sort((a,b)=>{
@@ -8045,307 +8222,690 @@ function _erSaldoTela(){
     const oa=ta==='pao'?PAO_CLASSES.indexOf(ca):ordemCls.indexOf(ca), ob=tb==='pao'?PAO_CLASSES.indexOf(cb):ordemCls.indexOf(cb);
     return (oa<0?99:oa)-(ob<0?99:ob);
   });
-  const nomeG=g=>g==='outro'?'📦 Outros':((g.startsWith('pao:')?'🍞 ':'🥐 ')+g.split(':')[1]);
-  const pertence=(g,filtro)=>filtro==='todos'||g===filtro||(filtro==='pao'&&g.startsWith('pao:'))||(filtro==='salg'&&g.startsWith('salg:'));
-
-  // saldo dia a dia por grupo
+  const nomeG=g=>g==='outro'?'Outros':g.split(':')[1];
+  const corG=g=>g.startsWith('pao:')?'var(--pao)':(g.startsWith('salg:')?'var(--salg)':'var(--mut)');
+  const pertence=(g,f)=>f==='todos'||g===f||(f==='pao'&&g.startsWith('pao:'))||(f==='salg'&&g.startsWith('salg:'));
   const saldo={}; lista.forEach(g=>saldo[g]=antes[g]||0);
-  const linhas=dias.map(d=>{
-    const porG={};
-    lista.forEach(g=>{
-      const m=(mov[d]||{})[g]||{prod:0,emb:0,baixa:0};
-      const i=saldo[g], f=i+m.prod-m.emb-m.baixa;
-      porG[g]={ini:i, prod:m.prod, emb:m.emb, baixa:m.baixa, fim:f};
-      saldo[g]=f;
-    });
-    return {d, porG};
-  });
-  const soma=(L,filtro,c)=>lista.filter(g=>pertence(g,filtro)).reduce((t,g)=>t+L.porG[g][c],0);
+  const linhas=dias.map(d=>{ const porG={};
+    lista.forEach(g=>{ const m=(mov[d]||{})[g]||{prod:0,emb:0,baixa:0}; const i=saldo[g], f=i+m.prod-m.emb-m.baixa; porG[g]={ini:i, prod:m.prod, emb:m.emb, baixa:m.baixa, fim:f}; saldo[g]=f; });
+    return {d, porG}; });
+  const soma=(L,f,c)=>lista.filter(g=>pertence(g,f)).reduce((t,g)=>t+L.porG[g][c],0);
 
-  // filtros
-  const opc=[['todos','Todos'],['pao','🍞 Pães'],...lista.filter(g=>g.startsWith('pao:')).map(g=>[g,g.split(':')[1]]),['salg','🥐 Salgados'],...lista.filter(g=>g.startsWith('salg:')).map(g=>[g,g.split(':')[1]]),...(lista.includes('outro')?[['outro','Outros']]:[])];
+  const opc=[['todos','Todos'],['pao','Pães'],...lista.filter(g=>g.startsWith('pao:')).map(g=>[g,g.split(':')[1]]),['salg','Salgados'],...lista.filter(g=>g.startsWith('salg:')).map(g=>[g,g.split(':')[1]]),...(lista.includes('outro')?[['outro','Outros']]:[])];
   if(!opc.some(o=>o[0]===_erSaldoGrupo)) _erSaldoGrupo='todos';
   const F=_erSaldoGrupo;
-  const seg=[['1','Hoje'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['datas','📅 Datas']];
-  let h='<div style="margin-bottom:14px;"><button class="pt-btn" onclick="erVista(\'rend\')">‹ Voltar ao rendimento</button></div>'+
-    '<div class="pt-head"><div><h1>Início e fim do dia</h1><p>'+dias[0]+(dias.length>1?' a '+dias[dias.length-1]:'')+' · fim = início + produzido − embalado − baixas</p></div>'+
-    '<div class="pt-filtros"><div class="pt-seg">'+seg.map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
-  if(_erPer==='datas') h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="er-de" value="'+(_erDe||'')+'"><label>até</label><input class="pt-ctl" type="date" id="er-ate" value="'+(_erAte||'')+'">'+
-    '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="erDatas()">Aplicar</button><span id="er-datas-erro" style="font-size:12px;color:#dc2626;font-weight:600;"></span></div>';
-  h+='<div class="pt-card" style="margin-bottom:16px;padding:12px 14px;"><div style="display:flex;gap:6px;flex-wrap:wrap;">'+
-    opc.map(([v,t])=>'<button onclick="erSaldoGrupo(\''+v+'\')" style="border:1px solid '+(F===v?'#1e40af':'#e2e8f0')+';background:'+(F===v?'#1e40af':'#fff')+';color:'+(F===v?'#fff':'#334155')+';border-radius:99px;padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">'+t+'</button>').join('')+'</div></div>';
+  h+='<div style="margin-bottom:14px;"><div class="nx-pills" role="group" aria-label="Grupo">'+opc.map(([v,t])=>'<button class="'+(F===v?'on':'')+'" onclick="erSaldoGrupo(\''+v.replace(/'/g,"\\'")+'\')">'+t+'</button>').join('')+'</div></div>';
 
-  // indicadores do período, para o grupo escolhido
   const L0=linhas[0], Lf=linhas[linhas.length-1];
   const tProd=linhas.reduce((t,L)=>t+soma(L,F,'prod'),0), tEmb=linhas.reduce((t,L)=>t+soma(L,F,'emb'),0), tBx=linhas.reduce((t,L)=>t+soma(L,F,'baixa'),0);
-  const iniP=soma(L0,F,'ini'), fimP=soma(Lf,F,'fim');
-  h+='<div class="pt-grid pt-g4">'+
-    _ptKpi('🌅','amber', fmt(iniP), 'Início do período', 'falta embalar em '+dias[0].slice(0,5))+
-    _ptKpi('🏭','blue', fmt(tProd), 'Produzido', 'no período')+
-    _ptKpi('📦','green', fmt(tEmb), 'Embalado', 'produto a produto'+(tBx>0.5?(' · '+fmt(tBx)+' em baixas'):''))+
-    _ptKpi('🌙', fimP>iniP?'red':'green', fmt(fimP), 'Fim do período', (fimP>iniP?'+':'')+fmt(fimP-iniP)+' no saldo · '+(fimP>iniP?'a fila cresceu':'a fila diminuiu'))+
+  const iniP=soma(L0,F,'ini'), fimP=soma(Lf,F,'fim'), dif=fimP-iniP;
+  const cartao=(rot,ax,v,sub,cor)=>'<div class="nx-card"><div class="nx-rot">'+rot+'<span class="ax">'+ax+'</span></div><div class="nx-num"'+(cor?' style="color:'+cor+';"':'')+'>'+fmt(v)+'<small>pacotes</small></div><div class="nx-sub">'+sub+'</div></div>';
+  h+='<div class="nx-g nx-g4i">'+
+    cartao('Início do período', dias[0].slice(0,5), iniP, 'o que faltava embalar na abertura')+
+    cartao('Produzido','no período', tProd, 'produção lançada')+
+    cartao('Embalado','produto a produto', tEmb, tBx>0.5?(fmt(tBx)+' pacotes saíram em baixas'):'sem baixas no período', 'var(--tl)')+
+    cartao('Fim do período', dias[dias.length-1].slice(0,5), fimP, '<span class="nx-chip '+(dif>0.5?'dn':'up')+'">'+(dif>0.5?'▲ +':(dif<-0.5?'▼ ':''))+fmt(dif)+'</span> &nbsp;'+(dif>0.5?'a fila cresceu':(dif<-0.5?'a fila diminuiu':'a fila ficou igual')), dif>0.5?'var(--bad)':'')+
   '</div>';
 
-  // tabela por dia
-  const td=(v,cor,peso)=>'<td class="c" style="'+(cor?'color:'+cor+';':'')+(peso?'font-weight:'+peso+';':'')+'">'+(Math.abs(v)>0.5?fmt(v):'<span style="color:#cbd5e1;">—</span>')+'</td>';
+  const z='<span class="m">—</span>', cel=(v,cor,forte)=>'<td'+(cor?' style="color:'+cor+';'+(forte?'font-weight:700;':'')+'"':(forte?' style="font-weight:700;"':''))+'>'+(Math.abs(v)>0.5?fmt(v):z)+'</td>';
+  // dia escolhido: o clicado; senão o último com movimento
+  let dSel=_erSaldoDia && linhas.some(L=>L.d===_erSaldoDia) ? _erSaldoDia : '';
+  if(!dSel){ const c=linhas.slice().reverse().find(L=>lista.some(g=>{ const x=L.porG[g]; return x.prod>0.5||x.emb>0.5||x.baixa>0.5; })); dSel=(c||Lf).d; }
   const corpo=linhas.slice().reverse().map(L=>{
     const i=soma(L,F,'ini'), p=soma(L,F,'prod'), e=soma(L,F,'emb'), b=soma(L,F,'baixa'), f=soma(L,F,'fim');
-    const disp=i+p, aprov=disp>0.5?Math.round(e/disp*100):null;
-    return '<tr class="cl" onclick="erSaldoDia(\''+L.d+'\')"'+(_erSaldoDia===L.d?' style="background:#eff6ff;"':'')+'>'+
-      '<td><b style="font-weight:650;">'+L.d.slice(0,5)+'</b> <span style="color:#94a3b8;font-size:11.5px;">'+semana(L.d)+'</span></td>'+
-      td(i,'#b45309',700)+td(p,'#1d4ed8')+td(e,'#047857',700)+td(b,'#94a3b8')+td(f,f>i+0.5?'#b91c1c':'#334155',800)+
-      '<td class="c">'+(aprov===null?'<span style="color:#cbd5e1;">—</span>':_ptPill(aprov+'%', aprov>=50?'green':(aprov>=25?'amber':'red'), true))+'</td></tr>';
-  }).join('');
-  h+='<div class="pt-grid">'+_ptCard((F==='todos'?'Todos os produtos':opc.find(o=>o[0]===F)[1])+' · dia a dia','toque num dia para ver por classe',
-    '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,760px);"><thead><tr><th>Dia</th><th class="c">🌅 Início</th><th class="c">🏭 Produzido</th><th class="c">📦 Embalado</th><th class="c">Baixas</th><th class="c">🌙 Fim</th><th class="c">Embalou do disponível</th></tr></thead><tbody>'+corpo+'</tbody></table></div>')+'</div>';
-
-  // um dia, por classe
-  const dSel=_erSaldoDia||(dias.length===1?dias[0]:'');
-  const L=linhas.find(x=>x.d===dSel);
-  if(L){
-    const rows=lista.filter(g=>Object.values(L.porG[g]).some(v=>Math.abs(v)>0.5)).map(g=>{ const x=L.porG[g];
-      return '<tr><td style="padding-right:30px;font-weight:600;">'+nomeG(g)+'</td>'+td(x.ini,'#b45309',700)+td(x.prod,'#1d4ed8')+td(x.emb,'#047857',700)+td(x.baixa,'#94a3b8')+td(x.fim,x.fim>x.ini+0.5?'#b91c1c':'#334155',800)+'</tr>'; }).join('');
-    h+='<div id="er-saldo-det" class="pt-grid">'+_ptCard(dSel+' por classe', semana(dSel),
-      rows?'<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,620px);"><thead><tr><th>Classe</th><th class="c">🌅 Início</th><th class="c">🏭 Produzido</th><th class="c">📦 Embalado</th><th class="c">Baixas</th><th class="c">🌙 Fim</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-        :'<div class="pt-vazio" style="padding:16px;">Sem movimento neste dia.</div>', '<button class="pt-btn" onclick="erSaldoDia(\''+dSel+'\')">Fechar</button>')+'</div>';
-  }
-  h+='<div class="pt-nota"><b>Início</b> = o que faltava embalar quando o dia começou. <b>Produzido</b> = produção lançada naquele dia. <b>Embalado</b> = lançado produto a produto (sem o lote). '+
+    const disp=i+p, ap=disp>0.5?Math.round(e/disp*100):null;
+    return '<tr class="cl'+(dSel===L.d?' sel':'')+'" onclick="erSaldoDia(\''+L.d+'\')"><td><b style="font-weight:600;">'+L.d.slice(0,5)+'</b> <span class="m">'+semana(L.d)+'</span></td>'+
+      cel(i,'var(--or)')+cel(p)+cel(e,'var(--tl)',true)+cel(b,'var(--mut)')+cel(f,f>i+0.5?'var(--bad)':'',true)+
+      '<td>'+(ap===null?z:'<span class="nx-chip '+(ap>=50?'up':(ap<25?'dn':''))+'">'+ap+'%</span>')+'</td></tr>'; }).join('');
+  const LS=linhas.find(x=>x.d===dSel);
+  const rows=lista.filter(g=>Object.values(LS.porG[g]).some(v=>Math.abs(v)>0.5)).map(g=>{ const x=LS.porG[g];
+    return '<tr><td><span class="nx-pt" style="background:'+corG(g)+';margin-right:8px;"></span><b style="font-weight:600;">'+nomeG(g)+'</b></td>'+cel(x.ini,'var(--or)')+cel(x.prod)+cel(x.emb,'var(--tl)',true)+cel(x.baixa,'var(--mut)')+cel(x.fim,x.fim>x.ini+0.5?'var(--bad)':'',true)+'</tr>'; }).join('');
+  const cab='<th>Início</th><th>Produzido</th><th>Embalado</th><th>Baixas</th><th>Fim</th>';
+  h+='<div class="nx-card nx-duo" style="margin-bottom:14px;">'+
+    '<div><div class="nx-h"><b>'+(F==='todos'?'Todos os produtos':opc.find(o=>o[0]===F)[1])+' · dia a dia</b><span>toque num dia</span></div>'+
+      '<div class="nx-rol"><table class="nx-tab"><thead><tr><th>Dia</th>'+cab+'<th>Embalou do disponível</th></tr></thead><tbody>'+corpo+'</tbody></table></div></div>'+
+    '<div class="sep"></div>'+
+    '<div><div class="nx-h"><b>'+dSel.slice(0,5)+' por classe</b><span>'+semana(dSel)+'</span></div>'+
+      (rows?'<div class="nx-rol"><table class="nx-tab"><thead><tr><th>Classe</th>'+cab+'</tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="nx-vazio">Sem movimento neste dia.</div>')+'</div>'+
+  '</div>';
+  h+='<div class="nx-nota"><b>Início</b> = o que faltava embalar quando o dia começou. <b>Produzido</b> = produção lançada naquele dia. <b>Embalado</b> = lançado produto a produto. '+
     '<b>Baixas</b> = o que saiu da fila sem ser embalado produto a produto: o “embalar em lote” e a diferença quando um produto é finalizado com menos do que foi produzido. '+
-    '<b>Embalou do disponível</b> = embalado ÷ (início + produzido). Contam as produções a partir de '+fmtData(lim).slice(0,5)+' (30 dias antes do período).</div>';
-  return h;
+    '<b>Embalou do disponível</b> = embalado ÷ (início + produzido). Contam as produções a partir de '+fmtData(lim).slice(0,5)+' (30 dias antes do período).</div></div>';
+  el.innerHTML=h;
 }
 
-/* Período só dos indicadores do topo: 'graf' = o mesmo do gráfico */
-let _erKpiPer='graf';
-function erKpiPer(v){ _erKpiPer=v; renderEmbRend(); }
-window.erKpiPer=erKpiPer;
-
-function renderEmbRend(){
-  const el=document.getElementById('emb-rend-content'); if(!el) return;
-  if(_erVista==='saldo' && window.adminMode===true){
-    if(typeof _ptCss==='function') _ptCss();
-    el.style.padding='0'; el.style.background='#f5f7fb';
-    el.innerHTML='<div class="pt"><main class="pt-main">'+_erSaldoTela()+'</main></div>';
-    return;
-  }
-  if(typeof _ptCss==='function') _ptCss();
-  el.style.padding='0'; el.style.background='#f5f7fb';
+function _erNovo(el){
+  _erNxLigar(el);
   const fmt=n=>Math.round(n).toLocaleString('pt-BR');
-  const ordemCls=[...(typeof classesProducao!=='undefined'?classesProducao:[]),'Sem classe'];
-  const ordCls=(a,b)=>{ const ia=ordemCls.indexOf(a), ib=ordemCls.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); };
+  const f1=n=>(Math.round(n*10)/10).toLocaleString('pt-BR');
   const semana=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
-
-  // ── período ──
-  const dias=[];
-  if(_erPer==='datas' && _erDe && _erAte){
-    const a=new Date(_erDe+'T12:00:00'), b=new Date(_erAte+'T12:00:00');
-    for(let d=new Date(a); d<=b; d.setDate(d.getDate()+1)) dias.push(fmtData(d));
-  } else if(_erPer!=='datas'){
-    const n=parseInt(_erPer)||7;
-    for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); dias.push(fmtData(d)); }
-  }
-  const noPer=new Set(dias);
-
-  // ── embalado ──
-  const {ev:evTodos, lote:loteTodos}=_erEventos();
-  const ev=evTodos.filter(x=>noPer.has(x.dia));
-  const lotePer=loteTodos.filter(x=>noPer.has(x.dia)).reduce((t,x)=>t+x.pct,0);
-  const porDia={}; dias.forEach(d=>porDia[d]={tot:0, pao:0, salg:0, outro:0, cls:{}, paoCls:{}, prods:{}});
-  ev.forEach(x=>{
-    const g=x.r.manual?{tipo:'outro',classe:''}:_erGrupo(x.r);
-    const D=porDia[x.dia];
-    D.tot+=x.pct;
-    if(g.tipo==='pao'){ D.pao+=x.pct; D.paoCls[g.classe]=(D.paoCls[g.classe]||0)+x.pct; } else if(g.tipo==='salgado'){ D.salg+=x.pct; D.cls[g.classe]=(D.cls[g.classe]||0)+x.pct; } else D.outro+=x.pct;
-    const chave=(x.r.produto||'?')+'|'+(x.r.data||'');
-    const P=D.prods[chave]||(D.prods[chave]={produto:x.r.produto||'?', dataProd:x.r.data||'', pct:0, g});
-    P.pct+=x.pct;
-  });
-  const comTrabalho=dias.filter(d=>porDia[d].tot>0.5);
-  const totPer=dias.reduce((t,d)=>t+porDia[d].tot,0);
-  const media=comTrabalho.length?totPer/comTrabalho.length:0;
-  const melhor=comTrabalho.slice().sort((a,b)=>porDia[b].tot-porDia[a].tot)[0];
-  const pior=comTrabalho.slice().sort((a,b)=>porDia[a].tot-porDia[b].tot)[0];
-  const clsPer=[...new Set(dias.flatMap(d=>Object.keys(porDia[d].cls)))].sort(ordCls);
-  const temOutro=dias.some(d=>porDia[d].outro>0.5);
-  const paoPer=PAO_CLASSES.filter(c=>dias.some(d=>(porDia[d].paoCls[c]||0)>0.5));
-
-  // equipe (Controle de Ponto, setor Embalação)
-  const d30=[]; for(let i=30;i>=0;i--){ const x=new Date(); x.setDate(x.getDate()-i); d30.push(fmtData(x)); }
-  const mesesPonto=pontoMesesDe(dias.concat(d30));
-  const pontoOk=pontoMesesProntos(mesesPonto);
-  if(!pontoOk) pontoGarantirMeses(mesesPonto).then(()=>{ if(document.querySelector('.screen.active')?.id==='s-emb-rend') renderEmbRend(); });
-  const eqMapa=pontoOk ? _erEquipe() : null;
-  const eqDia=d=>eqMapa&&eqMapa[d]?{n:eqMapa[d].pessoas.size, min:eqMapa[d].min}:null;
-  const eqDias=dias.map(eqDia).filter(Boolean);
-  const eqMin=eqDias.reduce((t,x)=>t+x.min,0);
-  const eqPessoasMed=eqDias.length?eqDias.reduce((t,x)=>t+x.n,0)/eqDias.length:0;
-  // pacotes por hora: só nos dias que têm lançamento e ponto
-  const diasPH=dias.filter(d=>porDia[d].tot>0.5 && eqDia(d) && eqDia(d).min>0);
-  const pctHora=diasPH.length?diasPH.reduce((t,d)=>t+porDia[d].tot,0)/(diasPH.reduce((t,d)=>t+eqDia(d).min,0)/60):null;
   const hh=m=>(typeof _pontoHhmm==='function')?_pontoHhmm(Math.round(m)):(Math.round(m/60)+'h');
+  const COR={manha:'var(--or)', tarde:'var(--tl)', sem:'var(--sem)'};
+
+  // ── período e período anterior (mesmo tamanho, logo antes) ──
+  const dias=_erNxDias();
+  window._erDiasTela=dias;
+  const ant=[]; if(dias.length){ const ini=_erDate(dias[0]); for(let i=dias.length;i>=1;i--){ const d=new Date(ini); d.setDate(ini.getDate()-i); ant.push(fmtData(d)); } }
+  const noPer=new Set(dias), noAnt=new Set(ant);
+
+  // ── lançamentos, com hora e turno ──
+  const {ev:evTodos, lote:loteTodos}=_erEventos();
+  const passa=x=>_erTurno==='todos' || x.turno===_erTurno;
+  const porDia={}; dias.forEach(d=>porDia[d]={manha:0, tarde:0, sem:0, prods:{}});
+  const porHora={}, cls={};
+  let totAnt=0;
+  evTodos.forEach(x=>{
+    if(noAnt.has(x.dia) && passa(x)) totAnt+=x.pct;
+    if(!noPer.has(x.dia)) return;
+    const D=porDia[x.dia];
+    D[x.turno||'sem']+=x.pct;
+    if(x.hora){ const hr=parseInt(x.hora.slice(0,2),10); porHora[hr]=(porHora[hr]||0)+x.pct; }
+    if(!passa(x)) return;
+    const g=x.r.manual?{tipo:'outro',classe:''}:_erGrupo(x.r);
+    const nomeC=g.tipo==='outro'?'Outros':g.classe; const kc=g.tipo+'|'+nomeC;
+    (cls[kc]||(cls[kc]={tipo:g.tipo, nome:nomeC, pct:0})).pct+=x.pct;
+    const ch=(x.r.produto||'?')+'|'+(x.r.data||'');
+    const P=D.prods[ch]||(D.prods[ch]={produto:x.r.produto||'?', dataProd:x.r.data||'', manha:0, tarde:0, sem:0, g});
+    P[x.turno||'sem']+=x.pct;
+  });
+  const val=d=>_erTurno==='todos'?(porDia[d].manha+porDia[d].tarde+porDia[d].sem):porDia[d][_erTurno];
+  const comTrab=dias.filter(d=>val(d)>0.5);
+  const tot=dias.reduce((t,d)=>t+val(d),0);
+  const media=comTrab.length?tot/comTrab.length:0;
+  const totM=dias.reduce((t,d)=>t+porDia[d].manha,0), totT=dias.reduce((t,d)=>t+porDia[d].tarde,0), totS=dias.reduce((t,d)=>t+porDia[d].sem,0);
+  const lotePer=loteTodos.filter(x=>noPer.has(x.dia)).reduce((t,x)=>t+x.pct,0);
+
+  // ── equipe por turno (ponto) ──
+  const meses=pontoMesesDe(dias);
+  const pontoOk=pontoMesesProntos(meses);
+  if(!pontoOk) pontoGarantirMeses(meses).then(()=>{ if(document.querySelector('.screen.active')?.id==='s-emb-rend') renderEmbRend(); });
+  const eq=pontoOk?_erEquipeTurnos():null;
+  const E=d=>eq&&eq[d]?eq[d]:null;
+  let minM=0,minT=0,minTot=0,pesSoma=0,diasEq=0, vM=0,vT=0,mM=0,mT=0;
+  dias.forEach(d=>{ const e=E(d); if(!e) return; diasEq++; pesSoma+=e.pes.size; minM+=e.minM; minT+=e.minT; minTot+=e.min;
+    if(porDia[d].manha>0.5 && e.minM>0){ vM+=porDia[d].manha; mM+=e.minM; }
+    if(porDia[d].tarde>0.5 && e.minT>0){ vT+=porDia[d].tarde; mT+=e.minT; } });
+  const phM=mM?vM/(mM/60):null, phT=mT?vT/(mT/60):null;
+  const minSel=_erTurno==='manha'?minM:(_erTurno==='tarde'?minT:minTot);
+  const phSel=_erTurno==='manha'?phM:(_erTurno==='tarde'?phT:((mM+mT)?(vM+vT)/((mM+mT)/60):null));
 
   // ── pendente ──
   const pend=_erPendentes();
   const pTot=pend.reduce((t,x)=>t+x.falta,0);
-  const pPao=pend.filter(x=>x.tipo==='pao').reduce((t,x)=>t+x.falta,0);
-  const pPaoCls={}; pend.filter(x=>x.tipo==='pao').forEach(x=>{ pPaoCls[x.classe]=(pPaoCls[x.classe]||0)+x.falta; });
-  const pSalg=pend.filter(x=>x.tipo==='salgado');
-  const pSalgTot=pSalg.reduce((t,x)=>t+x.falta,0);
-  const pCls={}; pSalg.forEach(x=>{ pCls[x.classe]=(pCls[x.classe]||0)+x.falta; });
-  const pOutro=pend.filter(x=>x.tipo==='outro').reduce((t,x)=>t+x.falta,0);
-  const maisAntigo=pend.map(x=>x.r.data).sort((a,b)=>_erNum(a)-_erNum(b))[0];
-  const diasPend=new Set(pend.map(x=>x.r.data)).size;
-  const diasParaZerar=media?pTot/media:null;
+  const pGr={}; pend.forEach(x=>{ const nomeC=x.tipo==='outro'?'Outros':x.classe; const k=x.tipo+(x.tipo==='outro'?'':':'+x.classe); (pGr[k]||(pGr[k]={k, tipo:x.tipo, nome:nomeC, v:0})).v+=x.falta; });
+  const pLista=Object.values(pGr).sort((a,b)=>b.v-a.v);
+  const paraZerar=media?pTot/media:null;
+  const corTipo=t=>t==='pao'?'var(--pao)':(t==='salgado'?'var(--salg)':'var(--mut)');
 
   // ── cabeçalho ──
-  const seg=[['1','Hoje'],['7','7 dias'],['15','15 dias'],['30','30 dias'],['datas','📅 Datas']];
   const perTxt=dias.length?(dias.length===1?dias[0]:(dias[0]+' a '+dias[dias.length-1])):'escolha as datas';
-  let h='<div class="pt"><main class="pt-main">'+
-    '<div class="pt-head"><div><h1>Rendimento da Embalagem</h1><p>'+perTxt+' · lançamentos feitos produto a produto</p></div>'+
-      '<div class="pt-filtros">'+(window.adminMode===true?'<button class="pt-btn pri" onclick="erVista(\'saldo\')">🌅 Início e fim do dia</button><button class="pt-btn" onclick="erClassesPao()">🍞 Classes dos pães</button>':'')+
-      '<div class="pt-seg">'+seg.map(([v,t])=>'<button class="'+(_erPer===v?'on':'')+'" onclick="erPeriodo(\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
-  if(_erPer==='datas'){
-    h+='<div class="pt-datas"><label>De</label><input class="pt-ctl" type="date" id="er-de" value="'+(_erDe||'')+'">'+
-      '<label>até</label><input class="pt-ctl" type="date" id="er-ate" value="'+(_erAte||'')+'">'+
-      '<button class="pt-btn pri" style="height:40px;padding:0 20px;" onclick="erDatas()">Aplicar</button>'+
-      '<span id="er-datas-erro" style="font-size:12px;color:#dc2626;font-weight:600;"></span></div>';
-    if(!dias.length){ el.innerHTML=h+'<div class="pt-card pt-vazio">Escolha o período e toque em Aplicar.</div></main></div>'; return; }
-  }
+  const tPills=[['todos','Dia inteiro',''],['manha','Manhã','or'],['tarde','Tarde','tl']];
+  let h='<div class="nx'+(_erTema==='claro'?' claro':'')+'"><div class="nx-top"><div><h1>Rendimento da embalagem</h1><p>'+perTxt+' · manhã = lançado até 11:59 · tarde = das 12:00 em diante</p></div>'+
+    '<div class="nx-acoes">'+
+      '<div class="nx-pills" role="group" aria-label="Turno">'+tPills.map(([v,t,c])=>'<button class="'+(_erTurno===v?('on '+c):'')+'" onclick="erTurno(\''+v+'\')">'+t+'</button>').join('')+'</div>'+
+      _erNxPer()+
+      '<button class="nx-btn pri" onclick="erVista(\'plano\')">🗓 Plano da embalagem</button>'+
+      (window.adminMode===true?'<button class="nx-btn" onclick="erVista(\'saldo\')">Início e fim do dia</button><button class="nx-btn" onclick="erClassesPao()">Classes dos pães</button>':'')+
+      _erNxTemaBtn()+
+    '</div></div>'+_erNxDatas();
+  if(!dias.length){ el.innerHTML=h+'<div class="nx-card nx-vazio">Escolha o período e toque em Aplicar.</div></div>'; return; }
 
-  // ── indicadores: com período próprio (ex.: só os últimos 3 dias) ──
-  let kDias=dias;
-  if(_erKpiPer!=='graf'){ const n=parseInt(_erKpiPer)||7; kDias=[]; for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); kDias.push(fmtData(d)); } }
-  const kSet=new Set(kDias), kTot={};
-  kDias.forEach(d=>kTot[d]=0);
-  evTodos.forEach(x=>{ if(kSet.has(x.dia)) kTot[x.dia]+=x.pct; });
-  const kCom=kDias.filter(d=>kTot[d]>0.5);
-  const kTotal=kDias.reduce((t,d)=>t+kTot[d],0);
-  const kMedia=kCom.length?kTotal/kCom.length:0;
-  const kMelhor=kCom.slice().sort((a,b)=>kTot[b]-kTot[a])[0], kPior=kCom.slice().sort((a,b)=>kTot[a]-kTot[b])[0];
-  const kEq=kDias.map(eqDia).filter(Boolean);
-  const kMin=kEq.reduce((t,x)=>t+x.min,0), kPes=kEq.length?kEq.reduce((t,x)=>t+x.n,0)/kEq.length:0;
-  const kPH=kDias.filter(d=>kTot[d]>0.5 && eqDia(d) && eqDia(d).min>0);
-  const kPctHora=kPH.length?kPH.reduce((t,d)=>t+kTot[d],0)/(kPH.reduce((t,d)=>t+eqDia(d).min,0)/60):null;
-  const kParaZerar=kMedia?pTot/kMedia:null;
-  const kTxt=_erKpiPer==='graf'?'no período':('nos últimos '+kDias.length+' dias');
-  const kSeg=[['graf','Mesmo do gráfico'],['3','Últimos 3 dias'],['7','7 dias'],['15','15 dias'],['30','30 dias']];
-  h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-4px 0 10px;"><span style="font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--pt-mut);">INDICADORES</span>'+
-    '<div class="pt-seg">'+kSeg.map(([v,t])=>'<button class="'+(_erKpiPer===v?'on':'')+'" onclick="erKpiPer(\''+v+'\')">'+t+'</button>').join('')+'</div>'+
-    '<span style="font-size:11.5px;color:var(--pt-mut);">'+kDias[0].slice(0,5)+(kDias.length>1?' a '+kDias[kDias.length-1].slice(0,5):'')+'</span></div>';
-  h+='<div class="pt-grid pt-g4">'+
-    _ptKpi('📦','green', fmt(kTotal), 'Embalado '+kTxt, kCom.length+' dia(s) com lançamento')+
-    _ptKpi('📊','blue', fmt(kMedia), 'Média por dia', 'pacotes · só dias com lançamento')+
-    _ptKpi('🏆','violet', kMelhor?fmt(kTot[kMelhor]):'—', 'Melhor dia', kMelhor?(kMelhor.slice(0,5)+' · '+semana(kMelhor)+(kPior&&kPior!==kMelhor?(' · menor: '+fmt(kTot[kPior])+' em '+kPior.slice(0,5)):'')):'sem lançamentos')+
-    _ptKpi('⏳', pTot?'amber':'green', fmt(pTot), 'Falta embalar agora', kParaZerar?('≈ '+(kParaZerar<1?'menos de 1 dia':(kParaZerar.toFixed(1).replace('.',',')+' dia(s)'))+' na média acima'):(pTot?'pacotes':'tudo embalado 🎉'))+
-  '</div>';
-  h+='<div class="pt-grid pt-g3">'+
-    _ptKpi('👥','sky', eqMapa?(kEq.length?(Math.round(kPes*10)/10).toLocaleString('pt-BR'):'—'):'…', 'Pessoas por dia', eqMapa?(kEq.length?('média no setor Embalação · '+kEq.length+' dia(s) com ponto'):'sem ponto do setor nesses dias'):'carregando o ponto…')+
-    _ptKpi('🕐','sky', eqMapa?(kMin?hh(kMin):'—'):'…', 'Horas trabalhadas', eqMapa?(kEq.length?(kTxt+' · '+hh(kMin/kEq.length)+' por dia'):'pelo Controle de Ponto'):'carregando o ponto…')+
-    _ptKpi('⚡','green', kPctHora?(Math.round(kPctHora*10)/10).toLocaleString('pt-BR'):'—', 'Pacotes por hora trabalhada', kPctHora?('rendimento da equipe · '+kPH.length+' dia(s)'):'precisa de lançamento e ponto no mesmo dia')+
+  // dia mostrado no bloco de baixo: o escolhido; senão o último com lançamento
+  if(!_erDia || !noPer.has(_erDia)) _erDia=(comTrab[comTrab.length-1]||dias[dias.length-1]);
+  const dSel=_erDia;
+
+  // ── faixa de cima ──
+  const delta=totAnt>0.5?Math.round((tot/totAnt-1)*100):null;
+  const sparkW=260, sparkH=54, mx=Math.max(1,...dias.map(val));
+  const pts=dias.map((d,i)=>[(dias.length>1?i/(dias.length-1):.5)*sparkW, sparkH-4-(val(d)/mx)*(sparkH-10)]);
+  const corSel=_erTurno==='manha'?'var(--or)':(_erTurno==='tarde'?'var(--tl)':'var(--tx)');
+  const spark=dias.length>1?'<svg viewBox="0 0 '+sparkW+' '+sparkH+'" preserveAspectRatio="none" style="width:100%;height:54px;margin-top:10px;display:block;" aria-hidden="true">'+
+      '<defs><linearGradient id="nxsp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:'+corSel+';stop-opacity:.3"/><stop offset="1" style="stop-color:'+corSel+';stop-opacity:0"/></linearGradient></defs>'+
+      '<path d="M0,'+sparkH+' L'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+' L'+sparkW+','+sparkH+' Z" fill="url(#nxsp)"/>'+
+      '<path d="M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L')+'" fill="none" style="stroke:'+corSel+';" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>':'';
+  const somaMT=totM+totT;
+  const frase=(()=>{
+    if(somaMT<1) return 'Sem lançamentos com horário no período.';
+    if(phM && phT){ const melhor=phM>=phT?'manhã':'tarde', dif=Math.round((Math.max(phM,phT)/Math.min(phM,phT)-1)*100);
+      return dif<5?'Os dois turnos rendem praticamente o mesmo por hora trabalhada.':('A <b style="color:'+(melhor==='manhã'?COR.manha:COR.tarde)+';">'+melhor+'</b> rende '+dif+'% mais por hora trabalhada.'); }
+    const melhor=totM>=totT?'manhã':'tarde';
+    return 'A <b style="color:'+(melhor==='manhã'?COR.manha:COR.tarde)+';">'+melhor+'</b> concentra '+Math.round(Math.max(totM,totT)/somaMT*100)+'% do volume.';
+  })();
+  const anel=(()=>{
+    const pao=pend.filter(x=>x.tipo==='pao').reduce((t,x)=>t+x.falta,0), R=30, C=2*Math.PI*R, fr=pTot?pao/pTot:0;
+    return '<svg viewBox="0 0 76 76" style="width:76px;height:76px;flex:0 0 76px;" aria-hidden="true"><circle cx="38" cy="38" r="'+R+'" fill="none" style="stroke:var(--trk);" stroke-width="9"/>'+
+      (pTot?'<circle cx="38" cy="38" r="'+R+'" fill="none" style="stroke:var(--salg);" stroke-width="9" stroke-dasharray="'+C+'" transform="rotate(-90 38 38)"/>'+
+        '<circle cx="38" cy="38" r="'+R+'" fill="none" style="stroke:var(--pao);" stroke-width="9" stroke-dasharray="'+(C*fr)+' '+C+'" transform="rotate(-90 38 38)"/>':'')+'</svg>';
+  })();
+  h+='<div class="nx-g nx-g4">'+
+    '<div class="nx-card"><div class="nx-rot">Embalado'+(_erTurno==='todos'?'':(' · '+(_erTurno==='manha'?'manhã':'tarde')))+'<span class="ax">'+comTrab.length+' dia(s)</span></div>'+
+      '<div class="nx-num">'+fmt(tot)+'<small>pacotes</small></div>'+
+      '<div class="nx-sub">'+(delta===null?'média de '+fmt(media)+' por dia':('<span class="nx-chip '+(delta>=0?'up':'dn')+'">'+(delta>=0?'▲ +':'▼ ')+delta+'%</span> &nbsp;contra os '+dias.length+' dia(s) anteriores · média '+fmt(media)+'/dia'))+'</div>'+spark+'</div>'+
+    '<div class="nx-card"><div class="nx-rot">Manhã × tarde<span class="ax">no período</span></div>'+
+      '<div class="nx-tn">'+
+        '<div><div class="l"><span class="nx-pt" style="background:'+COR.manha+';"></span>Manhã</div><div class="v">'+fmt(totM)+'</div><div class="s">'+(phM?(f1(phM)+' pct por hora'):(somaMT?Math.round(totM/somaMT*100)+'% do volume':'—'))+'</div></div>'+
+        '<div><div class="l"><span class="nx-pt" style="background:'+COR.tarde+';"></span>Tarde</div><div class="v">'+fmt(totT)+'</div><div class="s">'+(phT?(f1(phT)+' pct por hora'):(somaMT?Math.round(totT/somaMT*100)+'% do volume':'—'))+'</div></div>'+
+      '</div>'+
+      '<div class="nx-div">'+(somaMT?('<i style="width:'+(totM/somaMT*100)+'%;background:'+COR.manha+';"></i><i style="flex:1;background:'+COR.tarde+';"></i>'):'')+'</div>'+
+      '<div class="nx-sub">'+frase+(totS>0.5?(' <span style="color:var(--mut);">'+fmt(totS)+' pct sem horário registrado.</span>'):'')+'</div></div>'+
+    '<div class="nx-card"><div class="nx-rot">Ritmo da equipe<span class="ax">pelo ponto</span></div>'+
+      '<div class="nx-num">'+(phSel?f1(phSel):'—')+'<small>pct por hora</small></div>'+
+      '<div class="nx-sub">'+(eq?(diasEq?(f1(pesSoma/diasEq)+' pessoas por dia · '+hh(minSel)+' trabalhadas'+(_erTurno==='todos'?'':(' no turno'))):'sem ponto da Embalação no período'):'carregando o ponto…')+'</div></div>'+
+    '<div class="nx-card"><div class="nx-rot">Falta embalar<span class="ax">agora</span></div>'+
+      '<div style="display:flex;align-items:center;gap:14px;margin-top:10px;">'+anel+'<div><div class="nx-num" style="margin-top:0;font-size:38px;">'+fmt(pTot)+'</div>'+
+        '<div class="nx-sub" style="margin-top:6px;">'+(pTot<0.5?'tudo embalado':(paraZerar?('≈ '+(paraZerar<1?'menos de 1 dia':(f1(paraZerar)+' dia(s)'))+' no ritmo atual'):'pacotes'))+'</div></div></div>'+
+      '<div class="nx-sub" style="display:flex;gap:12px;"><span><span class="nx-pt" style="background:var(--pao);"></span> pães</span><span><span class="nx-pt" style="background:var(--salg);"></span> salgados</span></div></div>'+
   '</div>';
 
-  // ── gráfico + pendente ──
-  const max=Math.max(1,...dias.map(d=>porDia[d].tot));
+  // ── gráficos ──
+  const maxD=Math.max(1,...dias.map(val));
   const ALT=150;
-  const barras='<div style="display:flex;gap:16px;font-size:11.5px;color:var(--pt-sub);margin:-4px 0 12px;flex-wrap:wrap;">'+
-      '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#f59e0b;margin-right:6px;"></span>Pães</span>'+
-      '<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#3b82f6;margin-right:6px;"></span>Salgados</span>'+
-      (temOutro?'<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#94a3b8;margin-right:6px;"></span>Outros</span>':'')+
-      (media?'<span style="margin-left:auto;">┄ média '+fmt(media)+' pct</span>':'')+'</div>'+
-    '<div style="overflow-x:auto;"><div style="position:relative;display:flex;gap:'+(dias.length>20?4:8)+'px;align-items:flex-end;height:'+(ALT+44)+'px;min-width:'+(dias.length*(dias.length>20?26:40))+'px;">'+
-      (media?'<div style="position:absolute;left:0;right:0;bottom:'+(22+Math.round(media/max*ALT))+'px;border-top:1.5px dashed #94a3b8;pointer-events:none;"></div>':'')+
-      dias.map(d=>{
-        const D=porDia[d], hp=Math.round(D.pao/max*ALT), hs=Math.round(Math.max(0,D.salg)/max*ALT), ho=Math.round(Math.max(0,D.outro)/max*ALT), sel=_erDia===d;
-        const pilha=[[ho,'#94a3b8'],[hs,'#3b82f6'],[hp,'#f59e0b']].filter(x=>x[0]>0);
-        return '<button onclick="erVerDia(\''+d+'\')" title="'+d+': '+fmt(D.tot)+' pacotes" style="flex:1;min-width:22px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;background:'+(sel?'#eff6ff':'transparent')+';border:none;border-radius:10px;cursor:pointer;padding:0 0 2px;font-family:inherit;">'+
-          '<div style="font-size:10.5px;font-weight:700;color:'+(D.tot>0.5?'#334155':'#cbd5e1')+';margin-bottom:4px;">'+(D.tot>0.5?fmt(D.tot):'0')+'</div>'+
-          '<div style="width:68%;max-width:30px;display:flex;flex-direction:column;border-radius:6px 6px 3px 3px;overflow:hidden;">'+pilha.map(x=>'<div style="height:'+x[0]+'px;background:'+x[1]+';"></div>').join('')+'</div>'+
-          '<div style="font-size:10px;color:var(--pt-sub);margin-top:5px;white-space:nowrap;">'+d.slice(0,5)+'</div></button>';
-      }).join('')+
-    '</div></div>';
-  const linhaP=(rot,v,cor,tot,k)=>'<button onclick="erPendVer(\''+k+'\')" title="Ver os pendentes" style="display:block;width:100%;text-align:left;border:none;background:'+(_erPendSel===k?'#eff6ff':'transparent')+';border-radius:9px;padding:6px 8px;margin:0 -8px 5px;width:calc(100% + 16px);cursor:pointer;font-family:inherit;color:inherit;">'+
-    '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="font-weight:600;color:#334155;">'+rot+'</span><span><b>'+fmt(v)+'</b> <span style="color:#94a3b8;font-size:12px;">›</span></span></div>'+
-    '<div class="pt-barra"><div style="width:'+(tot?Math.max(2,v/tot*100):0)+'%;background:'+cor+';"></div></div></button>';
-  const clsPaoPend=PAO_CLASSES.filter(c=>(pPaoCls[c]||0)>0.5);
-  const clsPend=Object.keys(pCls).sort(ordCls);
-  const pendHtml=pTot<0.5
-    ? '<div class="pt-vazio" style="padding:26px 10px;"><div style="font-size:30px;">✅</div><div style="font-weight:700;color:var(--pt-txt);margin-top:6px;">Nada pendente</div></div>'
-    : '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px;"><span style="font-size:30px;font-weight:800;color:#b45309;">'+fmt(pTot)+'</span><span style="font-size:13px;color:var(--pt-sub);">pacotes · '+pend.length+' produto(s) · '+diasPend+' dia(s)</span></div>'+
-      linhaP('🍞 Pães',pPao,'#f59e0b',pTot,'pao')+
-      (clsPaoPend.length?'<div style="margin:2px 0 8px 14px;padding-left:12px;border-left:2px solid #fde68a;">'+clsPaoPend.map(c=>linhaP(c,pPaoCls[c],'#fcd34d',pTot,'pao:'+c)).join('')+'</div>':'')+
-      linhaP('🥐 Salgados',pSalgTot,'#3b82f6',pTot,'salgado')+
-      (clsPend.length?'<div style="margin:2px 0 8px 14px;padding-left:12px;border-left:2px solid #dbeafe;">'+clsPend.map(c=>linhaP(c,pCls[c],'#93c5fd',pTot,'salgado:'+c)).join('')+'</div>':'')+
-      (pOutro>0.5?linhaP('📦 Outros',pOutro,'#94a3b8',pTot,'outro'):'')+
-      (maisAntigo?'<div style="font-size:11.5px;color:var(--pt-mut);margin-top:6px;">Mais antigo pendente: <b style="color:#b45309;">'+maisAntigo+'</b></div>':'');
-  h+='<div class="pt-grid pt-g21">'+_ptCard('Embalado por dia','toque num dia para ver o detalhe', barras)+_ptCard('Falta embalar','toque num grupo para ver a lista', pendHtml)+'</div>';
-
-  // ── lista dos pendentes do grupo escolhido ──
-  if(_erPendSel){
-    const [tp,cl]=_erPendSel.split(':');
-    const sel=pend.filter(x=>x.tipo===tp && (!cl || x.classe===cl)).sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)||b.falta-a.falta);
-    const nome=cl||({pao:'Pães',salgado:'Salgados',outro:'Outros'}[tp]);
-    const hojeN=_erNum(fmtData(new Date()));
-    const corpoP=sel.length
-      ? '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,560px);"><thead><tr><th>Produto</th><th>Produção</th><th class="c">Faltam</th></tr></thead><tbody>'+
-          sel.map(x=>{ const atras=_erNum(x.r.data)<hojeN;
-            return '<tr><td style="padding-right:36px;"><b style="font-weight:600;">'+x.r.produto+'</b></td>'+
-              '<td style="padding-right:28px;color:'+(atras?'#b45309':'var(--pt-sub)')+';font-weight:'+(atras?'700':'400')+';">'+x.r.data.slice(0,5)+' <span style="font-size:11px;color:var(--pt-mut);font-weight:400;">'+semana(x.r.data)+'</span></td>'+
-              '<td class="c" style="font-weight:800;">'+fmt(x.falta)+'</td></tr>'; }).join('')+
-        '</tbody></table></div>'
-      : '<div class="pt-vazio" style="padding:18px;">Nada pendente aqui.</div>';
-    h+='<div id="er-pend-lista" class="pt-grid">'+_ptCard('Pendentes · '+nome, sel.length+' produto(s) · '+fmt(sel.reduce((t,x)=>t+x.falta,0))+' pacotes · produção mais antiga primeiro', corpoP,
-      '<button class="pt-btn" onclick="erPendVer(\''+_erPendSel+'\')">Fechar</button>')+'</div>';
-  }
-
-  // ── tabela dia a dia ──
-  const linhas=dias.slice().reverse().map(d=>{
-    const D=porDia[d];
-    const vs=media&&D.tot>0.5?Math.round((D.tot/media-1)*100):null;
-    return '<tr class="cl" onclick="erVerDia(\''+d+'\')"'+(_erDia===d?' style="background:#eff6ff;"':'')+'>'+
-      '<td><b style="font-weight:650;">'+d.slice(0,5)+'</b> <span style="color:var(--pt-mut);font-size:11.5px;">'+semana(d)+'</span></td>'+
-      paoPer.map(c=>'<td class="c" style="color:#b45309;">'+((D.paoCls[c]||0)>0.5?fmt(D.paoCls[c]):'<span style="color:#cbd5e1;">—</span>')+'</td>').join('')+
-      clsPer.map(c=>'<td class="c" style="color:#1d4ed8;">'+(D.cls[c]>0.5?fmt(D.cls[c]):'<span style="color:#cbd5e1;">—</span>')+'</td>').join('')+
-      (temOutro?'<td class="c" style="color:#475569;">'+(D.outro>0.5?fmt(D.outro):'<span style="color:#cbd5e1;">—</span>')+'</td>':'')+
-      '<td class="c" style="font-weight:800;">'+(D.tot>0.5?fmt(D.tot):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
-      (()=>{ const e=eqDia(d); const ph=(e&&e.min>0&&D.tot>0.5)?D.tot/(e.min/60):null;
-        return '<td class="c" style="color:#0369a1;">'+(e?e.n:'<span style="color:#cbd5e1;">—</span>')+'</td>'+
-          '<td class="c" style="color:#0369a1;">'+(e&&e.min?hh(e.min):'<span style="color:#cbd5e1;">—</span>')+'</td>'+
-          '<td class="c" style="font-weight:700;">'+(ph?(Math.round(ph*10)/10).toLocaleString('pt-BR'):'<span style="color:#cbd5e1;">—</span>')+'</td>'; })()+
-      '<td class="c">'+(vs===null?'<span style="color:#cbd5e1;">—</span>':_ptPill((vs>0?'+':'')+vs+'%', vs>=0?'green':'red', true))+'</td></tr>';
+  const barras=dias.map(d=>{
+    const D=porDia[d], v=val(d), sel=dSel===d;
+    const seg=_erTurno==='todos'?[['sem',D.sem],['tarde',D.tarde],['manha',D.manha]]:[[_erTurno,D[_erTurno]]];
+    return '<button class="nx-bar'+(sel?' sel':'')+'" onclick="erVerDia(\''+d+'\')" aria-label="'+d+': '+fmt(v)+' pacotes">'+
+      '<span class="n'+(v>0.5?'':' z')+'">'+(v>0.5?fmt(v):'0')+'</span>'+
+      '<span class="pil">'+seg.filter(s=>s[1]>0.5).map(s=>'<i style="display:block;height:'+Math.max(2,Math.round(s[1]/maxD*ALT))+'px;background:'+COR[s[0]]+';"></i>').join('')+'</span>'+
+      '<span class="d">'+d.slice(0,5)+'</span></button>';
   }).join('');
-  h+='<div class="pt-grid">'+_ptCard('Dia a dia','pacotes embalados · equipe do setor Embalação pelo ponto', '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Dia</th>'+
-    paoPer.map(c=>'<th class="c">🍞 '+c+'</th>').join('')+
-    clsPer.map(c=>'<th class="c">🥐 '+c+'</th>').join('')+(temOutro?'<th class="c">Outros</th>':'')+'<th class="c">Total</th>'+
-    '<th class="c">Pessoas</th><th class="c">Horas</th><th class="c">Pct/hora</th><th class="c">vs média</th></tr></thead><tbody>'+linhas+'</tbody></table></div>')+'</div>';
-
-  // ── detalhe do dia ──
-  const dSel=_erDia || (dias.length===1?dias[0]:'');
-  if(dSel && porDia[dSel]){
-    const D=porDia[dSel];
-    const prods=Object.values(D.prods).filter(p=>Math.abs(p.pct)>0.001).sort((a,b)=>b.pct-a.pct);
-    const deOutros=prods.filter(p=>p.dataProd && p.dataProd!==dSel).reduce((t,p)=>t+p.pct,0);
-    const ic=g=>g.tipo==='pao'?'🍞':(g.tipo==='salgado'?'🥐':'📦');
-    const corpo=prods.length
-      ? '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,560px);"><thead><tr><th>Produto</th><th>Produção</th><th>Grupo</th><th class="c">Pacotes</th></tr></thead><tbody>'+
-          prods.map(p=>'<tr><td style="padding-right:36px;"><span style="margin-right:6px;">'+ic(p.g)+'</span><b style="font-weight:600;">'+p.produto+'</b></td>'+
-            '<td style="padding-right:28px;color:'+(p.dataProd&&p.dataProd!==dSel?'#b45309':'var(--pt-sub)')+';">'+(p.dataProd?p.dataProd.slice(0,5):'—')+(p.dataProd&&p.dataProd!==dSel?' · outro dia':'')+'</td>'+
-            '<td style="padding-right:28px;">'+(p.g.tipo==='salgado'?_ptPill(p.g.classe,'blue',true):(p.g.tipo==='pao'?_ptPill(p.g.classe||'Pão','amber',true):_ptPill('Outro','gray',true)))+'</td>'+
-            '<td class="c" style="font-weight:800;">'+fmt(p.pct)+'</td></tr>').join('')+
-        '</tbody></table></div>'
-      : '<div class="pt-vazio" style="padding:18px;">Nada lançado neste dia.</div>';
-    const eD=eqDia(dSel);
-    h+='<div id="er-detalhe" class="pt-grid">'+_ptCard('Embalado em '+dSel, semana(dSel)+' · '+fmt(D.tot)+' pacotes'+(deOutros>0.5?(' · '+fmt(deOutros)+' de produções de outros dias'):'')+
-      (eD?(' · '+eD.n+' pessoa(s), '+hh(eD.min)+(eD.min&&D.tot>0.5?(' · '+(Math.round(D.tot/(eD.min/60)*10)/10).toLocaleString('pt-BR')+' pct/hora'):'')):''), corpo,
-      '<button class="pt-btn" onclick="erVerDia(\''+dSel+'\')">Fechar</button>')+'</div>';
+  const linhaMedia=media?'<div style="position:absolute;left:0;right:0;bottom:'+(24+Math.round(media/maxD*ALT))+'px;border-top:1px dashed var(--mut);pointer-events:none;"><span style="position:absolute;right:0;top:-17px;font-size:10.5px;color:var(--sub);background:var(--rot);padding:0 6px;border-radius:6px;">média '+fmt(media)+'</span></div>':'';
+  const horasCom=Object.keys(porHora).map(Number);
+  const h0=horasCom.length?Math.min(6,...horasCom):6, h1=horasCom.length?Math.max(17,...horasCom):17;
+  const nDias=Math.max(1,dias.filter(d=>porDia[d].manha+porDia[d].tarde>0.5).length);
+  const maxH=Math.max(1,...horasCom.map(x=>porHora[x]/nDias));
+  let pico=null; horasCom.forEach(x=>{ if(pico===null || porHora[x]>porHora[pico]) pico=x; });
+  let barrasH='';
+  for(let x=h0;x<=h1;x++){
+    const v=(porHora[x]||0)/nDias, t=x<12?'manha':'tarde', fora=_erTurno!=='todos' && _erTurno!==t;
+    barrasH+='<div style="flex:1;min-width:14px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;'+(x===12?'border-left:1px dashed var(--mut);':'')+(fora?'opacity:.28;':'')+'">'+
+      '<span style="font-size:10.5px;font-weight:700;margin-bottom:4px;color:'+(x===pico?'var(--tx)':'var(--sub)')+';">'+(v>0.5?fmt(v):'')+'</span>'+
+      '<i style="display:block;width:66%;max-width:26px;border-radius:7px;height:'+Math.max(v>0.5?3:0,Math.round(v/maxH*140))+'px;background:'+COR[t]+';'+(x===pico?'box-shadow:0 0 18px '+COR[t]+';':'opacity:.78;')+'"></i>'+
+      '<span style="font-size:10.5px;color:var(--mut);margin-top:7px;">'+x+'h</span></div>';
   }
+  h+='<div class="nx-g nx-g2">'+
+    '<div class="nx-card"><div class="nx-h"><b>Embalado por dia</b><span>toque num dia para ver os produtos embaixo</span>'+
+      '<span class="dir">'+(_erTurno==='todos'?'<span><span class="nx-pt" style="background:'+COR.manha+';"></span> manhã</span><span><span class="nx-pt" style="background:'+COR.tarde+';"></span> tarde</span>':'')+'</span></div>'+
+      '<div class="nx-scroll"><div class="nx-bars" style="min-width:'+(dias.length*(dias.length>20?24:38))+'px;">'+linhaMedia+barras+'</div></div></div>'+
+    '<div class="nx-card"><div class="nx-h"><b>Em que hora rende mais</b><span>média de pacotes por hora do dia</span></div>'+
+      (horasCom.length?'<div class="nx-bars" style="gap:5px;height:200px;">'+barrasH+'</div>'+
+        '<div class="nx-sub">Pico às <b style="color:var(--tx);">'+pico+'h</b>, com '+fmt(porHora[pico]/nDias)+' pacotes em média. A linha tracejada marca o meio-dia.</div>'
+        :'<div class="nx-vazio">Sem lançamentos com horário no período.</div>')+'</div>'+
+  '</div>';
 
-  h+='<div class="pt-nota">Cada pacote conta no dia em que foi <b>lançado</b> na embalagem, não no dia da produção. '+
-    'Ajuste de quantidade depois de finalizar corrige o dia em que o produto foi finalizado. '+
-    '<b>Não entra o “Embalar em lote”</b>, que fecha o dia sem conferência'+(lotePer>0.5?(' — neste período foram '+fmt(lotePer)+' pacote(s) em lote, fora da conta'):'')+'.</div>';
-  h+='</main></div>';
+  // ── tabela por dia + classes ──
+  const z='<span class="m">—</span>';
+  const linhasT=dias.slice().reverse().map(d=>{ const D=porDia[d], e=E(d), t=D.manha+D.tarde+D.sem;
+    const pm=(e&&e.minM>0&&D.manha>0.5)?D.manha/(e.minM/60):null, pt=(e&&e.minT>0&&D.tarde>0.5)?D.tarde/(e.minT/60):null;
+    return '<tr class="cl'+(dSel===d?' sel':'')+'" onclick="erVerDia(\''+d+'\')"><td><b style="font-weight:600;">'+d.slice(0,5)+'</b> <span class="m">'+semana(d)+'</span></td>'+
+      '<td style="color:'+COR.manha+';">'+(D.manha>0.5?fmt(D.manha):z)+'</td><td style="color:'+COR.tarde+';">'+(D.tarde>0.5?fmt(D.tarde):z)+'</td>'+
+      '<td><b style="font-weight:700;">'+(t>0.5?fmt(t):z)+'</b></td><td>'+(e?e.pes.size:z)+'</td><td>'+(e?hh(e.min):z)+'</td>'+
+      '<td style="color:'+COR.manha+';">'+(pm?f1(pm):z)+'</td><td style="color:'+COR.tarde+';">'+(pt?f1(pt):z)+'</td></tr>'; }).join('');
+  const clsL=Object.values(cls).sort((a,b)=>b.pct-a.pct), totC=clsL.reduce((t,x)=>t+x.pct,0)||1;
+  h+='<div class="nx-g nx-g3">'+
+    '<div class="nx-card"><div class="nx-h"><b>Dia a dia</b><span>pacotes por turno e ritmo de cada um</span></div><div class="nx-scroll"><table class="nx-tab"><thead><tr><th>Dia</th><th>Manhã</th><th>Tarde</th><th>Total</th><th>Pessoas</th><th>Horas</th><th>Pct/h manhã</th><th>Pct/h tarde</th></tr></thead><tbody>'+linhasT+'</tbody></table></div></div>'+
+    '<div class="nx-card"><div class="nx-h"><b>Por classe</b><span>'+(_erTurno==='todos'?'embalado no período':(_erTurno==='manha'?'embalado de manhã':'embalado à tarde'))+'</span></div>'+
+      (clsL.length?clsL.map(c=>'<div style="margin-bottom:11px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span>'+c.nome+'</span><b style="font-weight:600;font-variant-numeric:tabular-nums;">'+fmt(c.pct)+'</b></div><div class="nx-tr"><i style="width:'+Math.max(2,c.pct/totC*100)+'%;background:'+corTipo(c.tipo)+';"></i></div></div>').join('')
+        :'<div class="nx-vazio">Nada lançado.</div>')+'</div>'+
+  '</div>';
+
+  // ── lado a lado: o que falta embalar | o que foi embalado no dia ──
+  if(_erPendSel && !pGr[_erPendSel]) _erPendSel='';
+  const pSel=pend.filter(x=>{ if(!_erPendSel) return true; const [tp,cl]=_erPendSel.split(':'); return x.tipo===tp && (!cl || x.classe===cl); })
+    .sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)||b.falta-a.falta);
+  const hojeN=_erNum(fmtData(new Date()));
+  const esq='<div><div class="nx-h"><b>Falta embalar</b><span>'+fmt(pSel.reduce((t,x)=>t+x.falta,0))+' pacotes · '+pSel.length+' produto(s) · mais antigo primeiro</span></div>'+
+    (pLista.length?'<div style="margin-bottom:10px;"><div class="nx-pills" role="group" aria-label="Classe">'+
+        '<button class="'+(!_erPendSel?'on':'')+'" onclick="erPendVer(\'\')">Todos<i>'+fmt(pTot)+'</i></button>'+
+        pLista.map(p=>'<button class="'+(_erPendSel===p.k?'on':'')+'" onclick="erPendVer(\''+p.k.replace(/'/g,"\\'")+'\')">'+p.nome+'<i>'+fmt(p.v)+'</i></button>').join('')+'</div></div>':'')+
+    (pSel.length?'<div class="nx-rol"><table class="nx-tab"><thead><tr><th>Produto</th><th class="e">Produção</th><th class="e">Classe</th><th>Faltam</th></tr></thead><tbody>'+
+        pSel.map(x=>'<tr><td><b style="font-weight:600;">'+x.r.produto+'</b></td><td class="e" style="color:'+(_erNum(x.r.data)<hojeN?'var(--or)':'var(--sub)')+';">'+x.r.data.slice(0,5)+' <span class="m">'+semana(x.r.data)+'</span></td>'+
+          '<td class="e"><span class="nx-chip"><span class="nx-pt" style="background:'+corTipo(x.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(x.tipo==='outro'?'Outro':x.classe)+'</span></td><td><b>'+fmt(x.falta)+'</b></td></tr>').join('')+'</tbody></table></div>'
+      :'<div class="nx-vazio" style="color:var(--ok);">Tudo embalado.</div>')+'</div>';
+  const prods=Object.values(porDia[dSel].prods).map(p=>({...p, tot:p.manha+p.tarde+p.sem})).filter(p=>Math.abs(p.tot)>0.001).sort((a,b)=>b.tot-a.tot);
+  const iSel=dias.indexOf(dSel);
+  const dir='<div><div class="nx-h"><b>Embalado em '+dSel.slice(0,5)+'</b><span>'+semana(dSel)+' · '+fmt(val(dSel))+' pacotes'+(_erTurno==='todos'?'':(_erTurno==='manha'?' de manhã':' à tarde'))+'</span>'+
+      '<span class="dir"><button class="nx-btn ic" onclick="erDiaMover(-1)"'+(iSel<=0?' disabled':'')+' aria-label="Dia anterior">‹</button><button class="nx-btn ic" onclick="erDiaMover(1)"'+(iSel>=dias.length-1?' disabled':'')+' aria-label="Próximo dia">›</button></span></div>'+
+    (prods.length?'<div class="nx-rol"><table class="nx-tab"><thead><tr><th>Produto</th><th class="e">Produção</th><th class="e">Classe</th><th>Manhã</th><th>Tarde</th><th>Total</th></tr></thead><tbody>'+
+        prods.map(p=>'<tr><td><b style="font-weight:600;">'+p.produto+'</b></td>'+
+          '<td class="e" style="color:'+(p.dataProd&&p.dataProd!==dSel?'var(--or)':'var(--sub)')+';">'+(p.dataProd?p.dataProd.slice(0,5):'—')+(p.dataProd&&p.dataProd!==dSel?' · outro dia':'')+'</td>'+
+          '<td class="e"><span class="nx-chip"><span class="nx-pt" style="background:'+corTipo(p.g.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(p.g.tipo==='outro'?'Outro':p.g.classe)+'</span></td>'+
+          '<td style="color:'+COR.manha+';">'+(p.manha>0.5?fmt(p.manha):z)+'</td><td style="color:'+COR.tarde+';">'+(p.tarde>0.5?fmt(p.tarde):z)+'</td><td><b>'+fmt(p.tot)+'</b></td></tr>').join('')+'</tbody></table></div>'
+      :'<div class="nx-vazio">Nada lançado neste dia'+(_erTurno==='todos'?'':' neste turno')+'.</div>')+'</div>';
+  h+='<div class="nx-card nx-duo" style="margin-bottom:14px;">'+esq+'<div class="sep"></div>'+dir+'</div>';
+
+  h+='<div class="nx-nota">Cada pacote conta no dia e na hora em que foi lançado na embalagem. O “embalar em lote” fica fora'+(lotePer>0.5?(' ('+fmt(lotePer)+' pacotes no período)'):'')+'. '+
+    'Pacotes por hora = pacotes do turno ÷ horas trabalhadas no turno pela equipe da Embalação, conforme as batidas do ponto.</div></div>';
   el.innerHTML=h;
 }
+
+
+/* ══ PLANO DA EMBALAGEM ═════════════════════════════════════════════
+   Quem cuida do plano distribui o que falta embalar pelos dias da
+   semana (segunda a sexta): arrasta o produto para o dia — ou toca no
+   produto e depois no dia, que é como funciona no tablet. Cada cartão
+   do plano tem uma barra que anda sozinha conforme a embalagem lança.
+
+   Como o andamento é calculado: ao entrar no plano, cada item guarda
+   quanto daquele registro já estava embalado ("base"). O que foi
+   embalado depois disso vai preenchendo os itens daquele produto na
+   ordem dos dias. Produto finalizado = item concluído.
+
+   Extras: capacidade do dia (média do que a embalagem lançou nos
+   últimos 15 dias) com aviso quando o dia passa dela; "Sugerir" monta
+   o plano do mais antigo para o mais novo até a capacidade; atrasados
+   podem ser trazidos para hoje.
+   Guarda em configuracoes/embPlano: { itens: { id: {...} } }. */
+let _plnItens={}, _plnOuvindo=false, _plnSem='', _plnSel='', _plnBusca='', _plnClasse='', _plnArr=false;
+function embPlanoAbrir(){ _erVista='plano'; goTo('s-emb-rend'); renderEmbRend(); }
+window.embPlanoAbrir=embPlanoAbrir;
+function _plnEscutar(){
+  if(_plnOuvindo) return; _plnOuvindo=true;
+  onSnapshot(doc(db,'configuracoes','embPlano'), snap=>{
+    try{
+      _plnItens=(snap.exists() && snap.data().itens) ? snap.data().itens : {};
+      if(document.querySelector('.screen.active')?.id==='s-emb-rend' && _erVista==='plano' && !_plnArr) renderEmbRend();
+    }catch(e){ console.error('embPlano:', e); }
+  }, err=>console.error('embPlano err:', err));
+}
+async function _plnSalvar(){
+  // limpeza: item concluído há mais de 14 dias sai do registro
+  const lim=new Date(); lim.setDate(lim.getDate()-14); const limN=_erNum(fmtData(lim));
+  Object.keys(_plnItens).forEach(id=>{ if(_erNum(_plnItens[id].dia)<limN) delete _plnItens[id]; });
+  try{ await setDoc(doc(db,'configuracoes','embPlano'),{itens:_plnItens, atualizadoEm:agora(), por:_demAutor()}); }
+  catch(e){ alert('Não consegui salvar o plano: '+((e&&e.message)||e)); }
+}
+const _plnId=()=>'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+/* põe q pacotes de um registro num dia; se o produto já está naquele dia, soma no mesmo cartão */
+function _plnPor(p, dia, q, extra){
+  const ja=Object.keys(_plnItens).find(id=>_plnItens[id].reg===p.r.firestoreId && _plnItens[id].dia===dia);
+  if(ja){ _plnItens[ja].qtd=Math.round((Number(_plnItens[ja].qtd)||0)+q); return; }
+  _plnItens[_plnId()]={reg:p.r.firestoreId, produto:p.r.produto||'', dataProd:p.r.data||'', tipo:p.tipo, classe:p.classe||'', qtd:Math.round(q), dia,
+    base:_plnEmb(p.r), ord:Date.now()+(extra||0), criadoEm:agora(), por:_demAutor()};
+}
+/* pacotes já embalados de um registro */
+function _plnEmb(r){ const e=(r&&r.embalagem)||{}; const s=(e.parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0); return e.feito?(Number(e.qtdEmbalada)||s):s; }
+function _plnSegunda(d){ const x=new Date(d); x.setHours(12,0,0,0); x.setDate(x.getDate()-((x.getDay()+6)%7)); return x; }
+
+/* estado de tudo: itens com andamento, pendentes sem encaixe, dias */
+function _plnEstado(){
+  const hojeS=fmtData(new Date()), hojeN=_erNum(hojeS);
+  const regPorId={}; (registros||[]).forEach(r=>{ regPorId[r.firestoreId]=r; });
+  // andamento: por registro, na ordem dos dias
+  const porReg={};
+  Object.keys(_plnItens).forEach(id=>{ const it={id, ..._plnItens[id]}; (porReg[it.reg]||(porReg[it.reg]=[])).push(it); });
+  const itens=[];
+  Object.keys(porReg).forEach(reg=>{
+    const l=porReg[reg].sort((a,b)=>_erNum(a.dia)-_erNum(b.dia)||(a.ord||0)-(b.ord||0));
+    const r=regPorId[reg], fechado=!r || !!(r.embalagem&&r.embalagem.feito);
+    let resto=fechado?Infinity:Math.max(0,_plnEmb(r)-Math.min(...l.map(x=>Number(x.base)||0)));
+    l.forEach(it=>{ const q=Number(it.qtd)||0, f=Math.min(q,resto); resto-=f;
+      itens.push({...it, feito:f, pronto:f>=q-0.001, atrasado:_erNum(it.dia)<hojeN && f<q-0.001}); });
+  });
+  // o que ainda não tem dia: falta do produto menos o que está planejado e ainda não foi feito
+  const pend=_erPendentes().map(p=>{
+    const plan=itens.filter(it=>it.reg===p.r.firestoreId).reduce((t,it)=>t+Math.max(0,(Number(it.qtd)||0)-it.feito),0);
+    return {...p, livre:Math.max(0,p.falta-plan)};
+  });
+  return {itens, pend, hojeS, hojeN};
+}
+/* capacidade: média diária do que a embalagem lançou nos últimos 15 dias com lançamento */
+function _plnCapacidade(){
+  const lim=new Date(); lim.setDate(lim.getDate()-15); const limN=_erNum(fmtData(lim)), hojeN=_erNum(fmtData(new Date()));
+  const d={}; _erEventos().ev.forEach(x=>{ const n=_erNum(x.dia); if(n>=limN && n<hojeN) d[x.dia]=(d[x.dia]||0)+x.pct; });
+  const v=Object.values(d).filter(x=>x>0.5);
+  return v.length?Math.round(v.reduce((t,x)=>t+x,0)/v.length):0;
+}
+
+/* ── ações ── */
+function plnSemana(n){ const b=_plnSem?new Date(_plnSem+'T12:00:00'):_plnSegunda(new Date()); b.setDate(b.getDate()+7*n); _plnSem=n===0?'':(b.getFullYear()+'-'+String(b.getMonth()+1).padStart(2,'0')+'-'+String(b.getDate()).padStart(2,'0')); renderEmbRend(); }
+window.plnSemana=plnSemana;
+function plnSelecionar(k){ _plnSel=(_plnSel===k?'':k); renderEmbRend(); }
+window.plnSelecionar=plnSelecionar;
+function plnFiltro(campo,v){ if(campo==='c') _plnClasse=(_plnClasse===v?'':v); else _plnBusca=v; renderEmbRend(); if(campo==='b'){ const i=document.getElementById('pln-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } } }
+window.plnFiltro=plnFiltro;
+/* põe um produto pendente num dia, ou muda um item de dia */
+async function plnColocar(k, dia){
+  const E=_plnEstado();
+  if(k.startsWith('p:')){
+    const p=E.pend.find(x=>x.r.firestoreId===k.slice(2)); if(!p || p.livre<0.5) return;
+    _plnPor(p, dia, p.livre);
+  } else if(k.startsWith('i:')){
+    const id=k.slice(2), it=_plnItens[id]; if(!it || it.dia===dia) { _plnSel=''; renderEmbRend(); return; }
+    // se o produto já tem cartão no dia de destino, junta os dois
+    const ja=Object.keys(_plnItens).find(x=>x!==id && _plnItens[x].reg===it.reg && _plnItens[x].dia===dia);
+    if(ja){ _plnItens[ja].qtd=Math.round((Number(_plnItens[ja].qtd)||0)+(Number(it.qtd)||0)); _plnItens[ja].base=Math.min(Number(_plnItens[ja].base)||0, Number(it.base)||0); delete _plnItens[id]; }
+    else { it.dia=dia; it.ord=Date.now(); }
+  } else return;
+  _plnSel=''; renderEmbRend(); await _plnSalvar();
+}
+window.plnColocar=plnColocar;
+async function plnTirar(id){ if(!_plnItens[id]) return; delete _plnItens[id]; _plnSel=''; renderEmbRend(); await _plnSalvar(); }
+window.plnTirar=plnTirar;
+async function plnQtd(id){
+  const it=_plnItens[id]; if(!it) return;
+  const E=_plnEstado(), p=E.pend.find(x=>x.r.firestoreId===it.reg), x=E.itens.find(y=>y.id===id);
+  const max=Math.round((Number(it.qtd)||0)+(p?p.livre:0));
+  const v=prompt('Quantos pacotes de '+it.produto+' neste dia?\n\nMáximo: '+max+(x&&x.feito>0.5?(' · já embalados: '+Math.round(x.feito)):''), Math.round(it.qtd));
+  if(v===null) return;
+  const n=Math.round(parseFloat(String(v).replace(',','.')));
+  if(!(n>0)){ alert('Informe um número maior que zero. Para tirar do plano, use o ×.'); return; }
+  it.qtd=Math.min(n,max); renderEmbRend(); await _plnSalvar();
+}
+window.plnQtd=plnQtd;
+/* arrastar (computador); no tablet vale o toque no produto e depois no dia */
+function plnDragIni(ev,k){ _plnArr=true; try{ ev.dataTransfer.setData('text/plain',k); ev.dataTransfer.effectAllowed='move'; }catch(e){} }
+function plnDragFim(){ _plnArr=false; document.querySelectorAll('.pl-dia.alvo,.pl-esq.alvo').forEach(e=>e.classList.remove('alvo')); }
+function plnDragSobre(ev,el){ ev.preventDefault(); el.classList.add('alvo'); }
+function plnDragSai(el){ el.classList.remove('alvo'); }
+function plnSoltar(ev,dia){ ev.preventDefault(); _plnArr=false; let k=''; try{ k=ev.dataTransfer.getData('text/plain'); }catch(e){} if(!k) return; if(dia) plnColocar(k,dia); else if(k.startsWith('i:')) plnTirar(k.slice(2)); else renderEmbRend(); }
+Object.assign(window,{plnDragIni,plnDragFim,plnDragSobre,plnDragSai,plnSoltar});
+/* monta o plano sozinho: mais antigo primeiro, até a capacidade de cada dia */
+async function plnSugerir(){
+  const E=_plnEstado(), cap=_plnCapacidade();
+  const seg=_plnSem?new Date(_plnSem+'T12:00:00'):_plnSegunda(new Date());
+  const dias=[]; for(let i=0;i<5;i++){ const d=new Date(seg); d.setDate(seg.getDate()+i); const s=fmtData(d); if(_erNum(s)>=E.hojeN) dias.push(s); }
+  const livres=E.pend.filter(p=>p.livre>0.5).sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data));
+  if(!dias.length){ alert('Esta semana já passou. Avance para a semana atual.'); return; }
+  if(!livres.length){ alert('Não há nada sem encaixe.'); return; }
+  if(!cap){ alert('Ainda não tenho histórico de embalagem para calcular a capacidade do dia. Monte o plano arrastando.'); return; }
+  if(!confirm('Sugerir o plano?\n\nVou distribuir '+livres.length+' produto(s) sem encaixe, do mais antigo para o mais novo, em '+dias.length+' dia(s), até cerca de '+cap+' pacotes por dia (a média do que a embalagem vem lançando).\n\nO que você já colocou no plano não muda. Dá para ajustar depois.')) return;
+  // o que já está no dia ocupa a capacidade dele, feito ou não
+  const usado={}; dias.forEach(d=>usado[d]=E.itens.filter(it=>it.dia===d).reduce((t,it)=>t+(Number(it.qtd)||0),0));
+  let n=0;
+  livres.forEach(p=>{ let falta=Math.round(p.livre);
+    for(const d of dias){ if(falta<=0) break; const vaga=Math.round(cap-usado[d]); if(vaga<=0) continue;
+      const q=Math.min(falta,vaga); usado[d]+=q; falta-=q; n++;
+      _plnPor(p, d, q, n); } });
+  renderEmbRend(); await _plnSalvar();
+}
+window.plnSugerir=plnSugerir;
+/* o que ficou para trás vem para hoje: a parte feita fica no dia antigo, o resto muda de dia */
+async function plnAtrasados(){
+  const E=_plnEstado(); const l=E.itens.filter(it=>it.atrasado); if(!l.length) return;
+  if(!confirm('Trazer '+l.length+' item(ns) atrasado(s) para hoje?\n\nO que já foi embalado fica registrado no dia original; só o que falta vem para hoje.')) return;
+  l.forEach((it,i)=>{ const falta=Math.round((Number(it.qtd)||0)-it.feito), o=_plnItens[it.id]; if(!o||falta<=0) return;
+    if(it.feito>0.5){ o.qtd=Math.round(it.feito); _plnItens[_plnId()]={...o, qtd:falta, dia:E.hojeS, ord:Date.now()+i, criadoEm:agora(), por:_demAutor()}; }
+    else { o.dia=E.hojeS; o.ord=Date.now()+i; } });
+  renderEmbRend(); await _plnSalvar();
+}
+window.plnAtrasados=plnAtrasados;
+async function plnLimpar(){
+  const seg=_plnSem?new Date(_plnSem+'T12:00:00'):_plnSegunda(new Date());
+  const dias=new Set(); for(let i=0;i<5;i++){ const d=new Date(seg); d.setDate(seg.getDate()+i); dias.add(fmtData(d)); }
+  const E=_plnEstado(); const l=E.itens.filter(it=>dias.has(it.dia) && it.feito<0.5);
+  if(!l.length){ alert('Não há nada para limpar nesta semana (o que já teve embalagem fica).'); return; }
+  if(!confirm('Tirar do plano os '+l.length+' item(ns) desta semana que ainda não começaram?\n\nEles voltam para a lista “Sem encaixe”.')) return;
+  l.forEach(it=>delete _plnItens[it.id]); renderEmbRend(); await _plnSalvar();
+}
+window.plnLimpar=plnLimpar;
+
+function _plnCss(){
+  if(document.getElementById('pln-css')) return;
+  const st=document.createElement('style'); st.id='pln-css';
+  st.textContent=`
+.pl-wrap{display:grid;grid-template-columns:310px minmax(0,1fr);gap:14px;align-items:start;}
+.pl-esq{position:sticky;top:10px;max-height:calc(100vh - 150px);display:flex;flex-direction:column;border:1px solid var(--bd);border-radius:22px;background:var(--card);padding:16px;box-shadow:var(--sombra);}
+.pl-esq.alvo,.pl-dia.alvo{outline:2px dashed var(--or);outline-offset:-2px;background:color-mix(in srgb,var(--or) 7%,var(--card));}
+.pl-lista{overflow:auto;margin:10px -6px 0;padding:0 6px;flex:1;min-height:60px;}
+.pl-dias{display:grid;grid-template-columns:repeat(5,minmax(176px,1fr));gap:10px;overflow-x:auto;padding-bottom:4px;}
+.pl-dia{border:1px solid var(--bd);border-radius:18px;background:var(--card);padding:12px;min-height:300px;display:flex;flex-direction:column;box-shadow:var(--sombra);}
+.pl-dia.hoje{border-color:var(--or);}
+.pl-dia.pode{cursor:pointer;border-style:dashed;border-color:var(--or);}
+.pl-dh{display:flex;align-items:baseline;gap:6px;} .pl-dh b{font-size:14px;font-weight:600;} .pl-dh span{font-size:11.5px;color:var(--mut);}
+.pl-dh em{margin-left:auto;font-style:normal;font-size:10.5px;font-weight:700;color:var(--or-tx);background:var(--or);border-radius:99px;padding:1px 8px;}
+.pl-tot{font-size:12px;color:var(--sub);margin-top:6px;font-variant-numeric:tabular-nums;} .pl-tot b{color:var(--tx);font-size:15px;font-weight:600;}
+.pl-bar{height:5px;border-radius:99px;background:var(--trk);overflow:hidden;margin-top:6px;} .pl-bar i{display:block;height:100%;border-radius:99px;background:var(--tl);transition:width .4s ease;}
+.pl-its{margin-top:10px;display:flex;flex-direction:column;gap:7px;flex:1;}
+.pl-c{border:1px solid var(--bd);border-radius:13px;background:var(--pill);padding:9px 10px;cursor:grab;position:relative;text-align:left;font-family:inherit;color:inherit;width:100%;display:block;}
+.pl-c:active{cursor:grabbing;} .pl-c.sel{border-color:var(--or);box-shadow:0 0 0 2px color-mix(in srgb,var(--or) 35%,transparent);}
+.pl-c.atr{border-left:3px solid var(--bad);} .pl-c.ok{opacity:.62;}
+.pl-c .n{font-size:12.5px;font-weight:600;line-height:1.25;padding-right:44px;word-break:break-word;}
+.pl-c .s{font-size:11px;color:var(--mut);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.pl-c .q{position:absolute;top:8px;right:9px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;}
+.pl-c .ac{display:flex;gap:6px;margin-top:7px;}
+.pl-mini{border:1px solid var(--bd);background:var(--card);color:var(--tx);font-family:inherit;font-size:11px;font-weight:600;border-radius:99px;padding:3px 9px;cursor:pointer;}
+.pl-vz{flex:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11.5px;color:var(--mut);border:1px dashed var(--bd);border-radius:12px;padding:14px 8px;min-height:70px;}
+.pl-busca{width:100%;background:var(--pill) !important;border:1px solid var(--bd) !important;color:var(--tx) !important;border-radius:12px !important;padding:9px 11px !important;font-family:inherit;font-size:14px;margin-top:10px;box-shadow:none !important;}
+.pl-busca::placeholder{color:var(--mut);}
+.pl-aviso{border:1px solid color-mix(in srgb,var(--bad) 45%,transparent);background:color-mix(in srgb,var(--bad) 10%,transparent);border-radius:14px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+@media (max-width:980px){ .pl-wrap{grid-template-columns:minmax(0,1fr);} .pl-esq{position:static;max-height:340px;} }
+@media (max-width:640px){ .pl-busca{font-size:16px;} }
+`;
+  document.head.appendChild(st);
+}
+
+function _erPlanoTela(el){
+  _erNxLigar(el); _plnCss(); _plnEscutar();
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const E=_plnEstado(), cap=_plnCapacidade();
+  const seg=_plnSem?new Date(_plnSem+'T12:00:00'):_plnSegunda(new Date());
+  const dias=[]; for(let i=0;i<5;i++){ const d=new Date(seg); d.setDate(seg.getDate()+i); dias.push(fmtData(d)); }
+  const NOME=['Segunda','Terça','Quarta','Quinta','Sexta'];
+  const corTipo=t=>t==='pao'?'var(--pao)':(t==='salgado'?'var(--salg)':'var(--mut)');
+  const q=_normNome(_plnBusca||'').trim();
+  const passa=x=>(!q || _normNome(x.produto||'').includes(q)) && (!_plnClasse || (x.classe||'Outros')===_plnClasse);
+  const livres=E.pend.filter(p=>p.livre>0.5).sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)||b.livre-a.livre);
+  const livresF=livres.filter(p=>passa({produto:p.r.produto, classe:p.tipo==='outro'?'Outros':p.classe}));
+  const daSemana=E.itens.filter(it=>dias.includes(it.dia));
+  const classes=[...new Set(E.pend.map(p=>p.tipo==='outro'?'Outros':p.classe).concat(daSemana.map(it=>it.classe||'Outros')))].filter(Boolean);
+  const totFalta=E.pend.reduce((t,p)=>t+p.falta,0), totLivre=livres.reduce((t,p)=>t+p.livre,0);
+  const planSem=daSemana.reduce((t,it)=>t+(Number(it.qtd)||0),0), feitoSem=daSemana.reduce((t,it)=>t+it.feito,0);
+  const atrasados=E.itens.filter(it=>it.atrasado);
+  const semTxt=dias[0].slice(0,5)+' a '+dias[4].slice(0,5), ehAtual=dias.includes(E.hojeS);
+
+  let h='<div class="nx'+(_erTema==='claro'?' claro':'')+'"><div class="nx-top"><div><h1>Plano da embalagem</h1><p>semana de '+semTxt+' · arraste o produto para o dia, ou toque no produto e depois no dia</p></div>'+
+    '<div class="nx-acoes"><button class="nx-btn" onclick="erVista(\'rend\')">‹ Voltar ao rendimento</button>'+
+      '<div class="nx-pills"><button onclick="plnSemana(-1)" aria-label="Semana anterior">‹</button><button class="'+(ehAtual?'on':'')+'" onclick="plnSemana(0)">Esta semana</button><button onclick="plnSemana(1)" aria-label="Próxima semana">›</button></div>'+
+      '<button class="nx-btn pri" onclick="plnSugerir()" title="Distribui o que está sem encaixe, do mais antigo para o mais novo, até a capacidade do dia">✨ Sugerir</button>'+
+      '<button class="nx-btn" onclick="plnLimpar()">Limpar a semana</button>'+_erNxTemaBtn()+'</div></div>';
+
+  h+='<div class="nx-g nx-g4i">'+
+    '<div class="nx-card"><div class="nx-rot">Falta embalar<span class="ax">agora</span></div><div class="nx-num">'+fmt(totFalta)+'<small>pacotes</small></div><div class="nx-sub">'+E.pend.length+' produto(s) pendente(s)</div></div>'+
+    '<div class="nx-card"><div class="nx-rot">Sem encaixe<span class="ax">ainda sem dia</span></div><div class="nx-num"'+(totLivre>0.5?' style="color:var(--or);"':'')+'>'+fmt(totLivre)+'<small>pacotes</small></div><div class="nx-sub">'+(totLivre>0.5?(livres.length+' produto(s) esperando um dia'):'tudo o que falta já tem dia')+'</div></div>'+
+    '<div class="nx-card"><div class="nx-rot">Planejado na semana<span class="ax">'+semTxt+'</span></div><div class="nx-num">'+fmt(planSem)+'<small>pacotes</small></div><div class="nx-sub">'+(cap?('capacidade de uns '+fmt(cap)+' por dia · '+fmt(cap*5)+' na semana'):'sem histórico para estimar a capacidade')+'</div></div>'+
+    '<div class="nx-card"><div class="nx-rot">Andamento do plano<span class="ax">ao vivo</span></div><div class="nx-num" style="color:var(--tl);">'+(planSem?Math.round(feitoSem/planSem*100):0)+'<small>%</small></div><div class="pl-bar" style="height:8px;margin-top:10px;"><i style="width:'+(planSem?Math.min(100,feitoSem/planSem*100):0)+'%;"></i></div><div class="nx-sub">'+fmt(feitoSem)+' de '+fmt(planSem)+' pacotes embalados</div></div>'+
+  '</div>';
+  if(atrasados.length) h+='<div class="pl-aviso"><span><b>'+atrasados.length+' item(ns) atrasado(s)</b> — '+fmt(atrasados.reduce((t,it)=>t+(it.qtd-it.feito),0))+' pacotes de dias que já passaram.</span><button class="nx-btn pri" onclick="plnAtrasados()">Trazer para hoje</button></div>';
+
+  // esquerda: o que falta encaixar
+  const cartaoP=p=>{ const k='p:'+p.r.firestoreId, velho=_erNum(p.r.data)<E.hojeN;
+    return '<div role="button" tabindex="0" class="pl-c'+(_plnSel===k?' sel':'')+'" draggable="true" ondragstart="plnDragIni(event,\''+k+'\')" ondragend="plnDragFim()" onclick="plnSelecionar(\''+k+'\')" onkeydown="if(event.key===\'Enter\')plnSelecionar(\''+k+'\')">'+
+      '<span class="n" style="display:block;">'+(p.r.produto||'?')+'</span><span class="q" style="color:var(--or);">'+fmt(p.livre)+'</span>'+
+      '<span class="s"><span class="nx-pt" style="background:'+corTipo(p.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(p.tipo==='outro'?'Outro':p.classe)+' · produção '+p.r.data.slice(0,5)+(velho?' <b style="color:var(--bad);font-weight:600;">· '+Math.round((new Date().setHours(12,0,0,0)-_erDate(p.r.data))/864e5)+' d</b>':'')+
+        (p.livre<p.falta-0.5?(' · '+fmt(p.falta-p.livre)+' já no plano'):'')+'</span></div>'; };
+  const esq='<div class="pl-esq" ondragover="plnDragSobre(event,this)" ondragleave="plnDragSai(this)" ondrop="plnSoltar(event,\'\')">'+
+    '<div class="nx-h" style="margin-bottom:0;"><b>Sem encaixe</b><span>'+fmt(livresF.reduce((t,p)=>t+p.livre,0))+' pct · '+livresF.length+' produto(s)</span></div>'+
+    '<input class="pl-busca" id="pln-busca" type="text" placeholder="Filtrar por produto…" value="'+String(_plnBusca||'').replace(/"/g,'&quot;')+'" oninput="plnFiltro(\'b\',this.value)">'+
+    (classes.length>1?'<div style="margin-top:8px;"><div class="nx-pills">'+classes.map(c=>'<button class="'+(_plnClasse===c?'on':'')+'" onclick="plnFiltro(\'c\',\''+c.replace(/'/g,"\\'")+'\')">'+c+'</button>').join('')+'</div></div>':'')+
+    '<div class="pl-lista" style="display:flex;flex-direction:column;gap:7px;">'+
+      (livresF.length?livresF.map(cartaoP).join(''):'<div class="pl-vz">'+(livres.length?'Nenhum produto com esse filtro.':'Tudo o que falta embalar já tem dia no plano. 🎉')+'</div>')+
+    '</div>'+
+    '<div class="nx-sub" style="margin-top:10px;">'+(_plnSel?'<b style="color:var(--or);">Agora toque no dia</b> para colocar. Toque de novo no cartão para desistir.':'Solte um item do plano aqui para tirá-lo do plano.')+'</div></div>';
+
+  // direita: os cinco dias
+  const colunas=dias.map((d,i)=>{
+    const its=daSemana.filter(it=>it.dia===d).sort((a,b)=>(a.pronto?1:0)-(b.pronto?1:0)||(a.ord||0)-(b.ord||0));
+    const itsF=its.filter(passa);
+    const plan=its.reduce((t,it)=>t+(Number(it.qtd)||0),0), feito=its.reduce((t,it)=>t+it.feito,0);
+    const passou=_erNum(d)<E.hojeN, hoje=d===E.hojeS, acima=cap && plan>cap*1.1;
+    return '<div class="pl-dia'+(hoje?' hoje':'')+(_plnSel?' pode':'')+'" '+(_plnSel?'onclick="plnColocar(\''+_plnSel+'\',\''+d+'\')" ':'')+'ondragover="plnDragSobre(event,this)" ondragleave="plnDragSai(this)" ondrop="plnSoltar(event,\''+d+'\')"'+(passou&&!its.length?' style="opacity:.55;"':'')+'>'+
+      '<div class="pl-dh"><b>'+NOME[i]+'</b><span>'+d.slice(0,5)+'</span>'+(hoje?'<em>hoje</em>':'')+'</div>'+
+      '<div class="pl-tot"><b>'+fmt(plan)+'</b> pct'+(cap?(' <span style="color:'+(acima?'var(--bad)':'var(--mut)')+';">/ '+fmt(cap)+(acima?' · acima da capacidade':'')+'</span>'):'')+'</div>'+
+      '<div class="pl-bar"><i style="width:'+(plan?Math.min(100,feito/plan*100):0)+'%;"></i></div>'+
+      '<div class="pl-its">'+
+        (itsF.length?itsF.map(it=>{ const k='i:'+it.id, pc=it.qtd?Math.min(100,it.feito/it.qtd*100):0;
+          return '<div class="pl-c'+(_plnSel===k?' sel':'')+(it.atrasado?' atr':'')+(it.pronto?' ok':'')+'" draggable="true" ondragstart="plnDragIni(event,\''+k+'\')" ondragend="plnDragFim()" onclick="event.stopPropagation();plnSelecionar(\''+k+'\')">'+
+            '<span class="n" style="display:block;">'+(it.pronto?'✓ ':'')+it.produto+'</span><span class="q">'+fmt(it.qtd)+'</span>'+
+            '<span class="s"><span class="nx-pt" style="background:'+corTipo(it.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(it.classe||'Outro')+' · prod. '+String(it.dataProd||'').slice(0,5)+(it.atrasado?' <b style="color:var(--bad);font-weight:600;">· atrasado</b>':'')+'</span>'+
+            '<div class="pl-bar"><i style="width:'+pc+'%;'+(it.pronto?'background:var(--ok);':'')+'"></i></div>'+
+            '<span class="s" style="margin-top:4px;">'+fmt(it.feito)+' de '+fmt(it.qtd)+' embalados</span>'+
+            (_plnSel===k?'<div class="ac"><button class="pl-mini" onclick="event.stopPropagation();plnQtd(\''+it.id+'\')">Mudar quantidade</button><button class="pl-mini" onclick="event.stopPropagation();plnTirar(\''+it.id+'\')">Tirar do plano</button></div>':'')+
+          '</div>'; }).join('')
+          :'<div class="pl-vz">'+(its.length?'Nada com esse filtro.':(_plnSel?'Toque para colocar aqui':(passou?'Dia já passou':'Arraste um produto para cá')))+'</div>')+
+      '</div></div>'; }).join('');
+  h+='<div class="pl-wrap">'+esq+'<div class="pl-dias">'+colunas+'</div></div>';
+  h+='<div class="nx-nota" style="margin-top:14px;">A barra de cada item anda conforme a embalagem lança o produto: o que for embalado depois de entrar no plano preenche os dias na ordem. '+
+    'A capacidade do dia é a média do que a embalagem lançou nos últimos 15 dias. Toque num item do plano para mudar a quantidade ou tirar. O plano é salvo sozinho e aparece igual para todos.</div></div>';
+  el.innerHTML=h;
+}
+
+function renderEmbRend(){
+  const el=document.getElementById('emb-rend-content'); if(!el) return;
+  if(_plnArr) return;                                   // no meio de um arrasto, não redesenha
+  if(_erVista==='plano') _erPlanoTela(el);
+  else if(_erVista==='saldo' && window.adminMode===true) _erSaldoNovo(el);
+  else _erNovo(el);
+}
 window.renderEmbRend=renderEmbRend;
+
+/* ══ ABAS POR SETOR (admin) ═════════════════════════════════════════
+   O admin escolhe quais telas cada setor enxerga, sem precisar pedir
+   mudança no código. Na tela inicial de cada setor aparece o bloco
+   "Liberado para este setor", com as telas marcadas aqui.
+
+   De onde vem a lista de telas (o catálogo):
+   1. AUTOMÁTICO — tudo o que está no Painel Administrativo e nos
+      seus sub-painéis. Tela nova que entrar no painel do admin já
+      aparece aqui, sem mexer em nada.
+   2. ACX_EXTRAS — telas que moram dentro de um setor (ex.: Rendimento
+      da Embalagem). Tela nova desse tipo entra com uma linha aqui.
+
+   Liberar uma tela NÃO transforma o setor em admin: o que é "só do
+   admin" dentro da tela (apagar, configurar, senha) continua fechado.
+   Ficam de fora do catálogo: a entrada nos setores, as senhas e esta
+   própria tela.
+   Guarda em configuracoes/acessosSetores: { setores: { patrick:[ids] } } */
+const ACX_EXTRAS=[
+  {id:'x:emb-rend',  nome:'Rendimento da Embalagem', ic:'📈', grupo:'Embalagem', desc:'Embalado por dia e por turno, ritmo da equipe e o que falta', abrir:"embRendAbrir()"},
+  {id:'x:emb-plano', nome:'Plano da Embalagem',      ic:'🗓️', grupo:'Embalagem', desc:'O que embalar em cada dia da semana, com o andamento', abrir:"embPlanoAbrir()"},
+  {id:'x:exp-dia',   nome:'Liberado no dia',         ic:'📋', grupo:'Expedição', desc:'Tudo o que a expedição lançou num dia, por horário', abrir:"expDiaAbrir()"}
+];
+const ACX_MENUS=/^s-adm-(hub|g-[\w-]+|cadastros)$/;       // telas que são só menu do admin
+const ACX_FORA=['s-adm-g-setores'];                        // entrar nos setores não é "tela a liberar"
+let _acxCfg={}, _acxCat=null, _acxSetor='', _acxBusca='';
+
+onSnapshot(doc(db,'configuracoes','acessosSetores'), snap=>{
+  try{
+    _acxCfg=(snap.exists() && snap.data().setores) ? snap.data().setores : {};
+    const t=document.querySelector('.screen.active')?.id||'';
+    acxPintarSetor(t);
+    if(t==='s-adm-acessos') renderAcx();
+  }catch(e){ console.error('acessosSetores:', e); }
+}, err=>console.error('acessosSetores err:', err));
+
+function _acxSlug(t){ return _normNome(t||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+function _acxCatalogo(){
+  if(_acxCat) return _acxCat;
+  const txt=el=>el?[...el.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join(' ').replace(/\s+/g,' ').trim():'';
+  const itens=[], vistos=new Set(['s-adm-hub']);
+  const ler=(telaId, grupo)=>{
+    const s=document.getElementById(telaId); if(!s) return;
+    s.querySelectorAll('.mc-sector-card, .home-btn').forEach(b=>{
+      const nome=txt(b.querySelector('.mc-sector-title, .hb-title')); if(!nome) return;
+      const oc=String(b.getAttribute('onclick')||'');
+      const m=oc.match(/goTo(?:Admin)?\('(s-[\w-]+)'\)/);
+      if(m && ACX_FORA.includes(m[1])) return;
+      if(m && ACX_MENUS.test(m[1])){ if(!vistos.has(m[1])){ vistos.add(m[1]); ler(m[1], nome); } return; }   // é um menu: entra nele
+      if(/senha/i.test(nome) || /acxAbrirGestao|sairAdmin/.test(oc)) return;
+      const id='a:'+_acxSlug((grupo?grupo+'/':'')+nome);
+      if(itens.some(x=>x.id===id)) return;
+      itens.push({id, nome, grupo:grupo||'Painel do admin', ic:((b.querySelector('.mc-sector-icon, .hb-icon')||{}).textContent||'•').trim(),
+        desc:((b.querySelector('.mc-sector-desc, .hb-desc')||{}).textContent||'').trim(), abrir:oc});
+    });
+  };
+  ler('s-adm-hub','');
+  _acxCat=ACX_EXTRAS.map(x=>({...x})).concat(itens);
+  return _acxCat;
+}
+/* de qual setor é esta tela inicial */
+function _acxSetorDaTela(telaId){ return Object.keys(DESTINOS).find(k=>k!=='admin' && DESTINOS[k]===telaId)||''; }
+
+/* Abre uma tela liberada. goToAdmin vira goTo: o setor entra na tela, mas não vira admin. */
+function acxAbrir(id){
+  const it=_acxCatalogo().find(x=>x.id===id); if(!it){ alert('Esta tela não existe mais. Avise o admin.'); return; }
+  const setor=_acxSetorDaTela(_navTelaAtual());
+  if(window.adminMode!==true && !((_acxCfg[setor]||[]).includes(id))){ alert('Esta tela não está liberada para este setor.'); return; }
+  try{ (new Function(String(it.abrir).replace(/goToAdmin\(/g,'goTo(')))(); }
+  catch(e){ console.error('abrir tela liberada:', e); alert('Não consegui abrir: '+((e&&e.message)||e)); }
+}
+window.acxAbrir=acxAbrir;
+
+/* Bloco "Liberado para este setor", logo abaixo do cabeçalho da tela inicial do setor */
+function acxPintarSetor(telaId){
+  const setor=_acxSetorDaTela(telaId); if(!setor) return;
+  const tela=document.getElementById(telaId); if(!tela) return;
+  let bloco=tela.querySelector(':scope > .acx-bloco');
+  const cat=_acxCatalogo();
+  const itens=(_acxCfg[setor]||[]).map(id=>cat.find(x=>x.id===id)).filter(Boolean);
+  if(!itens.length){ if(bloco) bloco.remove(); return; }
+  if(!bloco){
+    bloco=document.createElement('div'); bloco.className='acx-bloco';
+    bloco.style.cssText='flex:0 0 auto;padding:14px 16px 2px;background:var(--bg-page);';
+    const cab=tela.querySelector(':scope > .mc-header');
+    if(cab && cab.nextSibling) tela.insertBefore(bloco, cab.nextSibling); else tela.appendChild(bloco);
+  }
+  bloco.innerHTML='<div class="mc-section-header" style="margin-top:0;">⭐ Liberado para este setor</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">'+
+    itens.map(it=>'<button class="mc-sector-card" style="margin:0;" onclick="acxAbrir(\''+it.id.replace(/'/g,'')+'\')">'+
+      '<div class="mc-sector-icon" style="background:#e0e7ff;">'+it.ic+'</div><div class="mc-sector-info"><div class="mc-sector-title">'+it.nome+'</div>'+
+      '<div class="mc-sector-desc">'+(it.desc||it.grupo)+'</div></div><span class="mc-sector-arrow">›</span></button>').join('')+'</div>';
+}
+window.acxPintarSetor=acxPintarSetor;
+
+/* ── a tela do admin ── */
+function acxAbrirGestao(){
+  if(window.adminMode!==true){ alert('Só o admin gerencia as abas dos setores.'); return; }
+  _acxCat=null;                      // refaz o catálogo: pega o que foi criado desde a última vez
+  goTo('s-adm-acessos'); renderAcx();
+}
+window.acxAbrirGestao=acxAbrirGestao;
+function acxSetor(s){ _acxSetor=s; renderAcx(); }
+window.acxSetor=acxSetor;
+function acxBuscar(v){ _acxBusca=v; renderAcx(); const i=document.getElementById('acx-busca'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } }
+window.acxBuscar=acxBuscar;
+async function acxAlternar(id){
+  if(window.adminMode!==true) return;
+  const l=(_acxCfg[_acxSetor]||[]).slice(), i=l.indexOf(id);
+  if(i>=0) l.splice(i,1); else l.push(id);
+  _acxCfg={..._acxCfg, [_acxSetor]:l};
+  renderAcx();
+  try{ await setDoc(doc(db,'configuracoes','acessosSetores'),{setores:_acxCfg, atualizadoEm:agora(), por:_demAutor()}); }
+  catch(e){ alert('Não consegui salvar: '+((e&&e.message)||e)); }
+}
+window.acxAlternar=acxAlternar;
+
+function renderAcx(){
+  const el=document.getElementById('acx-content'); if(!el) return;
+  _ptCss(); el.style.padding='0'; el.style.background='#f5f7fb';
+  const setores=Object.keys(DESTINOS).filter(k=>k!=='admin');
+  if(!_acxSetor || !setores.includes(_acxSetor)) _acxSetor=setores.includes('patrick')?'patrick':setores[0];
+  const cat=_acxCatalogo();
+  const lib=_acxCfg[_acxSetor]||[];
+  const nomeS=k=>String(NOMES[k]||k);
+  const q=_normNome(_acxBusca||'').trim();
+  const visiveis=cat.filter(x=>!q || _normNome(x.nome+' '+x.desc+' '+x.grupo).includes(q));
+  const grupos=[]; visiveis.forEach(x=>{ let g=grupos.find(y=>y.nome===x.grupo); if(!g){ g={nome:x.grupo, itens:[]}; grupos.push(g); } g.itens.push(x); });
+  const menu='<aside class="pt-side"><div class="pt-side-in"><div class="pt-side-tit">SETORES</div>'+
+    setores.map(k=>{ const n=(_acxCfg[k]||[]).filter(id=>cat.some(x=>x.id===id)).length;
+      return '<button class="pt-nav'+(_acxSetor===k?' on':'')+'" onclick="acxSetor(\''+k+'\')">'+nomeS(k)+(n?'<span class="ct">'+n+'</span>':'')+'</button>'; }).join('')+'</div></aside>';
+  let h='<div class="pt-head"><div><h1>Abas de '+nomeS(_acxSetor)+'</h1><p>'+lib.filter(id=>cat.some(x=>x.id===id)).length+' tela(s) liberada(s) além das que o setor já tem · aparecem no topo da tela inicial dele</p></div>'+
+    '<div class="pt-filtros"><div class="pt-busca" style="position:relative;"><input class="pt-ctl" id="acx-busca" type="text" placeholder="Buscar tela…" value="'+String(_acxBusca||'').replace(/"/g,'&quot;')+'" oninput="acxBuscar(this.value)" style="min-width:230px;"></div></div></div>';
+  if(!grupos.length) h+='<div class="pt-card pt-vazio">Nenhuma tela com esse nome.</div>';
+  grupos.forEach(g=>{
+    h+='<div class="pt-card" style="margin-bottom:14px;"><div class="pt-card-h"><h3>'+g.nome+'</h3><span>'+g.itens.filter(x=>lib.includes(x.id)).length+' de '+g.itens.length+' liberada(s)</span></div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;">'+
+      g.itens.map(x=>{ const on=lib.includes(x.id);
+        return '<button onclick="acxAlternar(\''+x.id.replace(/'/g,'')+'\')" role="switch" aria-checked="'+on+'" style="display:flex;align-items:center;gap:11px;text-align:left;border:1px solid '+(on?'#1e40af':'var(--pt-bd,#e2e8f0)')+';background:'+(on?'#eff6ff':'#fff')+';border-radius:12px;padding:10px 12px;cursor:pointer;font-family:inherit;color:inherit;min-width:0;">'+
+          '<span style="font-size:18px;flex:0 0 26px;text-align:center;">'+x.ic+'</span>'+
+          '<span style="flex:1;min-width:0;"><span style="display:block;font-size:13.5px;font-weight:650;">'+x.nome+'</span><span style="display:block;font-size:11.5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(x.desc||'')+'</span></span>'+
+          '<span style="flex:0 0 38px;height:22px;border-radius:99px;background:'+(on?'#1e40af':'#cbd5e1')+';position:relative;transition:background .15s;"><span style="position:absolute;top:2px;left:'+(on?'18px':'2px')+';width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s;"></span></span></button>'; }).join('')+
+      '</div></div>';
+  });
+  h+='<div class="pt-nota">A lista vem do Painel Administrativo: toda tela nova que entrar lá aparece aqui sozinha. Liberar uma tela deixa o setor <b>abrir</b> a tela; o que dentro dela é “só do admin” (apagar, configurar, pedir senha) continua fechado. '+
+    'Ficam de fora desta lista a entrada nos setores e as senhas.</div>';
+  el.innerHTML='<div class="pt">'+menu+'<main class="pt-main">'+h+'</main></div>';
+}
+window.renderAcx=renderAcx;
 
 /* ══ EXPEDIÇÃO: O QUE FOI LIBERADO NO DIA (admin) ═══════════════════
    A tela normal da expedição mostra uma produção inteira. Aqui é o
@@ -12012,9 +12572,14 @@ window.salvarNovaSenha = async () => {
 window.adminMode = false;
 let adminMode = false;
 function goToAdmin(id) {
-  adminMode = true;
-  window.adminMode = true;
-  document.body.classList.add('admin-mode');
+  /* Só vira modo admin quem JÁ é admin (entrou com a senha do admin).
+     Antes, qualquer clique num destes botões ligava o modo admin — o que
+     passou a importar agora que setores podem abrir telas do admin. */
+  if(adminMode===true || window.setorAtual==='admin'){
+    adminMode = true;
+    window.adminMode = true;
+    document.body.classList.add('admin-mode');
+  }
   goTo(id);
 }
 function sairAdmin() {
@@ -27270,14 +27835,19 @@ function simixSenha(){
   return _simixSenha;
 }
 
-async function simixBuscar(consulta, anoMes){
+/* A ponte fala com o Símix de duas formas: pela API de integração, com
+   chave (a oficial, que traz também os desligados), ou pelo login
+   antigo, enquanto a chave não estiver cadastrada. Ela diz qual usou
+   em "fonte"; guardamos para mostrar no teste. */
+let _simixFonte='';
+async function simixBuscar(consulta, anoMes, fonte){
   if(!simixPronto()) throw new Error('A ponte do Símix não está configurada.');
   const senha=simixSenha();
   if(senha===null) return null;
   const resp=await fetch(simixCfg.url, {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({senha, consulta, anoMes:anoMes||''})
+    body:JSON.stringify({senha, consulta, anoMes:anoMes||'', fonte:fonte||undefined})
   });
   const txt=await resp.text();
   let r;
@@ -27287,9 +27857,11 @@ async function simixBuscar(consulta, anoMes){
     if(resp.status===401) _simixSenha='';   // senha errada: pergunta de novo
     throw new Error(r.erro||('A ponte respondeu '+resp.status));
   }
+  _simixFonte=r.fonte||'login';        // ponte antiga não informa: era sempre por login
   return Array.isArray(r.dados)?r.dados:[];
 }
 window.simixBuscar=simixBuscar;
+
 
 /* ── CONFIGURAR ──────────────────────────────────────────────────── */
 /* ── BUSCAR UM MÊS PELA PONTE ────────────────────────────────────
@@ -27598,7 +28170,18 @@ function _simixMontar(equipe, ponto, anoMes){
   });
 
   // totais calculados dos dias
+  const _anoM=String(anoMes||'').slice(0,4);
   Object.values(pessoas).forEach(p=>{
+    /* Quem foi desligado: o Símix manda o mês inteiro, com os dias
+       depois da saída zerados. Eles não são folga nem falta. */
+    const dm=String(p.demissao||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if(dm && _anoM){
+      const isoDem=dm[3]+'-'+dm[2]+'-'+dm[1];
+      p.dias.forEach(d=>{
+        const x=String(d.data||'').split('/'); if(x.length<2) return;
+        if((_anoM+'-'+x[1]+'-'+x[0])>isoDem){ d.foraDoPeriodo=true; d.falta=false; d.folga=false; d.minSaldo=null; d.minPrev=0; d.obs=d.obs||'depois do desligamento'; }
+      });
+    }
     p.dias.sort((a,b)=>_simixOrdemData(a.data)-_simixOrdemData(b.data));
     p.diasFaltas=p.dias.filter(d=>d.falta).length;
     p.horasTrab=p.dias.reduce((t,d)=>t+(d.minTrab||0),0);
@@ -27783,7 +28366,13 @@ function _simixDia(r, campo, anoMes){
      regra da leitura do PDF, que trata qualquer "falta" como falta. */
   const afastBruto=String(campo(r,'afastaDesc','afastaSigla','Afastamento','Ocorrencia')||'').trim();
   const ehFalta=/falta/i.test(afastBruto);
-  const afast=ehFalta?'':afastBruto;
+  /* Na API de integração o afastaDesc traz também o NOME DO FERIADO
+     ("Falta", o nome do feriado ou do afastamento). Feriado não é
+     afastamento: quem decide se conta é a regra de feriado mais abaixo. */
+  const _sim=v=>v===true || v===1 || /^(s|sim|true|1)$/i.test(String(v==null?'':v).trim());
+  const _ferCampo=campo(r,'eFeriado','feriado');
+  const eFeriadoSimix=_sim(_ferCampo) || (typeof _ferCampo==='string' && _ferCampo.trim().length>1 && !/^(n|nao|não|false|0)$/i.test(_ferCampo.trim()));
+  const afast=(ehFalta || eFeriadoSimix)?'':afastBruto;
 
   /* Dia que ainda não chegou: o Símix já manda o mês inteiro, com os
      dias futuros vazios. Ficam fora da conta, como no PDF. */
@@ -27801,17 +28390,19 @@ function _simixDia(r, campo, anoMes){
   let atraso=null;
   if(batidas.length){
     const e=_pontoMin(batidas[0]);
-    const prev=String(campo(r,'horariosPrevResumo')||'').match(/(\d{1,2}):(\d{2})/);
+    const prev=String(campo(r,'horariosPrevResumo','horariosPrevistos')||'').match(/(\d{1,2}):(\d{2})/);
     const prevE=prev?(parseInt(prev[1])*60+parseInt(prev[2])):null;
     atraso=(e!==null && prevE!==null) ? e-prevE : null;
   }
 
   // feriado: mesma regra do PDF — o admin decide se conta como falta
-  const eFeriado=campo(r,'eFeriado')===true;
+  const eFeriado=eFeriadoSimix;
   const feriadoCad=(typeof pontoFeriado==='function') ? pontoFeriado(data+'/'+ano) : '';
-  const feriado=feriadoCad || (eFeriado?'feriado':'');
+  // o nome do feriado, quando o Símix manda (no afastaDesc ou no próprio campo)
+  const nomeFer=eFeriado ? ((!ehFalta && afastBruto) || (typeof _ferCampo==='string' && _ferCampo.trim().length>1 ? _ferCampo.trim() : 'feriado')) : '';
+  const feriado=feriadoCad || nomeFer;
   const feriadoConta=(typeof pontoFeriadoConta==='function') ? pontoFeriadoConta() : false;
-  const dsr=campo(r,'eDiaDSR')===true;
+  const dsr=_sim(campo(r,'eDiaDSR','dsr'));
 
   /* Falta de dia inteiro: sem nenhuma batida e com horas faltando.
      O Símix deixa o hrPrev vazio nos dias sem batida, então quem diz
@@ -27848,7 +28439,7 @@ function _simixBatidas(r, campo){
   const out=[];
   const pega=t=>String(t||'').replace(/<[^>]*>/g,' ')
     .replace(/(\d{1,2}):(\d{2})/g,(m,hh,mi)=>{ out.push(hh.padStart(2,'0')+':'+mi); return m; });
-  const resumo=campo(r,'horariosResumo');
+  const resumo=campo(r,'horariosResumo','registros');     // "registros" é o nome na API de integração
   if(resumo) pega(resumo);
   else{
     const turnos=campo(r,'turnos');
@@ -27959,7 +28550,15 @@ async function simixTestar(){
     const pt=await simixBuscar('ponto', anoMes);
     if(pt===null){ simixCfg=antes; if(res) res.innerHTML=''; return; }
     window._simixTesteDados={equipe:d, ponto:pt, anoMes};
-    if(res) res.innerHTML='<span style="color:#15803d;font-weight:700;">✓ Funcionou em '+anoMes+': '+d.length+' no cadastro, '+pt.length+' linha(s) de ponto.</span>'+
+    // quantos desligados vieram com ponto: é o que muda com a chave de API
+    const _desl=d.filter(e=>e.dtDemissao && String(e.dtDemissao)>'1900').map(e=>String(e.cdFunc));
+    const _comPt=new Set(pt.map(x=>String(x.cdFunc)));
+    const _deslCom=_desl.filter(c=>_comPt.has(c)).length;
+    if(res) res.innerHTML='<span style="color:#15803d;font-weight:700;">✓ Funcionou em '+anoMes+': '+d.length+' no cadastro, '+pt.length+' linha(s) de ponto de '+_comPt.size+' pessoa(s).</span>'+
+      '<div style="margin-top:6px;padding:8px 10px;border-radius:8px;background:'+(_simixFonte==='chave'?'#f0fdf4':'#fffbeb')+';color:'+(_simixFonte==='chave'?'#166534':'#78350f')+';">'+
+        (_simixFonte==='chave'
+          ? '🔑 Pela <b>chave de API</b> (integração). Desligados com ponto neste mês: <b>'+_deslCom+' de '+_desl.length+'</b>.'
+          : '⚠️ Ainda pelo <b>login antigo</b>: a chave de API não está cadastrada na ponte, então os desligados vêm sem ponto ('+_deslCom+' de '+_desl.length+').')+'</div>'+
       '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" '+
         'onclick="simixDiagnostico(_simixTesteDados.equipe,_simixTesteDados.ponto,\'\',_simixTesteDados.anoMes)">🔍 Ver os campos</button>';
   }catch(e){
