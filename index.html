@@ -967,6 +967,14 @@
           </div>
           <span class="mc-sector-arrow">›</span>
         </button>
+        <button class="mc-sector-card" onclick="abrirPin('embop')">
+          <div class="mc-sector-icon" style="background:#dbeafe;">🏷️</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Operador da Embalagem</div>
+            <div class="mc-sector-desc">Procurar o produto e lançar o que embalou</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
         <button class="mc-sector-card" onclick="abrirPin('rh')">
           <div class="mc-sector-icon" style="background:#e0e7ff;">👥</div>
           <div class="mc-sector-info">
@@ -4909,6 +4917,32 @@
   </div>
 
   <!-- RH: entrada do setor -->
+  <!-- OPERADOR DA EMBALAGEM -->
+  <div class="screen" id="s-embop-home">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Embalagem</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">🏷️ Operador da Embalagem</div>
+        <div class="mc-page-sub">Procure o produto e lance o que embalou</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:16px;background:var(--bg-page);overflow-y:auto;" id="embop-content">
+      <div style="max-width:720px;margin:0 auto;">
+        <input type="search" id="eo-busca" placeholder="🔍 Nome do produto (ex.: folhado calabresa)" autocomplete="off" oninput="eoBuscar(this.value)"
+          style="width:100%;font-size:18px;padding:14px 16px;border-radius:14px;border:1.5px solid var(--mc-azul);margin-bottom:14px;box-sizing:border-box;">
+        <div id="eo-lista"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="screen" id="s-rh-home">
     <div class="mc-header">
       <button class="mc-header-back" onclick="voltar()">‹</button>
@@ -5613,7 +5647,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='16/11/2026 · 15';
+  var VERSAO='17/11/2026 · 16';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -5742,7 +5776,7 @@
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, arrayUnion, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // MODO TV VIA LINK (?tv=1): detectado logo no início, antes de qualquer snapshot do Firebase
@@ -5847,7 +5881,68 @@ window._plLogado=false;
    O Painel TV (?tv=1) não espera: lá o importante é a tela não ficar
    parada. */
 const _carga={total:0, chegou:0, pronta:false, fechada:false, pend:{}, aoChegar:{}, t0:0, seq:0, ultimo:0};
+/* ── SEGUNDA ETAPA: o que a conta não precisa para abrir ─────────────
+   Medido no iPhone (13/11/2026): 17 MB ao abrir, dos quais 10,6 MB são
+   a lista de carregamentos. Quem só entra na Embalagem, na Cozinha ou
+   na Confeitaria não usa essa lista para trabalhar. Então:
+   · conta que vê todos os setores (ou tem admin, estoque, expedição,
+     carregamento, comercial, Patrick): carrega tudo antes de abrir,
+     como sempre;
+   · as outras contas: abrem sem esperar os carregamentos, que chegam
+     em segundo plano logo depois;
+   · conta que só tem o Operador da Embalagem: abre só com o que essa
+     tela usa (a produção e os cadastros); o resto vem em segundo plano.
+   Nada fica de fora para sempre: a segunda etapa começa assim que o app
+   abre. E se a pessoa entrar numa tela que depende do que ainda não
+   chegou, a tela de carregamento volta até chegar. */
+const CARGA_USA_CARREG=['admin','carregamento','estoque','expedicao','comercial','patrick'];
+const CARGA_ENXUTO={ embop:/^(registros|embManual|prioridades|produtosConfeitaria|quadraProdutosCustom|quadraKitsCustom|massasList|recheiosList|configuracoes\/)/ };
+const CARGA_TELAS_CARREG=/^s-(carreg|est-|la-|ppr|exp-dia|adm-|pf)/;
+const CARGA_TELAS_ENXUTO=/^s-(inicio|login|pin|embop)/;
+const _fase2={modo:'', itens:[], pend:{}, total:0, ok:0, comecou:false, t0:0, espera:null};
+function _plSetoresDaConta(){
+  if(!_plConta || _plConta.role==='admin') return null;
+  const l=Array.isArray(_plConta.produlogSetores)?_plConta.produlogSetores:[];
+  return l.length?l:null;          // lista vazia = vê todos os setores
+}
+function _fase2Chegou(id){
+  if(!_fase2.pend[id]) return;
+  delete _fase2.pend[id]; _fase2.ok++;
+  _fase2Pintar();
+  if(_fase2.ok>=_fase2.total){
+    try{ if(window.plDiag) window.plDiag('segunda etapa completa: '+_fase2.total+' listas em '+((Date.now()-_fase2.t0)/1000).toFixed(1)+'s'); }catch(e){}
+    if(_fase2.espera){ const tela=_fase2.espera; _fase2.espera=null; const ld=document.getElementById('loading'); if(ld) ld.style.display='none'; try{ goTo(tela, true); }catch(e){} }
+  }
+}
+function _fase2Pintar(){
+  let el=document.getElementById('pl-fase2');
+  if(_fase2.ok>=_fase2.total || !_fase2.comecou){ if(el) el.remove(); return; }
+  if(_fase2.espera){ const t=document.querySelector('#loading .loading-text'); if(t) t.textContent='Carregando o que esta tela precisa… '+_fase2.ok+' de '+_fase2.total; }
+  if(!el){ el=document.createElement('div'); el.id='pl-fase2';
+    el.style.cssText='position:fixed;bottom:10px;right:10px;z-index:890;background:rgba(15,23,42,.82);color:#fff;border-radius:99px;padding:5px 12px;font-size:11.5px;font-weight:600;pointer-events:none;';
+    document.body.appendChild(el); }
+  el.textContent='carregando o restante… '+_fase2.ok+' de '+_fase2.total;
+}
+function _fase2Comecar(){
+  if(_fase2.comecou || !_fase2.itens.length) return;
+  _fase2.comecou=true; _fase2.t0=Date.now();
+  try{ if(window.plDiag) window.plDiag('segunda etapa: ligando '+_fase2.itens.length+' lista(s) em segundo plano ('+_fase2.modo+')'); }catch(e){}
+  _fase2.itens.forEach(it=>{ if(it.cancelado){ _fase2Chegou(it.args.__cargaId); return; }
+    try{ it.unsub=_fbOnSnapshot(it.ref, ...it.args); }catch(e){ console.error('leitura:', e); _fase2Chegou(it.args.__cargaId); } });
+  _fase2Pintar();
+}
+/* a pessoa entrou numa tela que depende do que ainda está chegando: espera */
+function _cargaTelaPrecisa(id){
+  if(!_fase2.total || _fase2.ok>=_fase2.total || !_carga.pronta) return;
+  const falta=Object.values(_fase2.pend);
+  const precisa=_fase2.modo==='enxuto' ? !CARGA_TELAS_ENXUTO.test(id) : (CARGA_TELAS_CARREG.test(id) && falta.includes('carregamentos'));
+  if(!precisa) return;
+  _fase2.espera=id;
+  const ld=document.getElementById('loading'); if(ld) ld.style.display='';
+  _fase2Pintar();
+}
 function _cargaChegou(id){
+  if(_fase2.pend[id]){ _fase2Chegou(id); return; }
   if(!_carga.pend[id]) return;
   delete _carga.pend[id]; _carga.chegou++; _carga.ultimo=Date.now();
   const fn=_carga.aoChegar[id]; if(fn){ delete _carga.aoChegar[id]; try{ fn(); }catch(e){} }
@@ -5904,6 +5999,7 @@ function _cargaTerminar(como){
   const ld=document.getElementById('loading'); if(ld) ld.style.display='none';
   try{ atualizarTela(); }catch(e){ console.error('primeiro desenho:', e); }
   _sinc.ultimo=Date.now(); _sincPintar();       // com a abertura rápida, mostra o que ainda falta conferir
+  _fase2Comecar();                              // o que ficou para depois começa a chegar agora, em segundo plano
 }
 window.cargaEntrarAssim=function(){ _cargaTerminar('incompleta (a pessoa escolheu entrar)'); };
 
@@ -6075,8 +6171,19 @@ function _plLigarFila(){
     proximo();
   };
   if(!serie){
-    try{ if(window.plDiag) window.plDiag('ligando '+fila.length+' listas de uma vez'); }catch(e){}
-    rodar(fila, fila.length, false, null);
+    // o que esta conta não precisa para abrir fica para a segunda etapa
+    const setores=_plSetoresDaConta();
+    let adia=null;
+    if(setores){
+      if(setores.every(x=>CARGA_ENXUTO[x])){ _fase2.modo='enxuto'; adia=n=>!setores.some(x=>CARGA_ENXUTO[x].test(n)); }
+      else if(!setores.some(x=>CARGA_USA_CARREG.includes(x))){ _fase2.modo='sem carregamentos'; adia=n=>n==='carregamentos'; }
+    }
+    const agora1=[], depois=[];
+    fila.forEach(it=>{ const id=it.args.__cargaId, n=nomeDe(it); if(adia && id && n && !it.cancelado && !pular.includes(n) && adia(n)) depois.push(it); else agora1.push(it); });
+    depois.forEach(it=>{ const id=it.args.__cargaId; _fase2.pend[id]=_carga.pend[id]; delete _carga.pend[id]; _carga.total--; });
+    _fase2.itens=depois; _fase2.total=depois.length;
+    try{ if(window.plDiag) window.plDiag('ligando '+agora1.length+' listas'+(depois.length?(' agora e '+depois.length+' em segundo plano ('+_fase2.modo+': '+(setores||[]).join(', ')+')'):' de uma vez')); }catch(e){}
+    rodar(agora1, agora1.length, false, null);
     return;
   }
   try{ if(window.plDiag) window.plDiag('ligando '+fila.length+' listas UMA por vez (modo de segurança): '+leves.length+' cadastros, depois '+pesadas.length+' de histórico'); }catch(e){}
@@ -6296,13 +6403,13 @@ let PINS = { admin:null,
   confeitaria:'1234', cozinha:'5678', embalagem:'9101', expedicao:'1314',
   contagem:'0000', container:'0001', quadra:'2020', testes:'7070',
   simone:'5050', alteracoes:'4321', carregamento:'6060', comercial:'3030',
-  estoque:'8080', patrick:'9090', rh:'9875' };
-const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo', rh:'indigo' };
+  estoque:'8080', patrick:'9090', rh:'9875', embop:'1515' };
+const CORES = { confeitaria:'', cozinha:'verde', embalagem:'', expedicao:'laranja', admin:'roxo', contagem:'roxo', container:'', quadra:'', testes:'', simone:'', alteracoes:'roxo', carregamento:'laranja', comercial:'verde', patrick:'indigo', rh:'indigo', embop:'' };
 /* Todo setor que existe em DESTINOS precisa estar aqui: é desta lista
    que a tela de Gerenciar Senhas tira os setores. Faltavam patrick e
    estoque, e por isso a senha deles não aparecia para ninguém. */
-const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒', patrick:'Patrick 🧭', estoque:'Estoque 🏭', rh:'RH 👥' };
-const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home', rh:'s-rh-home' };
+const NOMES = { confeitaria:'Confeitaria 🥐', cozinha:'Cozinha 🍳', embalagem:'Embalagem 📦', expedicao:'Expedição 🚚', admin:'Administrativo 📊', contagem:'Contagem 📋', container:'Rafael 📦', quadra:'Quadra 🍞', testes:'Testes MP 🔬', simone:'Simone - Financeiro 💼', alteracoes:'Alterações de Receita ✏️', carregamento:'Carregamento 📦', comercial:'Comercial 🛒', patrick:'Patrick 🧭', estoque:'Estoque 🏭', rh:'RH 👥', embop:'Operador da Embalagem 🏷️' };
+const DESTINOS = { confeitaria:'s-conf-home', cozinha:'s-coz-home', embalagem:'s-emb-sel-data', expedicao:'s-exp-sel-data', admin:'s-adm-hub', contagem:'s-contagem-home', container:'s-rafael-home', quadra:'s-quadra-home', testes:'s-testes-home', simone:'s-simone-home', alteracoes:'s-alt-home', carregamento:'s-carreg', comercial:'s-la-solicitar', estoque:'s-est-hub', patrick:'s-patrick-home', rh:'s-rh-home', embop:'s-embop-home' };
 
 let pinAtual = '';
 let setorAtivo = '';
@@ -6400,6 +6507,7 @@ function atualizarTela(){
   if(!tela||tela==='loading'){ goTo('s-inicio'); return; }
   if(tela==='s-conf-home') renderConfHome();
   if(tela==='s-emb-rend') renderEmbRend();
+  if(tela==='s-embop-home') renderEmbop();
   if(tela==='s-exp-dia') renderExpDia();
   if(tela==='s-ppr'){ const a=document.activeElement; if(!(a && a.closest && a.closest('#ppr-content') && /INPUT|SELECT/.test(a.tagName))) renderPpr(); }
   if(tela==='s-adm-hub' && typeof _pprBadge==='function') _pprBadge();
@@ -6643,6 +6751,8 @@ function goTo(id, semHistorico){
   window.scrollTo(0,0);
   if(id==='s-login') _plMostrarLogin();
   if(typeof acxPintarSetor==='function') acxPintarSetor(id);
+  if(id==='s-embop-home' && typeof renderEmbop==='function'){ const b=document.getElementById('eo-busca'); if(b){ b.value=''; } _eoBusca=''; _eoProd=''; renderEmbop(); }
+  if(typeof _cargaTelaPrecisa==='function') _cargaTelaPrecisa(id);
   if(typeof mcGarantirTelaCheia==='function') mcGarantirTelaCheia();
   if(id==='s-mp-precos') mppRender();
   if(id==='s-emb') embRender();
@@ -8457,9 +8567,10 @@ function _erNovo(el){
     (pLista.length?'<div style="margin-bottom:10px;"><div class="nx-pills" role="group" aria-label="Classe">'+
         '<button class="'+(!_erPendSel?'on':'')+'" onclick="erPendVer(\'\')">Todos<i>'+fmt(pTot)+'</i></button>'+
         pLista.map(p=>'<button class="'+(_erPendSel===p.k?'on':'')+'" onclick="erPendVer(\''+p.k.replace(/'/g,"\\'")+'\')">'+p.nome+'<i>'+fmt(p.v)+'</i></button>').join('')+'</div></div>':'')+
-    (pSel.length?'<div class="nx-rol"><table class="nx-tab"><thead><tr><th>Produto</th><th class="e">Produção</th><th class="e">Classe</th><th>Faltam</th></tr></thead><tbody>'+
+    (pSel.length?'<div class="nx-rol"><table class="nx-tab"><thead><tr><th>Produto</th><th class="e">Produção</th><th class="e">Classe</th><th>Faltam</th>'+(window.adminMode===true?'<th></th>':'')+'</tr></thead><tbody>'+
         pSel.map(x=>'<tr><td><b style="font-weight:600;">'+x.r.produto+'</b></td><td class="e" style="color:'+(_erNum(x.r.data)<hojeN?'var(--or)':'var(--sub)')+';">'+x.r.data.slice(0,5)+' <span class="m">'+semana(x.r.data)+'</span></td>'+
-          '<td class="e"><span class="nx-chip"><span class="nx-pt" style="background:'+corTipo(x.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(x.tipo==='outro'?'Outro':x.classe)+'</span></td><td><b>'+fmt(x.falta)+'</b></td></tr>').join('')+'</tbody></table></div>'
+          '<td class="e"><span class="nx-chip"><span class="nx-pt" style="background:'+corTipo(x.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(x.tipo==='outro'?'Outro':x.classe)+'</span></td><td><b>'+fmt(x.falta)+'</b></td>'+
+          (window.adminMode===true?'<td><button class="nx-btn" style="padding:4px 10px;font-size:11.5px;" onclick="embSemContar(\''+x.r.firestoreId+'\')" title="Fecha como embalado sem contar no rendimento">Fechar sem contar</button></td>':'')+'</tr>').join('')+'</tbody></table></div>'
       :'<div class="nx-vazio" style="color:var(--ok);">Tudo embalado.</div>')+'</div>';
   const prods=Object.values(porDia[dSel].prods).map(p=>({...p, tot:p.manha+p.tarde+p.sem})).filter(p=>Math.abs(p.tot)>0.001).sort((a,b)=>b.tot-a.tot);
   const iSel=dias.indexOf(dSel);
@@ -8859,6 +8970,143 @@ function renderEmbRend(){
   else _erNovo(el);
 }
 window.renderEmbRend=renderEmbRend;
+
+/* ══ OPERADOR DA EMBALAGEM (setor) ══════════════════════════════════
+   Tela direta para quem está embalando: procura o produto, escolhe o
+   lote (a produção de um dia) e informa quantos pacotes embalou.
+   O lançamento cai no MESMO controle do "Produtos a Embalar": os dois
+   setores somam no mesmo lote. Por isso cada lançamento é ACRESCENTADO
+   ao registro (arrayUnion) — se a Embalagem lançar 50 e o operador
+   lançar 50 no mesmo instante, ficam os dois, 100. Antes a lista
+   inteira era regravada e um dos dois podia se perder. */
+let _eoBusca='', _eoProd='', _eoUlt=null;
+const _eoId=()=>'l'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function _eoGrupos(){
+  const g={};
+  _erPendentes().forEach(p=>{
+    const k=_normNome(p.r.produto||'');
+    const o=g[k]||(g[k]={k, nome:p.r.produto||'?', falta:0, lotes:[], tipo:p.tipo, classe:p.classe});
+    o.falta+=p.falta; o.lotes.push(p);
+  });
+  return Object.values(g).map(o=>{ o.lotes.sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)); return o; });
+}
+function eoBuscar(v){ _eoBusca=v; _eoProd=''; renderEmbop(); }
+window.eoBuscar=eoBuscar;
+function eoProduto(k){ _eoProd=k; renderEmbop(); const c=document.getElementById('embop-content'); if(c) c.scrollTop=0; }
+window.eoProduto=eoProduto;
+function eoTudo(fid, q){ const i=document.getElementById('eo-q-'+fid); if(i){ i.value=q; i.focus(); } }
+window.eoTudo=eoTudo;
+function _eoAviso(html, ms){
+  document.getElementById('eo-aviso')?.remove();
+  const el=document.createElement('div'); el.id='eo-aviso';
+  el.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#0f172a;color:#fff;padding:13px 16px;border-radius:14px;font-size:14px;font-weight:600;z-index:3500;box-shadow:0 12px 30px rgba(15,23,42,.35);display:flex;align-items:center;gap:14px;max-width:94vw;';
+  el.innerHTML=html; document.body.appendChild(el);
+  setTimeout(()=>{ if(el.isConnected) el.remove(); }, ms||6000);
+}
+async function eoLancar(fid){
+  const inp=document.getElementById('eo-q-'+fid);
+  const val=parseInt((inp||{}).value)||0;
+  if(val<=0){ alert('Digite quantos pacotes foram embalados.'); if(inp) inp.focus(); return; }
+  const reg=(registros||[]).find(r=>r.firestoreId===fid); if(!reg) return;
+  if(reg.embalagem && reg.embalagem.feito){ alert('Este lote já foi finalizado pela Embalagem.'); renderEmbop(); return; }
+  const total=(Number(reg.qtd)||0), feito=((reg.embalagem||{}).parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
+  if(feito+val>total && !confirm('Com esses '+val+', o lote passa do que foi produzido ('+(feito+val)+' de '+total+' pacotes).\n\nLançar assim mesmo?')) return;
+  const lanc={id:_eoId(), qtd:val, hora:agora(), setor:'embop', por:_demAutor()};
+  try{
+    await updateDoc(doc(db,'registros',fid),{'embalagem.parciais':arrayUnion(lanc)});
+  }catch(e){ alert('Não consegui lançar: '+((e&&e.message)||e)); return; }
+  // já mostra, sem esperar a volta do servidor
+  if(!reg.embalagem) reg.embalagem={feito:false, parciais:[]};
+  if(!Array.isArray(reg.embalagem.parciais)) reg.embalagem.parciais=[];
+  if(!reg.embalagem.parciais.some(p=>p.id===lanc.id)) reg.embalagem.parciais.push(lanc);
+  _eoUlt={fid, id:lanc.id, qtd:val, produto:reg.produto, data:reg.data};
+  if(inp) inp.value='';
+  renderEmbop();
+  _eoAviso('<span>✓ '+val+' pacote(s) lançado(s) · '+(reg.produto||'')+' ('+String(reg.data||'').slice(0,5)+')</span><button onclick="eoDesfazer()" style="border:1px solid rgba(255,255,255,.5);background:none;color:#fff;border-radius:9px;padding:6px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Desfazer</button>', 9000);
+  // completou o lote: oferece finalizar (igual ao "Confirmar" da Embalagem)
+  const novo=feito+val;
+  if(novo>=total && total>0){
+    setTimeout(async ()=>{
+      if(!confirm('Esse lote completou: '+novo+' de '+total+' pacotes.\n\nFinalizar o produto? Ele fica disponível para a Expedição.')) return;
+      try{ await updateDoc(doc(db,'registros',fid),{'embalagem.feito':true,'embalagem.qtdEmbalada':novo,'embalagem.qtdProduzida':total,'embalagem.horaFeito':agora()});
+        reg.embalagem.feito=true; reg.embalagem.qtdEmbalada=novo; _eoUlt=null; renderEmbop(); }
+      catch(e){ alert('Não consegui finalizar: '+((e&&e.message)||e)); }
+    }, 250);
+  }
+}
+window.eoLancar=eoLancar;
+/* desfaz o último lançamento feito nesta tela: entra um lançamento negativo, como o "− Remover" da Embalagem */
+async function eoDesfazer(){
+  const u=_eoUlt; if(!u) return;
+  const reg=(registros||[]).find(r=>r.firestoreId===u.fid); if(!reg) return;
+  if(reg.embalagem && reg.embalagem.feito){ alert('O lote já foi finalizado; peça à Embalagem para ajustar.'); return; }
+  const lanc={id:_eoId(), qtd:-u.qtd, hora:agora(), setor:'embop', por:_demAutor(), desfaz:u.id};
+  try{ await updateDoc(doc(db,'registros',u.fid),{'embalagem.parciais':arrayUnion(lanc)}); }
+  catch(e){ alert('Não consegui desfazer: '+((e&&e.message)||e)); return; }
+  if(reg.embalagem && Array.isArray(reg.embalagem.parciais) && !reg.embalagem.parciais.some(p=>p.id===lanc.id)) reg.embalagem.parciais.push(lanc);
+  _eoUlt=null; document.getElementById('eo-aviso')?.remove(); renderEmbop();
+  _eoAviso('<span>↩ Lançamento de '+u.qtd+' pacote(s) desfeito</span>', 3500);
+}
+window.eoDesfazer=eoDesfazer;
+
+function renderEmbop(){
+  const el=document.getElementById('eo-lista'); if(!el) return;
+  // quem está digitando não pode perder o que digitou quando a tela se atualiza sozinha
+  const digitado={}; el.querySelectorAll('input[id^="eo-q-"]').forEach(i=>{ if(i.value) digitado[i.id]=i.value; });
+  const foco=(document.activeElement&&document.activeElement.id&&document.activeElement.id.indexOf('eo-q-')===0)?document.activeElement.id:'';
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const grupos=_eoGrupos();
+  const hojeN=_erNum(fmtData(new Date()));
+  const sem=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
+  let h='';
+  const g=_eoProd?grupos.find(x=>x.k===_eoProd):null;
+  if(_eoProd && !g){ _eoProd=''; }
+  if(g){
+    h+='<button onclick="eoProduto(\'\')" style="border:none;background:none;color:var(--mc-azul);font-family:inherit;font-size:14px;font-weight:700;padding:4px 0 10px;cursor:pointer;">‹ Trocar de produto</button>'+
+      '<div style="font-size:21px;font-weight:800;line-height:1.2;">'+g.nome+'</div>'+
+      '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 14px;">'+g.lotes.length+' lote(s) para embalar · faltam '+fmt(g.falta)+' pacotes</div>';
+    g.lotes.forEach(p=>{ const r=p.r, total=Number(r.qtd)||0, feito=Math.max(0,total-p.falta), dias=Math.round((_erDate(fmtData(new Date()))-_erDate(r.data))/864e5);
+      h+='<div class="card" style="padding:14px;margin-bottom:10px;border-left:4px solid '+(dias>=2?'#d97706':'var(--mc-azul)')+';">'+
+        '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-size:16px;font-weight:800;">Produção de '+String(r.data).slice(0,5)+'</span><span style="font-size:12px;color:var(--text-secondary);">'+sem(r.data)+(dias>=1?(' · há '+dias+' dia'+(dias>1?'s':'')):' · hoje')+'</span></div>'+
+        '<div style="font-size:13px;color:var(--text-secondary);margin-top:6px;">Faltam <b style="color:var(--text-primary);font-size:16px;">'+fmt(p.falta)+'</b> de '+fmt(total)+' pacotes'+(feito>0.5?(' · '+fmt(feito)+' já embalados'):'')+'</div>'+
+        '<div style="height:7px;border-radius:99px;background:#e5e7eb;overflow:hidden;margin-top:8px;"><div style="height:100%;width:'+(total?Math.min(100,feito/total*100):0)+'%;background:#16a34a;border-radius:99px;"></div></div>'+
+        '<div style="display:flex;gap:8px;margin-top:12px;">'+
+          '<input type="number" id="eo-q-'+r.firestoreId+'" inputmode="numeric" min="1" placeholder="Quantos pacotes?" onkeydown="if(event.key===\'Enter\')eoLancar(\''+r.firestoreId+'\')" style="flex:1;min-width:0;font-size:18px;padding:12px;border-radius:10px;border:1.5px solid var(--mc-azul);">'+
+          '<button onclick="eoLancar(\''+r.firestoreId+'\')" style="flex:0 0 auto;background:var(--mc-azul);color:#fff;border:none;border-radius:10px;padding:0 22px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;">Lançar</button></div>'+
+        '<button onclick="eoTudo(\''+r.firestoreId+'\','+Math.round(p.falta)+')" style="margin-top:8px;border:1px solid var(--border);background:#fff;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--text-secondary);cursor:pointer;font-family:inherit;">Preencher com o que falta ('+fmt(p.falta)+')</button>'+
+      '</div>'; });
+  } else {
+    const q=_normNome(_eoBusca||'').trim(), pal=q.split(/\s+/).filter(Boolean);
+    const lista=grupos.filter(x=>!pal.length || pal.every(w=>x.k.includes(w))).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+    if(!grupos.length) h+='<div class="empty" style="padding:40px 10px;text-align:center;color:var(--text-secondary);">Não há nada para embalar agora. 🎉</div>';
+    else if(!lista.length) h+='<div class="empty" style="padding:30px 10px;text-align:center;color:var(--text-secondary);">Nenhum produto com “'+String(_eoBusca).replace(/</g,'&lt;')+'”.</div>';
+    else {
+      h+='<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">'+(pal.length?(lista.length+' produto(s) encontrado(s)'):(lista.length+' produto(s) esperando embalagem'))+'</div>';
+      lista.forEach(x=>{ const antigo=x.lotes.some(p=>_erNum(p.r.data)<hojeN);
+        h+='<button onclick="eoProduto(\''+x.k.replace(/'/g,"\\'")+'\')" class="card" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">'+
+          '<span style="flex:1;min-width:0;"><span style="display:block;font-size:16px;font-weight:700;">'+x.nome+'</span>'+
+            '<span style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:3px;">'+x.lotes.length+' lote'+(x.lotes.length>1?'s':'')+' · '+x.lotes.map(p=>String(p.r.data).slice(0,5)).join(', ')+(antigo?' <b style="color:#b45309;">· tem lote de outro dia</b>':'')+'</span></span>'+
+          '<span style="flex:0 0 auto;text-align:right;"><span style="display:block;font-size:18px;font-weight:800;color:var(--mc-azul);">'+fmt(x.falta)+'</span><span style="display:block;font-size:11px;color:var(--text-secondary);">pacotes</span></span>'+
+          '<span style="color:var(--text-secondary);font-size:20px;">›</span></button>'; });
+    }
+  }
+  // o que este setor lançou hoje
+  const hojeS=fmtData(new Date()), meus=[];
+  (registros||[]).forEach(r=>((r.embalagem||{}).parciais||[]).forEach(p=>{ if(p.setor==='embop' && _erDataDe(p.hora)===hojeS) meus.push({r,p}); }));
+  if(meus.length){
+    meus.sort((a,b)=>String(b.p.hora).localeCompare(String(a.p.hora)));
+    const tot=meus.reduce((t,x)=>t+(Number(x.p.qtd)||0),0);
+    h+='<div style="margin-top:20px;font-size:12px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;">LANÇADO HOJE POR AQUI · '+fmt(tot)+' PACOTES</div>'+
+      '<div class="card" style="padding:4px 14px;margin-top:8px;">'+meus.slice(0,12).map(x=>'<div style="display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;">'+
+        '<span style="color:var(--text-secondary);font-size:12px;flex:0 0 42px;">'+String(x.p.hora).slice(11,16)+'</span><span style="flex:1;min-width:0;">'+x.r.produto+' <span style="color:var(--text-secondary);font-size:12px;">('+String(x.r.data).slice(0,5)+')</span></span>'+
+        '<b style="color:'+(x.p.qtd<0?'#c62828':'#15803d')+';">'+(x.p.qtd>0?'+':'')+x.p.qtd+'</b></div>').join('')+
+      (meus.length>12?'<div style="font-size:12px;color:var(--text-secondary);padding:8px 0;">… e mais '+(meus.length-12)+'</div>':'')+'</div>';
+  }
+  el.innerHTML=h;
+  Object.keys(digitado).forEach(id=>{ const i=document.getElementById(id); if(i) i.value=digitado[id]; });
+  if(foco){ const i=document.getElementById(foco); if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} } }
+}
+window.renderEmbop=renderEmbop;
 
 /* ══ ABAS POR SETOR (admin) ═════════════════════════════════════════
    O admin escolhe quais telas cada setor enxerga, sem precisar pedir
@@ -9861,6 +10109,7 @@ function renderEmbalagem(){
               ${r.qtdPacotes>0?`Produzido: <strong>${r.qtdPacotes} pct</strong> <span style="color:var(--text-secondary);font-size:11px;">(${r.qtdUnidades||r.qtd} un)</span>`:`Produzido: <strong>${r.qtd} pct</strong>`}
               ${totalParcial>0&&!done?` · Embalando: <strong style="color:var(--mc-dourado);">${totalParcial} pct</strong>`:''}
               ${done?` · Embalado: <strong>${emb.qtdEmbalada} pct</strong>`:''}
+              ${done&&emb.emLote?` <span style="font-size:10.5px;font-weight:700;color:#475569;background:#e2e8f0;border-radius:99px;padding:1px 7px;">${emb.emLote.tipo==='semContar'?'sem contabilizar':'em lote'}</span>`:''}
               ${done&&emb.qtdEmbalada<(r.qtd||0)?` <span style="color:#c62828;font-size:11px;">(−${(r.qtd||0)-emb.qtdEmbalada})</span>`:''}
             </div>
             ${parciais.length>0&&!done?`<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">${parciais.map(p=>p.hora+': +'+p.qtd).join(' · ')}</div>`:''}
@@ -9878,6 +10127,8 @@ function renderEmbalagem(){
           <textarea id="emb-obs-${r.firestoreId}" placeholder="Observação (opcional)..."
             onblur="salvarObsEmb('${r.firestoreId}',this.value)"
             style="width:100%;font-size:13px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-primary);color:var(--text-primary);font-family:inherit;resize:vertical;min-height:40px;margin-bottom:6px;">${(r.embalagem&&r.embalagem.obs)||''}</textarea>
+          ${window.adminMode===true?`<button onclick="embSemContar('${r.firestoreId}')" title="Fecha o produto como embalado sem contar no rendimento da equipe"
+            style="width:100%;padding:8px;background:#fff;border:1px dashed #94a3b8;color:#475569;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:6px;">Embalar sem contabilizar</button>`:''}
           ${totalParcial>0?`<button onclick="confirmarEmbalagEmCompleto('${r.firestoreId}',${r.qtd||0},${totalParcial})"
             style="width:100%;padding:10px;background:#2e7d32;color:white;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;">
             ✓ Confirmar ${totalParcial} pacotes embalados
@@ -9920,9 +10171,13 @@ async function adicionarParcialEmb(fid, qtdTotal){
   if(totalAtual+val>qtdTotal){
     if(!confirm(`Total parcial (${totalAtual+val}) excede produzido (${qtdTotal}). Continuar?`))return;
   }
-  parciais.push({qtd:val,hora:agora()});
+  /* arrayUnion acrescenta o lançamento sem regravar a lista: se o
+     operador da embalagem lançar no mesmo lote ao mesmo tempo, os dois
+     ficam. O id evita que dois lançamentos iguais no mesmo minuto
+     sejam tratados como um só. */
+  const lanc={id:'l'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), qtd:val, hora:agora()};
   try{
-    await updateDoc(doc(db,'registros',fid),{'embalagem.parciais':parciais});
+    await updateDoc(doc(db,'registros',fid),{'embalagem.parciais':arrayUnion(lanc)});
     inp.value='';
   }catch(e){alert('Erro: '+e.message);}
 }
@@ -10122,17 +10377,48 @@ async function subtrairParcialEmb(fid){
   const emb=reg.embalagem||{parciais:[]};
   const parciais=[...(emb.parciais||[])];
   const total=parciais.reduce((s,p)=>s+(p.qtd||0),0);
-  if(val>total){alert('Não é possível remover mais do que o total parcial ('+total+' un).');return;}
-  // Add negative entry
-  parciais.push({qtd:-val,hora:agora()});
+  if(val>total){alert('Não é possível remover mais do que o total parcial ('+total+' pacotes).');return;}
+  // lançamento negativo, acrescentado do mesmo jeito
+  const lanc={id:'l'+Date.now().toString(36)+Math.random().toString(36).slice(2,7), qtd:-val, hora:agora()};
   try{
-    await updateDoc(doc(db,'registros',fid),{'embalagem.parciais':parciais});
+    await updateDoc(doc(db,'registros',fid),{'embalagem.parciais':arrayUnion(lanc)});
     if(inp)inp.value='';
   }catch(e){alert('Erro: '+e.message);}
 }
 
+/* ── EMBALAR SEM CONTABILIZAR (admin) ────────────────────────────────
+   Para o produto que ficou pendente de dias atrás mas já foi embalado:
+   fecha o lote na quantidade produzida, sem contar no rendimento da
+   equipe. Usa a mesma marca do "embalar em lote" (emLote), então o
+   rendimento, o "início e fim do dia" (entra como baixa) e o plano já
+   tratam certo. O que tinha sido lançado antes, produto a produto,
+   continua contando no dia em que foi lançado. */
+async function embSemContar(fid){
+  if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
+  const r=(registros||[]).find(x=>x.firestoreId===fid); if(!r) return;
+  if(r.embalagem && r.embalagem.feito){ alert('Este produto já está embalado.'); return; }
+  const qtd=Number(r.qtd)||0;
+  const ja=((r.embalagem||{}).parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
+  if(!confirm('Embalar sem contabilizar?\n\n'+r.produto+' · produção de '+r.data+'\n'+qtd+' pacotes produzidos'+(ja>0?(' · '+ja+' já lançados (esses continuam contando)'):'')+'\n\n'+
+    'O produto fica como embalado e sai dos pendentes. '+Math.max(0,qtd-ja)+' pacote(s) NÃO entram no rendimento da embalagem.')) return;
+  try{
+    await updateDoc(doc(db,'registros',fid),{
+      'embalagem.feito':true,
+      'embalagem.qtdEmbalada':qtd,
+      'embalagem.qtdProduzida':qtd,
+      'embalagem.horaFeito':agora(),
+      'embalagem.emLote':{por:_demAutor(), em:agora(), tipo:'semContar'}
+    });
+    if(!r.embalagem) r.embalagem={parciais:[]};
+    Object.assign(r.embalagem,{feito:true, qtdEmbalada:qtd, qtdProduzida:qtd, horaFeito:agora(), emLote:{por:_demAutor(), em:agora(), tipo:'semContar'}});
+  }catch(e){ alert('Erro: '+((e&&e.message)||e)); return; }
+  const t=document.querySelector('.screen.active')?.id;
+  if(t==='s-emb-rend') renderEmbRend(); else if(typeof renderEmbalagem==='function') renderEmbalagem();
+}
+window.embSemContar=embSemContar;
+
 async function confirmarEmbalagEmCompleto(fid, qtdProd, totalParcial){
-  if(!confirm('Confirmar '+totalParcial+' un embaladas?\nO produto ficará disponível para Expedição.'))return;
+  if(!confirm('Confirmar '+totalParcial+' pacotes embalados?\nO produto ficará disponível para Expedição.'))return;
   try{
     await updateDoc(doc(db,'registros',fid),{
       'embalagem.feito':true,
@@ -19057,7 +19343,7 @@ const _SETOR_NOMES={
   admin:'Admin', confeitaria:'Confeitaria', cozinha:'Cozinha', embalagem:'Embalagem',
   expedicao:'Expedição', carregamento:'Carregamento', quadra:'Quadra', container:'Contêiner',
   contagem:'Contagem', estoque:'Estoque', comercial:'Comercial', testes:'Testes',
-  alteracoes:'Alterações', simone:'Simone', patrick:'Patrick', rh:'RH'
+  alteracoes:'Alterações', simone:'Simone', patrick:'Patrick', rh:'RH', embop:'Operador Embalagem'
 };
 
 /* O nome é guardado POR SETOR: o mesmo aparelho é usado por pessoas
