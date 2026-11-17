@@ -5647,7 +5647,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='17/11/2026 · 16';
+  var VERSAO='17/11/2026 · 17';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -28525,6 +28525,9 @@ function _simixMontar(equipe, ponto, anoMes){
       cargo:String(campo(e,'CargoNome','Cargo','CargoDesc')||'').trim(),
       setor:String(campo(e,'SetorNome','Setor','SetorDesc','DepaNome','Departamento')||'').trim(),
       admissao:_simixData(campo(e,'dtAdmissao','FuncAdmissao','Admissao','DataAdmissao')),
+      // a data completa, com o ano: é o que o turnover e o tempo de casa usam
+      admissaoData:(()=>{ const t=String(campo(e,'dtAdmissao','FuncAdmissao','Admissao','DataAdmissao')||'').slice(0,10);
+        return /^\d{4}-\d{2}-\d{2}$/.test(t) ? (t.slice(8,10)+'/'+t.slice(5,7)+'/'+t.slice(0,4)) : ''; })(),
       demissao:(()=>{ const t=String(campo(e,'dtDemissao','Demissao','DataDemissao')||'').slice(0,10);
         return /^\d{4}-\d{2}-\d{2}$/.test(t)&&t>'1900'?t.split('-').reverse().join('/'):''; })(),
       horario:String(campo(e,'horarioDescricao','HorarioNome','Horario','EscalaNome')||'').trim()
@@ -28547,7 +28550,7 @@ function _simixMontar(equipe, ponto, anoMes){
         codigo:cod||cad.codigo||'', nome:nome||cad.nome||'',
         cargo:cad.cargo||'',
         setor:cad.setor||String(campo(r,'setorNome')||'').trim(),
-        admissao:cad.admissao||'', demissao:cad.demissao||'', horario:cad.horario||'',
+        admissao:cad.admissao||'', admissaoData:cad.admissaoData||'', demissao:cad.demissao||'', horario:cad.horario||'',
         periodo:anoMes, emissao:null, dias:[],
         horasTrab:0, horasPrev:0, horasSaldo:0, horasFaltas:0, diasFaltas:0
       };
@@ -29641,7 +29644,7 @@ const _ptHh=m=>_pontoHhmm(m||0);
 const _ptSinal=m=>(m>0?'+':'')+_pontoHhmm(m||0);
 
 /* ── tela ──────────────────────────────────────────────────────── */
-const _PT_ABAS=[['resumo','📊','Resumo'],['pessoas','👥','Pessoas'],['jornada','⏱️','Jornada'],['setores','🏭','Setores'],['comparar','⚖️','Comparar'],['import','📄','Arquivos']];
+const _PT_ABAS=[['resumo','📊','Resumo'],['pessoas','👥','Pessoas'],['jornada','⏱️','Jornada'],['setores','🏭','Setores'],['turnover','🔁','Turnover'],['comparar','⚖️','Comparar'],['import','📄','Arquivos']];
 
 function renderPonto(){
   const el=document.getElementById('ponto-content'); if(!el) return;
@@ -29781,10 +29784,147 @@ function _ptDatas(){
     '<span id="ponto-datas-erro" style="font-size:12px;color:#dc2626;font-weight:600;"></span></div>';
 }
 
+
+/* ══ TURNOVER ═══════════════════════════════════════════════════════
+   Quem entrou e quem saiu, por mês e por setor. Só ficou possível
+   depois da chave de API do Símix (nov/2026): antes, quem era
+   desligado sumia do ponto e não havia como contar as saídas.
+
+   Como é calculado, mês a mês, com quem estava no quadro naquele mês:
+   · desligamento = data de demissão dentro do mês;
+   · admissão = data de admissão dentro do mês. Os meses gravados antes
+     desta versão guardam só dia/mês da admissão (sem o ano); para eles
+     vale: admitido no mês = dia/mês da admissão cai no mês E a pessoa
+     não estava no mês anterior;
+   · efetivo no início = quem estava no mês menos os admitidos nele;
+     efetivo no fim = quem estava menos os desligados nele;
+   · turnover = ((admissões + desligamentos) ÷ 2) ÷ efetivo médio;
+   · taxa de desligamento = desligamentos ÷ efetivo médio.
+   No período, somam-se admissões e desligamentos e usa-se a média dos
+   efetivos médios dos meses. */
+let _tvSerie='turn';
+function pontoTvSerie(k){ _tvSerie=k; _pontoAtualizarCorpo(); }
+window.pontoTvSerie=pontoTvSerie;
+
+/* um mês: quem estava, quem entrou, quem saiu — com o setor daquele mês */
+function _tvMes(ch){
+  const [A,M]=ch.split('-').map(Number);
+  const ini=A*10000+M*100+1, ult=new Date(A,M,0).getDate();
+  const h=new Date(), hojeN=h.getFullYear()*10000+(h.getMonth()+1)*100+h.getDate();
+  const fim=Math.min(A*10000+M*100+ult, hojeN);
+  const chave=p=>String(p.codigo||_normNome(p.nome||''));
+  const pa=new Date(A,M-2,1), chAnt=pa.getFullYear()+'-'+String(pa.getMonth()+1).padStart(2,'0');
+  const temAnt=((pontoMeses[chAnt]||{}).ponto||[]).length>0;
+  const antes=new Set(((pontoMeses[chAnt]||{}).ponto||[]).map(chave));
+  const pessoas=[];
+  ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+    const dem=p.demissao?estDataNum(p.demissao):0;
+    if(dem && dem<ini) return;                               // já tinha saído antes deste mês
+    // admissão: data completa quando existe; senão dia/mês + "não estava no mês anterior"
+    let adm=0;
+    if(p.admissaoData) adm=estDataNum(p.admissaoData);
+    else { const m=String(p.admissao||'').match(/^(\d{2})\/(\d{2})/);
+      if(m && +m[2]===M && (!temAnt || !antes.has(chave(p)))) adm=A*10000+M*100+(+m[1]); }
+    pessoas.push({k:chave(p), codigo:p.codigo, nome:p.nome||'', setor:(_pmesSetorDe(p,ch)||p.setor||'Sem setor'),
+      entrou:adm>=ini && adm<=fim ? adm : 0, saiu:dem>=ini && dem<=fim ? dem : 0, admN:adm, admTxt:p.admissaoData||'', demTxt:p.demissao||''});
+  });
+  return {ch, A, M, pessoas, origem:(pontoMeses[ch]||{}).origem||''};
+}
+function _tvConta(pessoas){
+  const n=pessoas.length, adm=pessoas.filter(p=>p.entrou).length, des=pessoas.filter(p=>p.saiu).length;
+  const inicio=n-adm, fim=n-des, medio=(inicio+fim)/2;
+  return {n, adm, des, inicio, fim, medio, turn:medio?((adm+des)/2)/medio*100:null, taxa:medio?des/medio*100:null};
+}
+/* soma vários meses: admissões e saídas somadas; efetivo médio = média dos meses */
+function _tvSoma(lista){
+  if(!lista.length) return {adm:0, des:0, inicio:0, fim:0, medio:0, turn:null, taxa:null, meses:0};
+  const adm=lista.reduce((t,x)=>t+x.adm,0), des=lista.reduce((t,x)=>t+x.des,0);
+  const medio=lista.reduce((t,x)=>t+x.medio,0)/lista.length;
+  return {adm, des, inicio:lista[0].inicio, fim:lista[lista.length-1].fim, medio, meses:lista.length,
+    turn:medio?((adm+des)/2)/medio*100:null, taxa:medio?des/medio*100:null};
+}
+
+function _pontoTurnover(){
+  const todos=_pontoMesesComDados();
+  const de=_pontoDe?estDataNum(_pontoDe):0, ate=_pontoAte?estDataNum(_pontoAte):99999999;
+  // meses do período escolhido (o mês entra se tiver algum dia dentro)
+  const noPer=todos.filter(ch=>{ const [a,m]=ch.split('-').map(Number); const i=a*10000+m*100+1, f=a*10000+m*100+31; return f>=de && i<=ate; });
+  if(!noPer.length) return '<div class="pt-card pt-vazio">Nenhum mês com dados no período.</div>';
+  const filtra=p=>!_pontoSetor || p.setor===_pontoSetor;
+  const M=noPer.map(_tvMes);
+  const porMes=M.map(m=>({...m, c:_tvConta(m.pessoas.filter(filtra))}));
+  const T=_tvSoma(porMes.map(x=>x.c));
+  const nM=Math.max(1,T.meses);          // as cores olham a média por mês (até 2,5% verde, até 5% amarelo), senão um ano inteiro ficaria sempre vermelho
+  const f1=v=>v===null||v===undefined?'—':(Math.round(v*10)/10).toLocaleString('pt-BR')+'%';
+  const nomeMes=ch=>PONTO_MES_NOMES[+ch.slice(5)].slice(0,3)+'/'+ch.slice(2,4);
+  const dataBR=n=>String(n).slice(6,8)+'/'+String(n).slice(4,6)+'/'+String(n).slice(0,4);
+  const tempoCasa=(adm,dem)=>{ if(!adm||!dem) return null; const a=new Date(+String(adm).slice(0,4),+String(adm).slice(4,6)-1,+String(adm).slice(6,8)), d=new Date(+String(dem).slice(0,4),+String(dem).slice(4,6)-1,+String(dem).slice(6,8)); return Math.round((d-a)/864e5); };
+  const txtTempo=d=>d===null?'—':(d<60?d+' dias':(d<730?Math.round(d/30.4)+' meses':(Math.round(d/36.5)/10).toLocaleString('pt-BR')+' anos'));
+
+  // quem saiu e quem entrou (uma vez cada, no período)
+  const saiu={}, entrou={}, primAdm={};
+  // admissão conhecida de cada pessoa: a data completa, ou a deduzida em algum mês gravado
+  todos.map(_tvMes).forEach(m=>m.pessoas.forEach(p=>{ if(p.entrou && !primAdm[p.k]) primAdm[p.k]=p.entrou; else if(p.admTxt && !primAdm[p.k]) primAdm[p.k]=estDataNum(p.admTxt); }));
+  porMes.forEach(m=>m.pessoas.filter(filtra).forEach(p=>{ if(p.saiu) saiu[p.k]={...p, casa:tempoCasa(primAdm[p.k]||0, p.saiu)}; if(p.entrou) entrou[p.k]=p; }));
+  const lSaiu=Object.values(saiu).sort((a,b)=>b.saiu-a.saiu), lEntrou=Object.values(entrou).sort((a,b)=>b.entrou-a.entrou);
+  const curtos=lSaiu.filter(p=>p.casa!==null && p.casa<90).length;
+  const entrouESaiu=lSaiu.filter(p=>entrou[p.k]).length;
+
+  let h='<div class="pt-grid pt-g4">'+
+    _ptKpi('🔁', (T.turn/nM)>5?'red':((T.turn/nM)>2.5?'amber':'green'), f1(T.turn), 'Turnover no período', T.meses>1?('média de '+f1(porMes.reduce((t,x)=>t+(x.c.turn||0),0)/T.meses)+' ao mês · '+T.meses+' meses'):'(admissões + desligamentos) ÷ 2 ÷ efetivo médio')+
+    _ptKpi('🚪', T.des?'red':'green', T.des, 'Desligamentos', 'taxa de '+f1(T.taxa)+(curtos?(' · '+curtos+' com menos de 90 dias de casa'):''))+
+    _ptKpi('🙋','blue', T.adm, 'Admissões', entrouESaiu?(entrouESaiu+' entraram e saíram no mesmo período'):'no período')+
+    _ptKpi('👥', T.fim>=T.inicio?'green':'amber', Math.round(T.fim), 'Efetivo no fim', 'começou com '+Math.round(T.inicio)+' · saldo '+(T.fim-T.inicio>0?'+':'')+Math.round(T.fim-T.inicio))+
+  '</div>';
+
+  // evolução: os meses do ano escolhido (ou todo o histórico)
+  const anoSel=_ptAnoSel();
+  const mesesG=todos.filter(ch=>anoSel==='tudo' || ch.indexOf(anoSel+'-')===0).map(_tvMes).map(m=>({ch:m.ch, c:_tvConta(m.pessoas.filter(filtra))}));
+  const series={turn:['Turnover',x=>x.c.turn,v=>f1(v),'#7c3aed'], des:['Desligamentos',x=>x.c.des,v=>String(Math.round(v)),'#dc2626'], adm:['Admissões',x=>x.c.adm,v=>String(Math.round(v)),'#2563eb'], efe:['Efetivo',x=>x.c.fim,v=>String(Math.round(v)),'#0f766e']};
+  if(!series[_tvSerie]) _tvSerie='turn';
+  const S=series[_tvSerie];
+  if(mesesG.length>1){
+    h+='<div class="pt-grid">'+_ptCard('Evolução mês a mês', (anoSel==='tudo'?'todo o histórico':String(anoSel))+(_pontoSetor?(' · '+_pontoEsc(_pontoSetor)):''),
+      _ptGrafico([{nome:S[0], cor:S[3], vals:mesesG.map(S[1])}], mesesG.map(x=>nomeMes(x.ch)), S[2], {valores:mesesG.length<=18?'todos':'fim', id:'tv', largo:1100, alto:260}),
+      '<div class="pt-seg">'+Object.keys(series).map(k=>'<button class="'+(_tvSerie===k?'on':'')+'" onclick="pontoTvSerie(\''+k+'\')">'+series[k][0]+'</button>').join('')+'</div>')+'</div>';
+  }
+
+  // por setor (sempre todos os setores, para comparar)
+  const setores=[...new Set(M.flatMap(m=>m.pessoas.map(p=>p.setor)))].sort();
+  const linhasS=setores.map(s=>({s, t:_tvSoma(M.map(m=>_tvConta(m.pessoas.filter(p=>p.setor===s))))})).filter(x=>x.t.medio>0||x.t.adm||x.t.des)
+    .sort((a,b)=>(b.t.turn||0)-(a.t.turn||0));
+  const geral=_tvSoma(M.map(m=>_tvConta(m.pessoas)));
+  const pill=v=>v===null?'<span style="color:#cbd5e1;">—</span>':_ptPill(f1(v), (v/nM)>5?'red':((v/nM)>2.5?'amber':'green'), true);
+  const z=v=>v?v:'<span style="color:#cbd5e1;">—</span>';
+  h+='<div class="pt-grid">'+_ptCard('Por setor','do maior turnover para o menor · toque para filtrar',
+    '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Setor</th><th class="c">Início</th><th class="c">Admissões</th><th class="c">Desligamentos</th><th class="c">Fim</th><th class="c">Efetivo médio</th><th class="c">Turnover</th><th class="c">Taxa de desligamento</th></tr></thead><tbody>'+
+    linhasS.map(x=>'<tr class="cl" onclick="pontoSetSetor(\''+String(x.s).replace(/'/g,"\\'")+'\')"'+(_pontoSetor===x.s?' style="background:#eff6ff;"':'')+'><td><b style="font-weight:650;">'+_pontoEsc(x.s)+'</b></td>'+
+      '<td class="c">'+Math.round(x.t.inicio)+'</td><td class="c" style="color:#1d4ed8;font-weight:700;">'+z(x.t.adm)+'</td><td class="c" style="color:#b91c1c;font-weight:700;">'+z(x.t.des)+'</td>'+
+      '<td class="c">'+Math.round(x.t.fim)+'</td><td class="c" style="color:var(--pt-sub);">'+(Math.round(x.t.medio*10)/10).toLocaleString('pt-BR')+'</td><td class="c">'+pill(x.t.turn)+'</td><td class="c">'+pill(x.t.taxa)+'</td></tr>').join('')+
+    '<tr style="background:#f8fafc;"><td><b>Empresa</b></td><td class="c"><b>'+Math.round(geral.inicio)+'</b></td><td class="c"><b>'+geral.adm+'</b></td><td class="c"><b>'+geral.des+'</b></td><td class="c"><b>'+Math.round(geral.fim)+'</b></td>'+
+      '<td class="c"><b>'+(Math.round(geral.medio*10)/10).toLocaleString('pt-BR')+'</b></td><td class="c">'+pill(geral.turn)+'</td><td class="c">'+pill(geral.taxa)+'</td></tr>'+
+    '</tbody></table></div>', _pontoSetor?'<button class="pt-btn" onclick="pontoSetSetor(\'\')">Ver todos os setores</button>':'')+'</div>';
+
+  // quem saiu | quem entrou
+  const tabP=(lista,tipo)=>lista.length
+    ? '<div class="pt-tw" style="max-height:420px;overflow:auto;"><table class="pt-tab"><thead><tr><th>Pessoa</th><th>Setor</th><th class="c">'+(tipo==='s'?'Saída':'Admissão')+'</th>'+(tipo==='s'?'<th class="c">Tempo de casa</th>':'')+'</tr></thead><tbody>'+
+        lista.map(p=>'<tr class="cl" onclick="pontoVerPessoa(\''+String(p.codigo||'').replace(/'/g,'')+'\')"><td><b style="font-weight:600;">'+_pontoEsc(p.nome)+'</b></td><td style="color:var(--pt-sub);">'+_pontoEsc(p.setor)+'</td>'+
+          '<td class="c">'+dataBR(tipo==='s'?p.saiu:p.entrou)+'</td>'+(tipo==='s'?'<td class="c">'+(p.casa!==null&&p.casa<90?_ptPill(txtTempo(p.casa),'red',true):txtTempo(p.casa))+'</td>':'')+'</tr>').join('')+'</tbody></table></div>'
+    : '<div class="pt-vazio" style="padding:22px;">'+(tipo==='s'?'Ninguém saiu no período 👍':'Ninguém entrou no período.')+'</div>';
+  h+='<div class="pt-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));">'+_ptCard('Quem saiu', lSaiu.length+' no período', tabP(lSaiu,'s'))+_ptCard('Quem entrou', lEntrou.length+' no período', tabP(lEntrou,'e'))+'</div>';
+
+  const dePdf=porMes.filter(m=>m.origem && m.origem!=='simix').map(m=>nomeMes(m.ch));
+  h+='<div class="pt-nota"><b>Turnover</b> = ((admissões + desligamentos) ÷ 2) ÷ efetivo médio. <b>Taxa de desligamento</b> = desligamentos ÷ efetivo médio. Efetivo médio = (quem estava no início + quem estava no fim) ÷ 2, mês a mês. '+
+    'Os desligados só aparecem nos meses atualizados pelo Símix depois da chave de API'+(dePdf.length?('; estes meses vieram de PDF e podem estar sem as saídas: '+dePdf.join(', ')):'')+'. '+
+    'Cores: verde até 2,5% ao mês, amarelo até 5%, vermelho acima. Tempo de casa “—” = a admissão é anterior ao primeiro mês gravado; atualizar os anos de novo grava a data completa.</div>';
+  return h;
+}
+
 function _pontoCorpo(){
   return _pontoAba==='pessoas' ? _pontoListaPessoas() :
          _pontoAba==='jornada' ? _pontoJornadaTela() :
          _pontoAba==='setores' ? _pontoPorSetor() :
+         _pontoAba==='turnover'? _pontoTurnover() :
          _pontoAba==='import'  ? _ptCard('Arquivos importados','um registro por mês', '<div>'+_pontoImportacoes()+'</div>') :
          _pontoAba==='comparar'? _pontoComparar() :
                                  _pontoResumo();
