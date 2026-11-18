@@ -5647,7 +5647,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='18/11/2026 · 18';
+  var VERSAO='18/11/2026 · 19';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -31263,6 +31263,7 @@ async function crecSalvarPrePreparo(){
 window.crecSalvarPrePreparo=crecSalvarPrePreparo;
 
 function cozRecheiosAbrir(){
+  _crecVista='dia';
   _crecDia=_crecDia||hoje();
   goTo('s-coz-recheios');
   renderCozRecheios();
@@ -31328,14 +31329,121 @@ function crecDiagnostico(dataBR){
 }
 window.crecDiagnostico=crecDiagnostico;
 
+/* ── RESUMO DA SEMANA (recheios) ─────────────────────────────────────
+   Tudo o que a cozinha produziu de recheio na semana e onde foi usado.
+   · Produzido = os lançamentos de recheio da cozinha (kg), dia a dia.
+   · Usado = o recheio que a confeitaria gastou em cada produto, pelo
+     que foi lançado na produção (o R1 e o R2 de cada lançamento).
+   A semana é a mesma que está na tela do dia (as setas valem aqui). */
+let _crecVista='dia';
+function crecVista(v){ _crecVista=v; renderCozRecheios(); const c=document.getElementById('crec-content'); if(c) c.scrollTop=0; }
+window.crecVista=crecVista;
+function _crecSemanaDados(){
+  const seg=_crecSegundaDaSemana(_crecDia||hoje()) || _crecSegundaDaSemana(hoje());
+  const dias=[]; for(let i=0;i<7;i++){ const d=new Date(seg); d.setDate(seg.getDate()+i); dias.push(_crecDataBR(d)); }
+  const noPer=new Set(dias);
+  const R={};
+  const pega=nome=>{ const of=_recNomeOficial(nome||'','recheio')||String(nome||'').trim(); const k=_normNome(of);
+    return R[k]||(R[k]={k, nome:of, prod:0, porDia:{}, uso:0, produtos:{}}); };
+  (typeof regRecheios!=='undefined'?regRecheios:[]).forEach(r=>{
+    if(!noPer.has(r.data) || !r.recheio) return; const q=parseFloat(r.qtdKg)||0; if(!q) return;
+    const o=pega(r.recheio); o.prod+=q; o.porDia[r.data]=(o.porDia[r.data]||0)+q; });
+  (registros||[]).forEach(r=>{
+    if(r.origem==='quadra' || !noPer.has(r.data)) return;
+    const pd=r.prodData||{};
+    [[pd.tipoRecheio, r.r1],[pd.tipoRecheio2, r.r2]].forEach(([tipo,kg])=>{
+      const q=parseFloat(kg)||0; if(!tipo || q<=0) return;
+      const o=pega(tipo); o.uso+=q;
+      const p=o.produtos[r.produto||'?']||(o.produtos[r.produto||'?']={nome:r.produto||'?', kg:0, pct:0});
+      p.kg+=q; p.pct+=Number(r.qtd)||0; });
+  });
+  /* Recheio comprado pronto (marcado no cadastro como "a cozinha não
+     faz": requeijão, salsicha…) não é produção da cozinha. Fica à parte,
+     para não aparecer como se a cozinha tivesse usado mais do que fez. */
+  const comprados=new Set();
+  (typeof PRODUTOS!=='undefined'?PRODUTOS:[]).forEach(p=>{
+    if(p.tipoRecheio && p.ocultarRecheioCoz) comprados.add(_normNome(_recNomeOficial(p.tipoRecheio,'recheio')||p.tipoRecheio));
+    if(p.tipoRecheio2 && p.ocultarRecheio2Coz) comprados.add(_normNome(_recNomeOficial(p.tipoRecheio2,'recheio')||p.tipoRecheio2));
+  });
+  const todos=Object.values(R).filter(x=>x.prod>0.0001||x.uso>0.0001).sort((a,b)=>(b.prod+b.uso)-(a.prod+a.uso));
+  const lista=todos.filter(x=>!(comprados.has(x.k) && x.prod<0.0001)), prontos=todos.filter(x=>comprados.has(x.k) && x.prod<0.0001);
+  return {dias, lista, prontos, prod:lista.reduce((t,x)=>t+x.prod,0), uso:lista.reduce((t,x)=>t+x.uso,0)};
+}
+function _crecSemanaTela(){
+  const D=_crecSemanaDados(), hoje0=hoje();
+  const kg=v=>(Math.round(v*10)/10).toLocaleString('pt-BR');
+  const NOME=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  const segHoje=_crecSegundaDaSemana(hoje0), seg=_crecSegundaDaSemana(_crecDia||hoje0);
+  const dif=Math.round((seg-segHoje)/(7*864e5));
+  const rot=dif===0?'Esta semana':(dif===-1?'Semana passada':(dif===1?'Semana que vem':(dif<0?('Há '+(-dif)+' semanas'):('Daqui a '+dif+' semanas'))));
+  const btn='background:#fff;border:1px solid var(--border);color:var(--text-primary);border-radius:10px;min-width:44px;height:40px;font-size:18px;font-weight:700;cursor:pointer;font-family:inherit;';
+  const saldo=D.prod-D.uso;
+  let h='<button onclick="crecVista(\'dia\')" style="border:none;background:none;color:var(--mc-azul,#2563eb);font-family:inherit;font-size:13.5px;font-weight:700;padding:2px 0 10px;cursor:pointer;">‹ Voltar para o dia</button>'+
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'+
+      '<button onclick="crecSemana(-1)" style="'+btn+'" aria-label="Semana anterior">‹</button>'+
+      '<div style="flex:1;text-align:center;line-height:1.3;"><div style="font-size:15px;font-weight:800;">'+rot+'</div><div style="font-size:11.5px;color:var(--text-secondary);">'+D.dias[0].slice(0,5)+' a '+D.dias[5].slice(0,5)+'</div></div>'+
+      (dif!==0?'<button onclick="crecSetDia(\''+hoje0+'\')" style="'+btn+'font-size:12.5px;padding:0 12px;">Hoje</button>':'')+
+      '<button onclick="crecSemana(1)" style="'+btn+'" aria-label="Próxima semana">›</button></div>';
+  const tot=(rotulo,valor,cor,sub)=>'<div class="card" style="flex:1 1 150px;margin:0;padding:14px 16px;"><div style="font-size:12px;font-weight:700;color:var(--text-secondary);">'+rotulo+'</div>'+
+    '<div style="font-size:28px;font-weight:800;line-height:1.1;margin-top:6px;color:'+cor+';">'+valor+' <span style="font-size:13px;font-weight:600;color:var(--text-secondary);">kg</span></div>'+
+    '<div style="font-size:11.5px;color:var(--text-secondary);margin-top:4px;">'+sub+'</div></div>';
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'+
+    tot('Produzido pela cozinha', kg(D.prod), 'var(--mc-azul,#2563eb)', D.lista.filter(x=>x.prod>0.0001).length+' recheio(s) na semana')+
+    tot('Usado nos produtos', kg(D.uso), '#15803d', D.lista.reduce((t,x)=>t+Object.keys(x.produtos).length,0)+' uso(s) em produtos')+
+    tot(saldo>=0?'Sobrou':'Usou a mais do que fez', kg(Math.abs(saldo)), saldo>=0?'#b45309':'#b91c1c', saldo>=0?'produzido e ainda não usado':'veio do saldo de semanas anteriores')+
+  '</div>';
+  if(!D.lista.length && !D.prontos.length){
+    return h+'<div class="card" style="text-align:center;padding:34px 16px;color:var(--text-secondary);"><div style="font-size:30px;">🥣</div><div style="font-size:15px;font-weight:700;color:var(--text-primary);margin-top:8px;">Nenhum recheio nesta semana</div><div style="font-size:13px;margin-top:4px;">Não há recheio lançado pela cozinha nem usado pela confeitaria entre '+D.dias[0].slice(0,5)+' e '+D.dias[6].slice(0,5)+'.</div></div>';
+  }
+  D.lista.forEach(x=>{
+    const prods=Object.values(x.produtos).sort((a,b)=>b.kg-a.kg);
+    const maxBar=Math.max(x.prod, x.uso, 0.0001), s=x.prod-x.uso;
+    const maxP=prods.length?prods[0].kg:1;
+    h+='<div class="card" style="margin-bottom:12px;padding:16px;">'+
+      '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="font-size:16px;font-weight:800;flex:1;min-width:0;">'+x.nome+'</span>'+
+        '<span style="font-size:12px;font-weight:700;border-radius:99px;padding:3px 10px;background:'+(Math.abs(s)<0.05?'#f1f5f9':(s>0?'#fef3c7':'#fee2e2'))+';color:'+(Math.abs(s)<0.05?'#475569':(s>0?'#92400e':'#b91c1c'))+';">'+(Math.abs(s)<0.05?'bateu certinho':(s>0?('sobrou '+kg(s)+' kg'):('usou '+kg(-s)+' kg a mais')))+'</span></div>'+
+      // produzido x usado
+      '<div style="margin-top:12px;display:grid;grid-template-columns:86px 1fr 74px;gap:6px 10px;align-items:center;font-size:12.5px;">'+
+        '<span style="color:var(--text-secondary);">Produzido</span><div style="height:12px;background:var(--bg-page);border-radius:99px;overflow:hidden;"><div style="height:100%;width:'+(x.prod/maxBar*100)+'%;background:var(--mc-azul,#2563eb);border-radius:99px;"></div></div><b style="text-align:right;">'+kg(x.prod)+' kg</b>'+
+        '<span style="color:var(--text-secondary);">Usado</span><div style="height:12px;background:var(--bg-page);border-radius:99px;overflow:hidden;"><div style="height:100%;width:'+(x.uso/maxBar*100)+'%;background:#16a34a;border-radius:99px;"></div></div><b style="text-align:right;">'+kg(x.uso)+' kg</b>'+
+      '</div>'+
+      // em que dias foi produzido
+      (x.prod>0.0001?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;">'+D.dias.map((d,i)=>{ const v=x.porDia[d]||0; return v>0.0001?('<span style="font-size:11.5px;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:3px 9px;font-weight:600;">'+NOME[i]+' '+kg(v)+'</span>'):''; }).join('')+'</div>':
+        '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">Nada produzido nesta semana: o que foi usado veio de saldo.</div>')+
+      // onde foi usado
+      '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">'+
+        '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;margin-bottom:8px;">ONDE FOI USADO</div>'+
+        (prods.length?prods.map(p=>'<div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(60px,1fr) 78px;gap:10px;align-items:center;padding:4px 0;font-size:13px;">'+
+            '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+String(p.nome).replace(/"/g,'&quot;')+'">'+p.nome+'</span>'+
+            '<div style="height:8px;background:var(--bg-page);border-radius:99px;overflow:hidden;"><div style="height:100%;width:'+(p.kg/maxP*100)+'%;background:#86efac;border-radius:99px;"></div></div>'+
+            '<span style="text-align:right;white-space:nowrap;"><b>'+kg(p.kg)+' kg</b>'+(x.uso>0?' <span style="color:var(--text-secondary);font-size:11px;">'+Math.round(p.kg/x.uso*100)+'%</span>':'')+'</span></div>').join('')
+          :'<div style="font-size:12.5px;color:var(--text-secondary);">Ainda não foi usado em nenhum produto lançado nesta semana.</div>')+
+      '</div></div>';
+  });
+  if(D.prontos.length){
+    h+='<div style="font-size:12px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;margin:18px 0 8px;">COMPRADOS PRONTOS · a cozinha não faz</div>';
+    D.prontos.forEach(x=>{ const prods=Object.values(x.produtos).sort((a,b)=>b.kg-a.kg);
+      h+='<div class="card" style="margin-bottom:10px;padding:14px 16px;"><div style="display:flex;align-items:baseline;gap:10px;"><span style="font-size:15px;font-weight:800;flex:1;">'+x.nome+'</span><b style="font-size:15px;">'+kg(x.uso)+' kg</b><span style="font-size:12px;color:var(--text-secondary);">usados</span></div>'+
+        '<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.7;">'+prods.map(p=>p.nome+' <b style="color:var(--text-primary);">'+kg(p.kg)+' kg</b>').join(' · ')+'</div></div>'; });
+  }
+  h+='<div style="font-size:11.5px;color:var(--text-muted);line-height:1.6;margin-top:4px;"><b>Produzido</b> = o que a cozinha lançou de recheio na semana. <b>Usado</b> = o recheio gasto em cada produto, conforme os lançamentos de produção da confeitaria. A porcentagem é a parte daquele produto no total usado do recheio.</div>';
+  return h;
+}
+
 function renderCozRecheios(){
   const el=document.getElementById('crec-content'); if(!el) return;
+  if(_crecVista==='semana'){
+    const sub0=document.getElementById('crec-sub'); if(sub0) sub0.textContent='Resumo da semana';
+    el.innerHTML=_crecSemanaTela();
+    return;
+  }
   const d=crecDados(_crecDia);
   const sub=document.getElementById('crec-sub');
   if(sub) sub.textContent=d.diaNome+' · '+d.dia;
 
   let h='<div style="display:flex;gap:7px;margin-bottom:10px;">'+
     '<button onclick="crecAbrirPrePreparo()" style="flex:1;background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:10px;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">🔀 Produtos com pré-preparo</button>'+
+    '<button onclick="crecVista(\'semana\')" title="Tudo o que foi produzido de recheio na semana e onde foi usado" style="flex:1;background:var(--mc-azul,#2563eb);border:1px solid var(--mc-azul,#2563eb);color:#fff;border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">📊 Resumo da semana</button>'+
   '</div>';
   h+=_crecSeletorDia();
 
