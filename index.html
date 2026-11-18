@@ -5647,7 +5647,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='18/11/2026 · 19';
+  var VERSAO='18/11/2026 · 20';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -31334,7 +31334,12 @@ window.crecDiagnostico=crecDiagnostico;
    · Produzido = os lançamentos de recheio da cozinha (kg), dia a dia.
    · Usado = o recheio que a confeitaria gastou em cada produto, pelo
      que foi lançado na produção (o R1 e o R2 de cada lançamento).
-   A semana é a mesma que está na tela do dia (as setas valem aqui). */
+   A semana é a mesma que está na tela do dia (as setas valem aqui).
+
+   REGRA DA EMPRESA: recheio é avaliado por SEMANA FECHADA. Uma semana
+   não usa recheio da anterior. Então, se numa semana aparece mais uso
+   do que produção, não é "saldo": é diferença de lançamento (faltou
+   lançar a produção do recheio, ou o consumo foi lançado a mais). */
 let _crecVista='dia';
 function crecVista(v){ _crecVista=v; renderCozRecheios(); const c=document.getElementById('crec-content'); if(c) c.scrollTop=0; }
 window.crecVista=crecVista;
@@ -31381,7 +31386,7 @@ function _crecSemanaTela(){
   let h='<button onclick="crecVista(\'dia\')" style="border:none;background:none;color:var(--mc-azul,#2563eb);font-family:inherit;font-size:13.5px;font-weight:700;padding:2px 0 10px;cursor:pointer;">‹ Voltar para o dia</button>'+
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">'+
       '<button onclick="crecSemana(-1)" style="'+btn+'" aria-label="Semana anterior">‹</button>'+
-      '<div style="flex:1;text-align:center;line-height:1.3;"><div style="font-size:15px;font-weight:800;">'+rot+'</div><div style="font-size:11.5px;color:var(--text-secondary);">'+D.dias[0].slice(0,5)+' a '+D.dias[5].slice(0,5)+'</div></div>'+
+      '<div style="flex:1;text-align:center;line-height:1.3;"><div style="font-size:15px;font-weight:800;">'+rot+'</div><div style="font-size:11.5px;color:var(--text-secondary);">'+D.dias[0].slice(0,5)+' a '+D.dias[6].slice(0,5)+' · '+(dif<0?'semana fechada':(dif===0?'em andamento':'ainda não começou'))+'</div></div>'+
       (dif!==0?'<button onclick="crecSetDia(\''+hoje0+'\')" style="'+btn+'font-size:12.5px;padding:0 12px;">Hoje</button>':'')+
       '<button onclick="crecSemana(1)" style="'+btn+'" aria-label="Próxima semana">›</button></div>';
   const tot=(rotulo,valor,cor,sub)=>'<div class="card" style="flex:1 1 150px;margin:0;padding:14px 16px;"><div style="font-size:12px;font-weight:700;color:var(--text-secondary);">'+rotulo+'</div>'+
@@ -31390,7 +31395,8 @@ function _crecSemanaTela(){
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'+
     tot('Produzido pela cozinha', kg(D.prod), 'var(--mc-azul,#2563eb)', D.lista.filter(x=>x.prod>0.0001).length+' recheio(s) na semana')+
     tot('Usado nos produtos', kg(D.uso), '#15803d', D.lista.reduce((t,x)=>t+Object.keys(x.produtos).length,0)+' uso(s) em produtos')+
-    tot(saldo>=0?'Sobrou':'Usou a mais do que fez', kg(Math.abs(saldo)), saldo>=0?'#b45309':'#b91c1c', saldo>=0?'produzido e ainda não usado':'veio do saldo de semanas anteriores')+
+    tot(saldo>=0?(dif<0?'Sobrou na semana':'Sobra até agora'):'Diferença: uso maior que a produção', kg(Math.abs(saldo)), saldo>=0?'#b45309':'#b91c1c',
+      saldo>=0?(dif<0?'produzido e não usado na semana':'produzido e ainda não usado'):'confira os lançamentos — a semana fecha em si mesma')+
   '</div>';
   if(!D.lista.length && !D.prontos.length){
     return h+'<div class="card" style="text-align:center;padding:34px 16px;color:var(--text-secondary);"><div style="font-size:30px;">🥣</div><div style="font-size:15px;font-weight:700;color:var(--text-primary);margin-top:8px;">Nenhum recheio nesta semana</div><div style="font-size:13px;margin-top:4px;">Não há recheio lançado pela cozinha nem usado pela confeitaria entre '+D.dias[0].slice(0,5)+' e '+D.dias[6].slice(0,5)+'.</div></div>';
@@ -31401,7 +31407,7 @@ function _crecSemanaTela(){
     const maxP=prods.length?prods[0].kg:1;
     h+='<div class="card" style="margin-bottom:12px;padding:16px;">'+
       '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="font-size:16px;font-weight:800;flex:1;min-width:0;">'+x.nome+'</span>'+
-        '<span style="font-size:12px;font-weight:700;border-radius:99px;padding:3px 10px;background:'+(Math.abs(s)<0.05?'#f1f5f9':(s>0?'#fef3c7':'#fee2e2'))+';color:'+(Math.abs(s)<0.05?'#475569':(s>0?'#92400e':'#b91c1c'))+';">'+(Math.abs(s)<0.05?'bateu certinho':(s>0?('sobrou '+kg(s)+' kg'):('usou '+kg(-s)+' kg a mais')))+'</span></div>'+
+        '<span style="font-size:12px;font-weight:700;border-radius:99px;padding:3px 10px;background:'+(Math.abs(s)<0.05?'#f1f5f9':(s>0?'#fef3c7':'#fee2e2'))+';color:'+(Math.abs(s)<0.05?'#475569':(s>0?'#92400e':'#b91c1c'))+';">'+(Math.abs(s)<0.05?'bateu certinho':(s>0?('sobrou '+kg(s)+' kg'):('⚠ '+kg(-s)+' kg de uso sem produção lançada')))+'</span></div>'+
       // produzido x usado
       '<div style="margin-top:12px;display:grid;grid-template-columns:86px 1fr 74px;gap:6px 10px;align-items:center;font-size:12.5px;">'+
         '<span style="color:var(--text-secondary);">Produzido</span><div style="height:12px;background:var(--bg-page);border-radius:99px;overflow:hidden;"><div style="height:100%;width:'+(x.prod/maxBar*100)+'%;background:var(--mc-azul,#2563eb);border-radius:99px;"></div></div><b style="text-align:right;">'+kg(x.prod)+' kg</b>'+
@@ -31409,7 +31415,7 @@ function _crecSemanaTela(){
       '</div>'+
       // em que dias foi produzido
       (x.prod>0.0001?'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:10px;">'+D.dias.map((d,i)=>{ const v=x.porDia[d]||0; return v>0.0001?('<span style="font-size:11.5px;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:3px 9px;font-weight:600;">'+NOME[i]+' '+kg(v)+'</span>'):''; }).join('')+'</div>':
-        '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">Nada produzido nesta semana: o que foi usado veio de saldo.</div>')+
+        '<div style="font-size:12px;color:#b91c1c;margin-top:8px;">Nenhuma produção deste recheio lançada na semana. Confira se a cozinha lançou, ou se o nome do recheio no lançamento é o mesmo do cadastro.</div>')+
       // onde foi usado
       '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;">'+
         '<div style="font-size:11px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;margin-bottom:8px;">ONDE FOI USADO</div>'+
@@ -31426,7 +31432,7 @@ function _crecSemanaTela(){
       h+='<div class="card" style="margin-bottom:10px;padding:14px 16px;"><div style="display:flex;align-items:baseline;gap:10px;"><span style="font-size:15px;font-weight:800;flex:1;">'+x.nome+'</span><b style="font-size:15px;">'+kg(x.uso)+' kg</b><span style="font-size:12px;color:var(--text-secondary);">usados</span></div>'+
         '<div style="font-size:12.5px;color:var(--text-secondary);margin-top:6px;line-height:1.7;">'+prods.map(p=>p.nome+' <b style="color:var(--text-primary);">'+kg(p.kg)+' kg</b>').join(' · ')+'</div></div>'; });
   }
-  h+='<div style="font-size:11.5px;color:var(--text-muted);line-height:1.6;margin-top:4px;"><b>Produzido</b> = o que a cozinha lançou de recheio na semana. <b>Usado</b> = o recheio gasto em cada produto, conforme os lançamentos de produção da confeitaria. A porcentagem é a parte daquele produto no total usado do recheio.</div>';
+  h+='<div style="font-size:11.5px;color:var(--text-muted);line-height:1.6;margin-top:4px;"><b>Produzido</b> = o que a cozinha lançou de recheio na semana. <b>Usado</b> = o recheio gasto em cada produto, conforme os lançamentos de produção da confeitaria. A porcentagem é a parte daquele produto no total usado do recheio. Cada semana é avaliada fechada, de segunda a domingo: uma semana não usa recheio da anterior. Uso maior que a produção indica lançamento faltando ou a mais.</div>';
   return h;
 }
 
