@@ -5003,7 +5003,7 @@
       <button class="mc-header-back" onclick="voltar()">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Pedido</div></div></div>
       <div class="mc-divider-v"></div>
-      <div class="mc-page-info"><div class="mc-page-title">📝 Montar pedido</div><div class="mc-page-sub">Quantidade · kg · preço</div></div>
+      <div class="mc-page-info"><div class="mc-page-title">🛒 Pedido de Matéria-Prima</div><div class="mc-page-sub">Itens, entrega e recebimento</div></div>
     </div>
     <div style="flex:1;padding:16px;background:var(--bg-page);overflow-y:auto;display:flex;flex-direction:column;" id="comp-forn-content"></div>
   </div>
@@ -5648,7 +5648,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='18/11/2026 · 24';
+  var VERSAO='18/11/2026 · 25';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -9092,17 +9092,37 @@ function renderEmbop(){
           '<span style="color:var(--text-secondary);font-size:20px;">›</span></button>'; });
     }
   }
-  // o que este setor lançou hoje
-  const hojeS=fmtData(new Date()), meus=[];
-  (registros||[]).forEach(r=>((r.embalagem||{}).parciais||[]).forEach(p=>{ if(p.setor==='embop' && _erDataDe(p.hora)===hojeS) meus.push({r,p}); }));
-  if(meus.length){
-    meus.sort((a,b)=>String(b.p.hora).localeCompare(String(a.p.hora)));
-    const tot=meus.reduce((t,x)=>t+(Number(x.p.qtd)||0),0);
-    h+='<div style="margin-top:20px;font-size:12px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;">LANÇADO HOJE POR AQUI · '+fmt(tot)+' PACOTES</div>'+
-      '<div class="card" style="padding:4px 14px;margin-top:8px;">'+meus.slice(0,12).map(x=>'<div style="display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--border);font-size:13.5px;">'+
-        '<span style="color:var(--text-secondary);font-size:12px;flex:0 0 42px;">'+String(x.p.hora).slice(11,16)+'</span><span style="flex:1;min-width:0;">'+x.r.produto+' <span style="color:var(--text-secondary);font-size:12px;">('+String(x.r.data).slice(0,5)+')</span></span>'+
-        '<b style="color:'+(x.p.qtd<0?'#c62828':'#15803d')+';">'+(x.p.qtd>0?'+':'')+x.p.qtd+'</b></div>').join('')+
-      (meus.length>12?'<div style="font-size:12px;color:var(--text-secondary);padding:8px 0;">… e mais '+(meus.length-12)+'</div>':'')+'</div>';
+  /* Embalado hoje, produto por produto (todos, sem cortar), com o total do
+     dia anterior ao lado para comparar. Conta o que foi lançado na
+     embalagem pelos dois setores — é o mesmo controle. "Dia anterior" é
+     o último dia que teve embalagem (numa segunda, mostra a sexta ou o
+     sábado, não um domingo zerado). */
+  { const hojeS=fmtData(new Date()), hojeN2=_erNum(hojeS);
+    const evs=_erEventos().ev;
+    const antS=[...new Set(evs.filter(x=>_erNum(x.dia)<hojeN2).map(x=>x.dia))].sort((a,b)=>_erNum(b)-_erNum(a))[0]||'';
+    const ontemD=new Date(); ontemD.setDate(ontemD.getDate()-1);
+    const rotAnt=!antS?'Dia anterior':(antS===fmtData(ontemD)?'Ontem':(nomeDiaSemana(_erDate(antS)).slice(0,3)+' '+antS.slice(0,5)));
+    const P={};
+    evs.forEach(x=>{ if(x.dia!==hojeS && x.dia!==antS) return; const nome=x.r.produto||'?';
+      const o=P[nome]||(P[nome]={nome, hoje:0, ant:0}); if(x.dia===hojeS) o.hoje+=x.pct; else o.ant+=x.pct; });
+    let aqui=0;
+    (registros||[]).forEach(r=>((r.embalagem||{}).parciais||[]).forEach(p=>{ if(p.setor==='embop' && _erDataDe(p.hora)===hojeS) aqui+=(Number(p.qtd)||0); }));
+    const lista=Object.values(P).filter(o=>Math.abs(o.hoje)>0.001).sort((a,b)=>b.hoje-a.hoje);
+    const totH=lista.reduce((t,o)=>t+o.hoje,0), totA=Object.values(P).reduce((t,o)=>t+o.ant,0);
+    if(lista.length || totA>0.5){
+      h+='<div style="margin-top:22px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;"><span style="font-size:12px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;">EMBALADO HOJE</span>'+
+        '<span style="font-size:12px;color:var(--text-secondary);">'+lista.length+' produto(s)'+(aqui?(' · '+fmt(aqui)+' pacotes lançados por aqui'):'')+'</span></div>'+
+        '<div class="card" style="padding:0;margin-top:8px;overflow:hidden;">'+
+        '<div style="display:grid;grid-template-columns:minmax(0,1fr) 84px 84px;gap:8px;padding:10px 14px;font-size:11px;font-weight:700;color:var(--text-secondary);border-bottom:1px solid var(--border);background:var(--bg-page);">'+
+          '<span>Produto</span><span style="text-align:right;">Hoje</span><span style="text-align:right;">'+rotAnt+'</span></div>'+
+        (lista.length?lista.map(o=>'<div style="display:grid;grid-template-columns:minmax(0,1fr) 84px 84px;gap:8px;padding:10px 14px;font-size:14px;border-bottom:1px solid var(--border);align-items:baseline;">'+
+            '<span style="min-width:0;">'+o.nome+'</span><b style="text-align:right;color:#15803d;font-variant-numeric:tabular-nums;">'+fmt(o.hoje)+'</b>'+
+            '<span style="text-align:right;color:var(--text-secondary);font-variant-numeric:tabular-nums;">'+(o.ant>0.5?fmt(o.ant):'—')+'</span></div>').join('')
+          :'<div style="padding:16px 14px;font-size:13px;color:var(--text-secondary);">Nada embalado hoje ainda.</div>')+
+        '<div style="display:grid;grid-template-columns:minmax(0,1fr) 84px 84px;gap:8px;padding:12px 14px;font-size:14px;font-weight:800;background:var(--bg-page);">'+
+          '<span>Total em pacotes</span><span style="text-align:right;color:#15803d;font-variant-numeric:tabular-nums;">'+fmt(totH)+'</span><span style="text-align:right;font-variant-numeric:tabular-nums;">'+(totA>0.5?fmt(totA):'—')+'</span></div></div>'+
+        '<div style="font-size:11.5px;color:var(--text-secondary);margin-top:6px;line-height:1.5;">Ao lado de cada produto, quanto dele foi embalado '+(antS?(rotAnt==='Ontem'?'ontem':('em '+antS.slice(0,5))):'no dia anterior')+'. O total da direita é tudo o que foi embalado nesse dia, inclusive produtos que hoje ainda não entraram.</div>';
+    }
   }
   el.innerHTML=h;
   Object.keys(digitado).forEach(id=>{ const i=document.getElementById(id); if(i) i.value=digitado[id]; });
@@ -20050,50 +20070,95 @@ function _cpCss(){
   if(document.getElementById('cp-css')) return;
   const st=document.createElement('style'); st.id='cp-css';
   st.textContent=`
-.cp{--tx:#1f1f1c;--sub:#6f6e68;--mut:#a3a199;--bd:#e7e5de;--am:#f6c945;--esc:#2a2a27;
+.cp{--tx:#1f1f1c;--sub:#6f6e68;--mut:#a3a199;--bd:#e7e5de;--bd2:#f1efe9;--am:#f6c945;--am-tx:#3b2f00;--esc:#2a2a27;--esc-tx:#ffffff;--card:#ffffff;--chip:#f1efe9;
+  --hov:#faf8f1;--dest:#fdf6d8;--dest-h:#fbf0c2;--ok:#166534;--al:#9a3412;--pe:#b91c1c;--sombra:0 1px 2px rgba(31,31,28,.04),0 14px 34px rgba(31,31,28,.06);
+  --seg-a:#2a2a27;--seg-a-tx:#fff;--seg-b:#ffffff;--listra1:#eceae3;--listra2:#f6f5f0;
   min-height:100%;box-sizing:border-box;padding:24px 26px 44px;color:var(--tx);font-family:inherit;
   background:radial-gradient(900px 480px at 100% 0%,#fbf4d9 0%,transparent 60%),linear-gradient(180deg,#f4f2ec,#ecebe5);}
+.cp.escuro{--tx:#f3f1ea;--sub:#b3b0a6;--mut:#7d7a70;--bd:#34322d;--bd2:#2a2925;--am:#f6c945;--am-tx:#2b2200;--esc:#f3f1ea;--esc-tx:#151513;--card:#201f1c;--chip:#2c2b27;
+  --hov:#27261f;--dest:rgba(246,201,69,.10);--dest-h:rgba(246,201,69,.16);--ok:#86efac;--al:#fdba74;--pe:#fca5a5;--sombra:0 1px 0 rgba(255,255,255,.03);
+  --seg-a:#f3f1ea;--seg-a-tx:#151513;--seg-b:#201f1c;--listra1:#24231f;--listra2:#1c1b18;
+  background:radial-gradient(900px 480px at 100% 0%,rgba(246,201,69,.10) 0%,transparent 60%),#151513;}
 .cp *{box-sizing:border-box;}
 .cp-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
 .cp-top h1{margin:0;font-size:34px;font-weight:400;letter-spacing:-.02em;color:var(--tx);flex:1;min-width:180px;}
-.cp-b{border:1px solid var(--bd);background:#fff;color:var(--tx);border-radius:99px;height:40px;padding:0 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;}
-.cp-b:hover{border-color:#cfcdc4;}
-.cp-b.esc{background:var(--esc);border-color:var(--esc);color:#fff;}
-.cp-b.am{background:var(--am);border-color:var(--am);color:#3b2f00;}
-.cp-b:focus-visible,.cp-seg:focus-visible,.cp-sel:focus-visible,.cp-lin:focus-visible{outline:2px solid var(--esc);outline-offset:2px;}
+.cp-b{border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:99px;height:40px;padding:0 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:7px;}
+.cp-b:hover{border-color:var(--mut);}
+.cp-b.esc{background:var(--esc);border-color:var(--esc);color:var(--esc-tx);}
+.cp-b.am{background:var(--am);border-color:var(--am);color:var(--am-tx);}
+.cp-b.larga{width:100%;height:44px;font-size:14px;}
+.cp-b:focus-visible,.cp-seg:focus-visible,.cp-sel:focus-visible,.cp-lin:focus-visible,.cp-in:focus-visible,.cp-ic:focus-visible,.cp-link:focus-visible,.cp-volta:focus-visible{outline:2px solid var(--am);outline-offset:2px;}
 .cp-faixa{display:flex;gap:8px;margin-bottom:18px;align-items:flex-end;overflow-x:auto;padding:2px 2px 4px;}
 .cp-seg{flex:1 1 0;min-width:190px;border:none;background:none;padding:0;text-align:left;cursor:pointer;font-family:inherit;color:inherit;}
 .cp-seg .r{font-size:13.5px;font-weight:600;color:var(--tx);margin:0 0 7px 4px;white-space:nowrap;}
 .cp-seg .p{height:42px;border-radius:99px;display:flex;align-items:center;padding:0 16px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;border:1px solid transparent;}
 .cp-seg.on .p{box-shadow:0 0 0 2px var(--esc);}
-.cp-seg.vz .p{background:repeating-linear-gradient(135deg,#eceae3 0 6px,#f6f5f0 6px 12px)!important;color:var(--mut)!important;}
+.cp-seg.vz .p{background:repeating-linear-gradient(135deg,var(--listra1) 0 6px,var(--listra2) 6px 12px)!important;color:var(--mut)!important;}
 .cp-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
-.cp-sel{appearance:none;-webkit-appearance:none;border:1px solid var(--bd)!important;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236f6e68' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center!important;border-radius:99px!important;height:40px!important;padding:0 34px 0 16px!important;font-family:inherit;font-size:13px!important;font-weight:600;color:var(--tx)!important;cursor:pointer;width:auto!important;max-width:230px;}
-.cp-busca{border:1px solid var(--bd)!important;background:#fff!important;border-radius:99px!important;height:40px!important;padding:0 16px!important;font-family:inherit;font-size:14px!important;color:var(--tx)!important;flex:1 1 200px;min-width:160px;max-width:340px;width:auto!important;}
-.cp-card{background:#fff;border-radius:26px;box-shadow:0 1px 2px rgba(31,31,28,.04),0 14px 34px rgba(31,31,28,.06);overflow:hidden;}
+.cp-sel{appearance:none;-webkit-appearance:none;border:1px solid var(--bd)!important;background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238a877e' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center!important;border-radius:99px!important;height:40px!important;padding:0 34px 0 16px!important;font-family:inherit;font-size:13px!important;font-weight:600;color:var(--tx)!important;cursor:pointer;width:auto!important;max-width:230px;}
+.cp.escuro .cp-sel{color-scheme:dark;}
+.cp-busca{border:1px solid var(--bd)!important;background:var(--card)!important;border-radius:99px!important;height:40px!important;padding:0 16px!important;font-family:inherit;font-size:14px!important;color:var(--tx)!important;flex:1 1 200px;min-width:160px;max-width:340px;width:auto!important;box-shadow:none!important;}
+.cp-busca::placeholder,.cp-in::placeholder{color:var(--mut);}
+.cp-card{background:var(--card);border-radius:26px;box-shadow:var(--sombra);overflow:hidden;border:1px solid transparent;}
+.cp.escuro .cp-card{border-color:var(--bd2);}
+.cp-pad{padding:18px 20px;}
 .cp-tw{overflow-x:auto;}
 .cp-tab{width:100%;border-collapse:collapse;font-size:13.5px;}
 .cp-tab th{text-align:left;font-size:11.5px;font-weight:600;color:var(--mut);padding:16px 14px 12px;white-space:nowrap;border-bottom:1px solid var(--bd);}
-.cp-tab td{padding:13px 14px;border-bottom:1px solid #f1efe9;vertical-align:middle;white-space:nowrap;}
+.cp-tab td{padding:13px 14px;border-bottom:1px solid var(--bd2);vertical-align:middle;white-space:nowrap;}
 .cp-tab tr:last-child td{border-bottom:none;}
 .cp-tab th:first-child,.cp-tab td:first-child{padding-left:24px;} .cp-tab th:last-child,.cp-tab td:last-child{padding-right:22px;}
-.cp-lin{cursor:pointer;} .cp-lin:hover td{background:#faf8f1;} .cp-lin.dest td{background:#fdf6d8;} .cp-lin.dest:hover td{background:#fbf0c2;}
-.cp-lin.apag td{color:var(--mut);} 
+.cp-lin{cursor:pointer;} .cp-lin:hover td{background:var(--hov);} .cp-lin.dest td{background:var(--dest);} .cp-lin.dest:hover td{background:var(--dest-h);}
+.cp-lin.apag td{color:var(--mut);}
 .cp-av{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex:0 0 32px;}
 .cp-pil{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:4px 11px;font-size:12px;font-weight:700;white-space:nowrap;}
 .cp-pil i{width:7px;height:7px;border-radius:50%;display:inline-block;}
 .cp-tag{display:inline-block;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;}
 .cp-num{font-variant-numeric:tabular-nums;color:var(--sub);font-weight:600;}
 .cp-vazio{text-align:center;color:var(--sub);padding:46px 16px;font-size:14px;}
-@media (max-width:900px){ .cp{padding:16px 12px 36px;} .cp-top h1{font-size:26px;} .cp-seg{flex:0 0 190px;} .cp-oc{display:none;} .cp-busca{max-width:none;font-size:16px!important;} }
+.cp-rot{font-size:12px;font-weight:600;color:var(--mut);}
+.cp-sub2{font-size:12.5px;color:var(--sub);}
+.cp-volta,.cp-link{border:none;background:none;font-family:inherit;cursor:pointer;padding:0;color:var(--sub);font-size:13px;font-weight:600;}
+.cp-link{font-size:12px;text-decoration:underline;text-underline-offset:2px;display:inline-block;}
+.cp-nota{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--dest);border:1px solid var(--am);border-radius:18px;padding:12px 16px;font-size:13px;margin-bottom:14px;}
+.cp-nota>div{flex:1;min-width:200px;}
+.cp-ped{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start;}
+.cp-lado{display:flex;flex-direction:column;gap:14px;position:sticky;top:12px;}
+.cp-passos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding-bottom:12px;}
+.cp-passo{display:flex;gap:10px;align-items:flex-start;min-width:0;}
+.cp-passo .b{flex:0 0 22px;width:22px;height:22px;border-radius:50%;border:2px solid var(--bd);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--esc-tx);margin-top:1px;}
+.cp-passo.ok .b{background:var(--esc);border-color:var(--esc);} .cp-passo.at .b{border-color:var(--am);box-shadow:0 0 0 4px color-mix(in srgb,var(--am) 25%,transparent);}
+.cp-passo .t{font-size:13.5px;font-weight:700;color:var(--mut);} .cp-passo.ok .t,.cp-passo.at .t{color:var(--tx);}
+.cp-passo .s{font-size:11.5px;color:var(--sub);margin-top:2px;overflow:hidden;text-overflow:ellipsis;}
+.cp-rl{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid var(--bd2);} .cp-rot+.cp-rl{margin-top:8px;}
+.cp-it{display:grid;grid-template-columns:minmax(0,1fr) 124px 92px 132px 118px 74px;gap:6px 12px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--bd2);font-size:13.5px;}
+.cp-it:last-child{border-bottom:none;} .cp-it.on{background:var(--dest);}
+.cp-it.cab{font-size:11.5px;font-weight:600;color:var(--mut);padding-top:16px;padding-bottom:10px;border-bottom:1px solid var(--bd);}
+.cp-it .n{font-weight:600;} .cp-it .i{font-size:11.5px;color:var(--sub);margin-top:2px;}
+.cp-it .d{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;} .cp-it .a{display:flex;gap:2px;justify-content:flex-end;}
+.cp-in{width:100%!important;height:38px!important;border:1px solid var(--bd)!important;background:var(--card)!important;color:var(--tx)!important;border-radius:12px!important;padding:0 10px!important;font-family:inherit;font-size:14px!important;font-weight:600;text-align:right;box-shadow:none!important;}
+.cp.escuro .cp-in{background:#1a1917!important;}
+.cp-ic{border:none;background:none;cursor:pointer;font-size:15px;width:34px;height:34px;border-radius:50%;} .cp-ic:hover{background:var(--chip);}
+.cp-hist{grid-column:1/-1;background:var(--chip);border-radius:14px;padding:10px 14px;font-size:12px;color:var(--sub);margin-top:4px;}
+.screen.cp-esc .mc-header{background:#151513;border-bottom-color:rgba(255,255,255,.08);box-shadow:none;}
+.screen.cp-esc .mc-page-title,.screen.cp-esc .mc-brand-name{color:#f3f1ea;}
+.screen.cp-esc .mc-page-sub,.screen.cp-esc .mc-brand-sub{color:rgba(243,241,234,.55);}
+.screen.cp-esc .mc-header-back,.screen.cp-esc .mc-act-btn-secondary{background:rgba(255,255,255,.08);color:#f3f1ea;border-color:rgba(255,255,255,.1);}
+.screen.cp-esc .mc-divider-v{background:rgba(255,255,255,.12);}
+@media (max-width:1100px){ .cp-ped{grid-template-columns:minmax(0,1fr);} .cp-lado{position:static;} .cp-acoes{position:sticky;bottom:8px;box-shadow:0 10px 30px rgba(0,0,0,.25);} }
+@media (max-width:900px){ .cp{padding:16px 12px 36px;} .cp-top h1{font-size:26px;} .cp-seg{flex:0 0 190px;} .cp-oc{display:none;} .cp-busca{max-width:none;font-size:16px!important;}
+  .cp-it{grid-template-columns:1fr 1fr;padding:14px 16px;} .cp-it.cab{display:none;} .cp-it>div:first-child{grid-column:1/-1;} .cp-it .a{grid-column:1/-1;justify-content:flex-start;}
+  .cp-it .d{text-align:left;} .cp-it .d::before{content:attr(data-r);display:block;font-size:10.5px;color:var(--mut);font-weight:500;margin-bottom:3px;} .cp-in{font-size:16px!important;text-align:left;}
+  .cp-passos{grid-template-columns:1fr;} }
 `;
   document.head.appendChild(st);
 }
 function renderCompras(){
   const el=document.getElementById('comp-hub-content'); if(!el) return;
-  _cpCss(); el.style.padding='0'; el.style.background='#ecebe5';
+  _cpLigar(el,'s-compras');
+  const clP='cp'+(_cpTema==='escuro'?' escuro':'');
   if(!comprasFornecedores.length){
-    el.innerHTML='<div class="cp"><div class="cp-card cp-vazio"><div style="font-size:17px;font-weight:700;color:#1f1f1c;margin-bottom:6px;">Nenhum fornecedor ainda</div>'+
+    el.innerHTML='<div class="'+clP+'"><div class="cp-card cp-vazio"><div style="font-size:17px;font-weight:700;color:var(--tx);margin-bottom:6px;">Nenhum fornecedor ainda</div>'+
       'Cadastre os fornecedores e o catálogo para começar a pedir.<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px;">'+
       '<button class="cp-b esc" onclick="goTo(\'s-compras-fornlist\')">Cadastrar fornecedores</button><button class="cp-b" onclick="compCarregarCatalogo()">Carregar catálogo padrão</button></div></div></div>';
     return;
@@ -20127,16 +20192,17 @@ function renderCompras(){
     '<div class="r">'+rot+'</div><div class="p" style="background:'+bg+';color:'+cor+';">'+n+'</div></button>';
   const fornOpc=comprasFornecedores.slice().sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome)))
     .filter(f=>linhas.some(x=>x.p.fornecedorId===f.firestoreId));
-  let h='<div class="cp"><div class="cp-top"><h1>Pedidos</h1>'+
+  let h='<div class="'+clP+'"><div class="cp-top"><h1>Pedidos</h1>'+
       '<button class="cp-b" onclick="goTo(\'s-req-admin\');renderReqAdmin()" title="O que o recebimento já conferiu">📥 Recebimentos</button>'+
       '<button class="cp-b" onclick="compAbrirConfig()" title="Fornecedores e catálogo">⚙ Cadastros</button>'+
+      _cpTemaBtn()+
       '<button class="cp-b am" onclick="compEscolherFornecedor()">＋ Novo pedido</button></div>'+
     '<div class="cp-faixa">'+
-      seg('comprador','Aguardando comprador',cont.comprador,'#f6c945','#3b2f00')+
-      seg('receber','Aguardando recebimento',cont.receber,'#2a2a27','#fff')+
+      seg('comprador','Aguardando comprador',cont.comprador,'var(--am)','var(--am-tx)')+
+      seg('receber','Aguardando recebimento',cont.receber,'var(--seg-a)','var(--seg-a-tx)')+
       seg('parcial','Recebido em parte',cont.parcial,'#fdba74','#7c2d12')+
-      seg('recebido','Recebidos',cont.recebido,'#fff','#166534')+
-      seg('cancelado','Cancelados',cont.cancelado,'#fff','#6b7280')+
+      seg('recebido','Recebidos',cont.recebido,'var(--seg-b)','var(--ok)')+
+      seg('cancelado','Cancelados',cont.cancelado,'var(--seg-b)','var(--mut)')+
     '</div>'+
     '<div class="cp-filtros">'+
       '<button class="cp-b'+(F.sit==='pend'?' esc':'')+'" onclick="cpFiltro(\'sit\',\'pend\')">Pendentes · '+pend+'</button>'+
@@ -20153,7 +20219,7 @@ function renderCompras(){
   const corpo=vis.slice(0,F.lim).map(({p,s})=>{
     const itens=p.itens||[], kg=Number(p.totalKg)||itens.reduce((t,i)=>t+(Number(i.kg)||0),0), rs=Number(p.totalRS)||itens.reduce((t,i)=>t+(Number(i.total)||0),0);
     const entrega=(s.k==='comprador'||s.k==='cancelado') ? '<span style="color:var(--mut);">—</span>'
-      : (s.prev ? (esc(s.prev)+(s.atraso?('<span class="cp-tag" style="background:#fee2e2;color:#b91c1c;">atrasado '+s.atraso+' d</span>'):(s.emDias!==null&&s.k!=='recebido'?('<span class="cp-tag" style="background:#f1efe9;color:#6f6e68;">'+(s.emDias===0?'hoje':(s.emDias===1?'amanhã':('em '+s.emDias+' d')))+'</span>'):'')))
+      : (s.prev ? (esc(s.prev)+(s.atraso?('<span class="cp-tag" style="background:#fee2e2;color:#b91c1c;">atrasado '+s.atraso+' d</span>'):(s.emDias!==null&&s.k!=='recebido'?('<span class="cp-tag" style="background:var(--chip);color:var(--sub);">'+(s.emDias===0?'hoje':(s.emDias===1?'amanhã':('em '+s.emDias+' d')))+'</span>'):'')))
                 : '<span style="color:var(--mut);">sem previsão</span>');
     return '<tr class="cp-lin'+(s.k==='comprador'?' dest':'')+(s.k==='cancelado'?' apag':'')+'" tabindex="0" onclick="compAbrirPedidoId(\''+escapeJsStr(p.firestoreId)+'\')" onkeydown="if(event.key===\'Enter\')compAbrirPedidoId(\''+escapeJsStr(p.firestoreId)+'\')">'+
       '<td class="cp-num">'+_cpNumero(p)+'</td>'+
@@ -20163,12 +20229,12 @@ function renderCompras(){
       '<td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">'+_fmtRS(rs)+'</td>'+
       '<td class="cp-oc">'+esc(p.criadoEm||'—')+(p.solicitadoPor?(' <span style="color:var(--mut);">· '+esc(p.solicitadoPor)+'</span>'):'')+'</td>'+
       '<td>'+entrega+'</td>'+
-      '<td><span class="cp-pil" style="background:'+s.bg+';color:'+s.cor+';">'+(s.k==='recebido'?'✓':'<i style="background:'+s.pt+';"></i>')+' '+s.rot+(s.comFalta?' · com falta':'')+'</span></td>'+
+      '<td>'+_cpPil(s)+'</td>'+
       '<td style="color:var(--mut);font-size:18px;text-align:right;">›</td></tr>';
   }).join('');
   h+='<div class="cp-card">'+(vis.length?
       '<div class="cp-tw"><table class="cp-tab"><thead><tr><th>Nº</th><th>Fornecedor</th><th class="cp-oc">Itens</th><th class="cp-oc" style="text-align:right;">Peso</th><th style="text-align:right;">Valor</th><th class="cp-oc">Pedido em</th><th>Entrega</th><th>Situação</th><th></th></tr></thead><tbody>'+corpo+'</tbody></table></div>'+
-      (vis.length>F.lim?'<div style="text-align:center;padding:14px;border-top:1px solid #f1efe9;"><button class="cp-b" onclick="cpMais()">Mostrar mais '+Math.min(60,vis.length-F.lim)+' de '+(vis.length-F.lim)+'</button></div>':'')
+      (vis.length>F.lim?'<div style="text-align:center;padding:14px;border-top:1px solid var(--bd2);"><button class="cp-b" onclick="cpMais()">Mostrar mais '+Math.min(60,vis.length-F.lim)+' de '+(vis.length-F.lim)+'</button></div>':'')
       :'<div class="cp-vazio">'+(linhas.length?(F.sit==='pend'&&!F.forn&&!F.entrega&&!q?'Nenhum pedido pendente. 👍<div style="margin-top:12px;"><button class="cp-b" onclick="cpFiltro(\'sit\',\'todos\')">Ver todos os pedidos</button></div>':'Nenhum pedido com esses filtros.'):'Nenhum pedido ainda. Comece em “＋ Novo pedido”.')+'</div>')+'</div>';
   h+='<div style="font-size:11.5px;color:var(--mut);margin-top:12px;line-height:1.6;">Pendentes primeiro: aguardando o comprador, depois o que está para chegar (atrasados em cima). O número é o da requisição interna — o mesmo que aparece para o recebimento.</div></div>';
   el.innerHTML=h;
@@ -20777,89 +20843,108 @@ window.compCopiarUltimo=compCopiarUltimo;
 // Arquiva o pedido atual (manda pro histórico) e abre um novo em branco da semana atual
 window.compNovoPedido=compNovoPedido;
 function compFornEditarAtual(){ if(_compFornSel) editarCompForn(_compFornSel); }
-function renderCompraForn(){
-  // quando o fornecedor tem mais de um pedido aberto, deixa claro em qual
-  // deles a pessoa está mexendo
-  const _avisoVarios = (typeof _compAvisoVarios!=='undefined' && _compAvisoVarios)
-    ? '<div class="card" style="margin-bottom:10px;border:2px solid #d97706;background:#fffbeb;">'+
-        '<div style="font-size:13px;font-weight:800;color:#b45309;">⚠️ '+_compAvisoVarios.n+' pedidos deste fornecedor em aberto</div>'+
-        '<div style="font-size:12px;color:#78350f;margin-top:3px;line-height:1.5;">Você está no '+_compAvisoVarios.pos+'º.'+
-          ' Os outros: '+_compAvisoVarios.outros.map(o=>(o.criadoEm||'sem data')+' · '+_fmtRS(o.totalRS||0)).join(' | ')+'</div>'+
-        '<button onclick="compVerOutrosPedidos()" style="width:100%;margin-top:7px;background:#fff;border:1px solid #d97706;color:#b45309;border-radius:8px;padding:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Ver os outros pedidos</button>'+
-      '</div>'
-    : '';
+/* ── TELA DO PEDIDO, no visual da tabela (claro ou escuro) ── */
+let _cpTema='claro'; try{ _cpTema=localStorage.getItem('cp_tema')==='escuro'?'escuro':'claro'; }catch(e){}
+function cpTema(){ _cpTema=(_cpTema==='escuro'?'claro':'escuro'); try{ localStorage.setItem('cp_tema',_cpTema); }catch(e){}
+  const t=document.querySelector('.screen.active')?.id; if(t==='s-compra-forn') renderCompraForn(); else renderCompras(); }
+window.cpTema=cpTema;
+const _cpTemaBtn=()=>'<button class="cp-b" onclick="cpTema()" title="Trocar entre modo claro e escuro">'+(_cpTema==='escuro'?'☀️ Claro':'🌙 Escuro')+'</button>';
+/* cores de cada situação, conforme o modo */
+function _cpCor(k){
+  const E={comprador:{bg:'rgba(246,201,69,.18)',cor:'#f6c945',pt:'#f6c945'}, receber:{bg:'rgba(255,255,255,.10)',cor:'#e7e5de',pt:'#e7e5de'}, parcial:{bg:'rgba(251,146,60,.18)',cor:'#fdba74',pt:'#fb923c'},
+           recebido:{bg:'rgba(74,222,128,.15)',cor:'#86efac',pt:'#4ade80'}, cancelado:{bg:'rgba(255,255,255,.06)',cor:'#8f8c82',pt:'#6f6c63'}};
+  return _cpTema==='escuro' ? E[k] : CP_SIT[k];
+}
+/* aplica o modo na tela (o cabeçalho do app acompanha) */
+function _cpLigar(el, telaId){
+  _cpCss();
+  el.style.padding='0'; el.style.background=_cpTema==='escuro'?'#151513':'#ecebe5';
+  const t=document.getElementById(telaId); if(t) t.classList.toggle('cp-esc', _cpTema==='escuro');
+}
+const _cpEsc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+const _cpPil=(s,extra)=>{ const c=_cpCor(s.k); return '<span class="cp-pil" style="background:'+c.bg+';color:'+c.cor+';">'+(s.k==='recebido'?'✓':'<i style="background:'+c.pt+';"></i>')+' '+s.rot+(s.comFalta?' · com falta':'')+(extra||'')+'</span>'; };
 
+function renderCompraForn(){
   const el=document.getElementById('comp-forn-content'); if(!el) return;
-  const f=_compForn(_compFornSel); if(!f){ el.innerHTML='<div class="empty">Fornecedor não encontrado.</div>'; return; }
-  const st=_compPedido.status||'solicitado'; const si=_compStatusInfo(st);
-  const bloqueado = _cpTravado(st);
-  const semLbl = (_compPedido.semana && typeof semanaLabel==='function')?semanaLabel(_compPedido.semana):'';
-  let html=_avisoVarios;
-  // cabeçalho do fornecedor
-  html+='<div class="card" style="margin-bottom:10px;border-left:3px solid var(--mc-azul);">'+
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'+
-    '<div><div style="font-size:16px;font-weight:800;">'+f.nome+(f.codigo?' <span style="font-size:12px;color:var(--text-secondary);font-weight:500;">('+f.codigo+')</span>':'')+'</div>'+
-    '<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">'+([f.diaEntrega?'📅 '+f.diaEntrega:'', f.vendedor?'👤 '+f.vendedor:'', f.contato?'📞 '+f.contato:'', f.tempoMedioEntrega?'⏱ '+f.tempoMedioEntrega:''].filter(Boolean).join(' · ')||'sem dados de contato')+'</div></div>'+
-    '<button class="btn btn-secondary" style="font-size:12px;padding:6px 10px;white-space:nowrap;" onclick="compFornEditarAtual()">✏️ Editar</button>'+
-    '</div></div>';
-  // número, situação e linha do tempo
-  const _sitP=_cpSit(_compPedido);
-  html+='<div style="margin-bottom:10px;padding:10px 12px;border-radius:12px;background:#fff;border:1px solid var(--border);">'+
-    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
-    '<span style="font-size:14px;font-weight:800;">Pedido '+_cpNumero(_compPedido)+'</span>'+
-    '<span style="font-size:12px;font-weight:700;border-radius:99px;padding:3px 10px;background:'+_sitP.bg+';color:'+_sitP.cor+';">'+(_sitP.k==='recebido'?'✓ ':'')+_sitP.rot+(_sitP.comFalta?' · com falta':'')+'</span>'+
-    (_sitP.atraso?'<span style="font-size:11px;font-weight:700;border-radius:99px;padding:3px 9px;background:#fee2e2;color:#b91c1c;">atrasado '+_sitP.atraso+' d</span>':'')+
-    (semLbl?'<span style="font-size:10px;color:var(--text-secondary);">· '+semLbl+'</span>':'')+
-    '</div>'+
-    '<div style="font-size:10px;color:var(--text-secondary);margin-top:3px;">'+
-    (_compPedido.solicitadoPor?'📝 Solicitado por '+_compPedido.solicitadoPor+(_compPedido.criadoEm?' em '+_compPedido.criadoEm:''):'')+
-    (_compPedido.confirmadoEm?' · ✅ Confirmado '+_compPedido.confirmadoEm+(_compPedido.confirmadoPor?' por '+_compPedido.confirmadoPor:''):'')+
-    (_compPedido.ocEm?' · 📄 OC gerada '+_compPedido.ocEm+(_compPedido.ocPor?' por '+_compPedido.ocPor:''):'')+
-    '</div>'+
-    ((_compPedido.previsaoEntrega||st==='confirmado'||st==='oc_gerada')?'<div style="font-size:12px;font-weight:700;color:var(--mc-verde);margin-top:5px;">🚚 Previsão de entrega: '+(_compPedido.previsaoEntrega||'— não definida')+(st!=='oc_gerada'?' <span onclick="compEditarPrevisao()" style="color:var(--mc-azul);font-weight:500;cursor:pointer;text-decoration:underline;font-size:11px;">editar</span>':'')+'</div>':'')+
-    (_sitP.k==='receber'?'<div style="font-size:11.5px;color:#1f2937;font-weight:600;margin-top:4px;">Compra confirmada. A requisição '+_cpNumero(_compPedido)+' está com o recebimento.</div>':'')+
-    (_compPedido.status==='cancelado'?'<div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Cancelado'+(_compPedido.canceladoEm?(' em '+_compPedido.canceladoEm):'')+(_compPedido.canceladoPor?(' por '+_compPedido.canceladoPor):'')+(_compPedido.motivoCancel?(' · '+_compPedido.motivoCancel):'')+'</div>':'')+
-    (_compPedido.status==='arquivado'?'<div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Arquivado pelo processo antigo'+(_compPedido.arquivadoData?(' em '+_compPedido.arquivadoData):'')+'.</div>':'')+
-    (st==='solicitado'&&_compPedido.firestoreId?'<div style="font-size:12px;color:var(--mc-verde);font-weight:700;margin-top:5px;background:rgba(22,163,74,.10);border-radius:8px;padding:6px 10px;">✅ Solicitação feita! Aguardando o comprador confirmar com o vendedor.</div>':'')+
-    (st==='solicitado'&&!_compPedido.firestoreId?'<div style="font-size:11px;color:#d97706;font-weight:600;margin-top:4px;">👉 Monte o pedido e clique em "Fazer solicitação".</div>':'')+
-    '</div>';
-  // o que o recebimento já lançou (quantidade por item, entregas e nota)
-  { const rq=_sitP.req;
-    if(rq && _cpTemRecebimento(rq)){
-      html+='<div class="card" style="margin-bottom:10px;padding:12px 14px;border-left:4px solid '+(rq.status==='recebido'&&!rq.comFalta?'#16a34a':'#ea580c')+';">'+
-        '<div style="font-size:13px;font-weight:800;margin-bottom:6px;">📥 Recebimento</div>'+
-        (rq.itens||[]).map(it=>{ const ped=parseFloat(it.qtd)||0, rec=parseFloat(it.rec)||0, ok=rec>=ped-0.0001;
-          return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0;border-top:1px solid var(--border);"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(it.nome||it.codigo)+'</span>'+
-            '<span style="white-space:nowrap;font-weight:700;color:'+(ok?'#166534':'#9a3412')+';">'+_fmtNum(rec)+' de '+_fmtNum(ped)+' '+(it.unidade||'')+(ok?' ✓':'')+'</span></div>'+
-            (it.obs&&it.obs.trim()?'<div style="font-size:11.5px;color:#9a3412;padding-bottom:3px;">⚠ '+it.obs+'</div>':''); }).join('')+
-        ((rq.recebimentos||[]).length?'<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;line-height:1.6;">'+rq.recebimentos.map((x,i)=>(i+1)+'ª entrega · '+(x.em||'')+(x.por?(' · '+x.por):'')+(x.nf?(' · NF '+x.nf):'')).join('<br>')+'</div>':'')+
+  _cpLigar(el,'s-compra-forn'); el.style.display='block';
+  const cl='cp'+(_cpTema==='escuro'?' escuro':'');
+  const f=_compForn(_compFornSel);
+  if(!f){ el.innerHTML='<div class="'+cl+'"><div class="cp-card cp-vazio">Fornecedor não encontrado.</div></div>'; return; }
+  const st=_compPedido.status||'solicitado', bloqueado=_cpTravado(st), s=_cpSit(_compPedido), salvo=!!_compPedido.firestoreId;
+  const semLbl=(_compPedido.semana && typeof semanaLabel==='function')?semanaLabel(_compPedido.semana):'';
+  const CORES=['#b45309','#0f766e','#1d4ed8','#7c3aed','#be185d','#15803d','#b91c1c','#475569'];
+  let hsh=0; for(const c of String(f.nome||'')) hsh=(hsh*31+c.charCodeAt(0))>>>0;
+  const inic=String(f.nome||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+
+  let h='<div class="'+cl+'"><div class="cp-top">'+
+      '<div style="flex:1;min-width:220px;"><button class="cp-volta" onclick="goTo(\'s-compras\')">‹ Todos os pedidos</button>'+
+        '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;"><h1 style="flex:0 1 auto;min-width:0;">'+(salvo?('Pedido '+_cpNumero(_compPedido)):'Novo pedido')+'</h1>'+
+          _cpPil(s)+(s.atraso?'<span class="cp-tag" style="background:#fee2e2;color:#b91c1c;margin:0;">atrasado '+s.atraso+' d</span>':'')+'</div></div>'+
+      _cpTemaBtn()+'</div>';
+
+  // quando o fornecedor tem outros pedidos abertos
+  if(typeof _compAvisoVarios!=='undefined' && _compAvisoVarios){
+    h+='<div class="cp-nota"><div><b>'+_compAvisoVarios.n+' pedidos deste fornecedor em aberto.</b> Você está no '+_compAvisoVarios.pos+'º. Os outros: '+
+      _compAvisoVarios.outros.map(o=>_cpNumero(o)+' · '+_cpEsc(o.criadoEm||'sem data')+' · '+_fmtRS(o.totalRS||0)).join(' | ')+'</div>'+
+      '<button class="cp-b" onclick="compVerOutrosPedidos()">Ver os outros</button></div>';
+  }
+
+  // linha do tempo: solicitado → compra confirmada → recebido
+  const passo=(feito,atual,tit,sub)=>'<div class="cp-passo'+(feito?' ok':'')+(atual?' at':'')+'"><span class="b">'+(feito?'✓':'')+'</span><div><div class="t">'+tit+'</div><div class="s">'+(sub||'&nbsp;')+'</div></div></div>';
+  const confirmado=['receber','parcial','recebido'].includes(s.k);
+  const linha= s.k==='cancelado'
+    ? '<div class="cp-sub2">'+(_compPedido.status==='arquivado'?('Arquivado pelo processo antigo'+(_compPedido.arquivadoData?(' em '+_cpEsc(_compPedido.arquivadoData)):'')+'.')
+        :('Cancelado'+(_compPedido.canceladoEm?(' em '+_cpEsc(_compPedido.canceladoEm)):'')+(_compPedido.canceladoPor?(' por '+_cpEsc(_compPedido.canceladoPor)):'')+(_compPedido.motivoCancel?(' · '+_cpEsc(_compPedido.motivoCancel)):'')))+'</div>'
+    : '<div class="cp-passos">'+
+        passo(salvo, !salvo, 'Solicitado', salvo?(_cpEsc(_compPedido.criadoEm||'')+(_compPedido.solicitadoPor?(' · '+_cpEsc(_compPedido.solicitadoPor)):'')):'monte o pedido e salve')+
+        passo(confirmado, salvo&&!confirmado, 'Compra confirmada', confirmado?(_cpEsc(_compPedido.confirmadoEm||'')+(_compPedido.confirmadoPor?(' · '+_cpEsc(_compPedido.confirmadoPor)):'')):(salvo?'aguardando o comprador':''))+
+        passo(s.k==='recebido', s.k==='receber'||s.k==='parcial', s.k==='parcial'?'Recebido em parte':'Recebido', s.k==='recebido'?(_cpEsc((s.req&&s.req.recebidoEm)||'')+(s.comFalta?' · com falta':'')):(confirmado?('requisição '+_cpNumero(_compPedido)+' com o recebimento'):''))+
       '</div>';
-    } }
-  // copiar último (quando pedido novo/vazio)
-  if(!bloqueado && !_compPedido.firestoreId){
-    html+='<button class="btn btn-secondary" style="width:100%;margin-bottom:10px;" onclick="compCopiarUltimo()">📋 Copiar quantidades do último pedido</button>';
+
+  // coluna da direita: fornecedor, entrega, recebimento e ações
+  const contato=[f.diaEntrega?('📅 Entrega: '+_cpEsc(f.diaEntrega)):'', f.vendedor?('👤 '+_cpEsc(f.vendedor)):'', f.contato?('📞 '+_cpEsc(f.contato)):'', f.tempoMedioEntrega?('⏱ '+_cpEsc(f.tempoMedioEntrega)):''].filter(Boolean);
+  let lado='<div class="cp-card cp-pad"><div style="display:flex;align-items:center;gap:12px;"><span class="cp-av" style="width:42px;height:42px;flex-basis:42px;font-size:14px;background:'+CORES[hsh%CORES.length]+';">'+_cpEsc(inic)+'</span>'+
+      '<div style="flex:1;min-width:0;"><div style="font-size:16px;font-weight:700;">'+_cpEsc(f.nome)+'</div><div class="cp-sub2">'+(f.codigo?('código '+_cpEsc(f.codigo)):'fornecedor')+(semLbl?(' · '+_cpEsc(semLbl)):'')+'</div></div>'+
+      '<button class="cp-b" style="height:34px;padding:0 12px;" onclick="compFornEditarAtual()">Editar</button></div>'+
+      '<div class="cp-sub2" style="margin-top:10px;line-height:1.8;">'+(contato.length?contato.join('<br>'):'Sem dados de contato cadastrados.')+'</div></div>';
+  if(_compPedido.previsaoEntrega || confirmado){
+    lado+='<div class="cp-card cp-pad"><div class="cp-rot">Previsão de entrega</div><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-top:6px;"><span style="font-size:20px;font-weight:700;">'+_cpEsc(_compPedido.previsaoEntrega||'não definida')+'</span>'+
+      (s.atraso?'<span class="cp-tag" style="background:#fee2e2;color:#b91c1c;margin:0;">atrasado '+s.atraso+' d</span>':(s.emDias!==null&&s.k!=='recebido'?'<span class="cp-tag" style="margin:0;background:var(--chip);color:var(--sub);">'+(s.emDias===0?'hoje':(s.emDias===1?'amanhã':('em '+s.emDias+' d')))+'</span>':''))+
+      (s.k!=='recebido'&&s.k!=='cancelado'?'<button class="cp-link" onclick="compEditarPrevisao()">alterar</button>':'')+'</div></div>';
   }
-  // busca + novo item
+  const rq=s.req;
+  if(rq && _cpTemRecebimento(rq)){
+    lado+='<div class="cp-card cp-pad"><div class="cp-rot">Recebimento</div>'+
+      (rq.itens||[]).map(it=>{ const ped=parseFloat(it.qtd)||0, rec=parseFloat(it.rec)||0, ok=rec>=ped-0.0001;
+        return '<div class="cp-rl"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+_cpEsc(it.nome||it.codigo)+'</span><b style="white-space:nowrap;color:'+(ok?'var(--ok)':'var(--al)')+';">'+_fmtNum(rec)+' de '+_fmtNum(ped)+' '+_cpEsc(it.unidade||'')+(ok?' ✓':'')+'</b></div>'+
+          (it.obs&&it.obs.trim()?'<div style="font-size:11.5px;color:var(--al);padding:0 0 6px;">⚠ '+_cpEsc(it.obs)+'</div>':''); }).join('')+
+      ((rq.recebimentos||[]).length?'<div class="cp-sub2" style="margin-top:8px;line-height:1.7;">'+rq.recebimentos.map((x,i)=>(i+1)+'ª entrega · '+_cpEsc(x.em||'')+(x.por?(' · '+_cpEsc(x.por)):'')+(x.nf?(' · NF '+_cpEsc(x.nf)):'')).join('<br>')+'</div>':'')+'</div>';
+  }
+  lado+='<div class="cp-card cp-pad cp-acoes" id="comp-footer"></div>';
+
+  // coluna principal: os itens
+  let meio='<div class="cp-card cp-pad" style="padding-bottom:6px;">'+linha+'</div>';
   if(!bloqueado){
-    html+='<input type="text" value="'+(_compBusca||'').replace(/"/g,'&quot;')+'" oninput="compBuscaSet(this.value)" placeholder="🔍 Buscar produto pelo nome ou código..." style="width:100%;font-size:15px;padding:12px 14px;border-radius:10px;border:1px solid var(--border-md,#d1d5db);box-sizing:border-box;margin-bottom:8px;">';
-    html+='<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button class="btn btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="compNovoItem()">+ Novo item</button></div>';
-  }
-  html+='<div id="comp-lista"></div>';
-  // rodapé fixo (subtotais + ações)
-  html+='<div id="comp-footer" style="position:sticky;bottom:0;background:var(--bg-page);padding-top:8px;margin-top:8px;border-top:1px solid var(--border);"></div>';
-  el.innerHTML=html;
+    meio+='<div class="cp-filtros" style="margin:14px 0 10px;">'+
+      '<input class="cp-busca" style="max-width:none;" type="search" value="'+_cpEsc(_compBusca||'')+'" oninput="compBuscaSet(this.value)" placeholder="Buscar produto pelo nome ou código">'+
+      (!salvo?'<button class="cp-b" onclick="compCopiarUltimo()">Copiar o último pedido</button>':'')+
+      '<button class="cp-b" onclick="compNovoItem()">＋ Novo item</button></div>';
+  } else meio+='<div style="height:14px;"></div>';
+  meio+='<div class="cp-card" id="comp-lista"></div>';
+
+  h+='<div class="cp-ped"><div class="cp-meio">'+meio+'</div><aside class="cp-lado">'+lado+'</aside></div></div>';
+  el.innerHTML=h;
   compRenderLista();
   compRenderFooter();
 }
-function compBuscaSet(v){ _compBusca=v; compRenderLista(); }
-window.compBuscaSet=compBuscaSet;
+
 function compRenderLista(){
   const cont=document.getElementById('comp-lista'); if(!cont) return;
   const st=_compPedido.status||'solicitado'; const bloqueado=_cpTravado(st);
   let cat=_compCatalogoDo(_compFornSel);
-  if(bloqueado){ cat=cat.filter(m=>(parseFloat(_compQtd[m.firestoreId])||0)>0); } // requisição mostra só o pedido
+  if(bloqueado){ cat=cat.filter(m=>(parseFloat(_compQtd[m.firestoreId])||0)>0); } // pedido fechado mostra só o que foi pedido
   if(_compBusca){ const q=_normNome(_compBusca); cat=cat.filter(m=>_normNome(m.nome+' '+m.codigo).includes(q)); }
-  if(!cat.length){ cont.innerHTML='<div class="empty" style="padding:18px;">'+(bloqueado?'Sem itens neste pedido.':'Nenhum item. Carregue o catálogo ou verifique o fornecedor.')+'</div>'; return; }
+  if(!cat.length){ cont.innerHTML='<div class="cp-vazio">'+(bloqueado?'Sem itens neste pedido.':(_compBusca?'Nenhum item com esse nome.':'Nenhum item. Carregue o catálogo ou confira o fornecedor.'))+'</div>'; return; }
   // itens com quantidade preenchida sobem para o topo (mantendo a ordem alfabética dentro de cada grupo)
   if(!bloqueado){
     cat=cat.slice().sort((a,b)=>{
@@ -20869,41 +20954,65 @@ function compRenderLista(){
       return String(a.nome).localeCompare(String(b.nome),'pt-BR');
     });
   }
-  cont.innerHTML=cat.map((m,i)=>{
+  const cab='<div class="cp-it cab"><span>Item</span><span class="d">Quantidade</span><span class="d">Peso</span><span class="d">Preço por kg</span><span class="d">Total</span><span></span></div>';
+  cont.innerHTML=cab+cat.map((m,i)=>{
     const k=m.firestoreId; const cod=m.codigo; const qtd=parseFloat(_compQtd[k])||0; const preco=parseFloat(_compPreco[k])||0;
     const kg=qtd*(parseFloat(m.kgPorUnidade)||0); const total=kg*preco;
     const temObs=(_compObs[k]||'').trim();
-    const ativoRow=qtd>0;
-    return '<div class="card" style="margin-bottom:6px;padding:9px 11px;'+(ativoRow?'border-left:3px solid var(--mc-verde);background:rgba(76,175,80,.08);':'')+'">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'+
-        '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;">'+m.nome+'</div>'+
-        '<div style="font-size:10px;color:var(--text-secondary);">cód '+cod+' · 1 '+(m.unidade||'un')+' = '+_fmtKg(m.kgPorUnidade)+' kg'+(m.infoUM?' · '+m.infoUM:'')+'</div></div>'+
-        '<button onclick="compToggleHist(\''+escapeJsStr(cod)+'\')" title="Histórico de compra" style="background:none;border:none;font-size:16px;cursor:pointer;">📊</button>'+
-        (bloqueado?'':'<button onclick="compEditarItem(\''+escapeJsStr(cod)+'\')" title="Editar item" style="background:none;border:none;font-size:15px;cursor:pointer;">✏️</button>')+
-      '</div>'+
+    return '<div class="cp-it'+(qtd>0&&!bloqueado?' on':'')+'">'+
+      '<div style="min-width:0;"><div class="n">'+_cpEsc(m.nome)+'</div><div class="i">cód '+_cpEsc(cod)+' · 1 '+_cpEsc(m.unidade||'un')+' = '+_fmtKg(m.kgPorUnidade)+' kg'+(m.infoUM?(' · '+_cpEsc(m.infoUM)):'')+'</div>'+
+        (bloqueado?(temObs?'<div class="i" style="color:var(--al);">📝 '+_cpEsc(temObs)+'</div>':'')
+                  :'<button class="cp-link" style="margin:2px 0 0;" onclick="compEditarObs(\''+escapeJsStr(k)+'\')">'+(temObs?('📝 '+_cpEsc(temObs)):'+ observação')+'</button>')+'</div>'+
       (bloqueado?
-        '<div style="display:flex;gap:10px;margin-top:6px;font-size:13px;flex-wrap:wrap;"><span>Qtd: <strong>'+qtd+' '+(m.unidade||'')+'</strong></span><span>Kg: <strong>'+_fmtKg(kg)+'</strong></span><span>Preço: '+_fmtRS(preco)+'/kg</span><span style="margin-left:auto;font-weight:700;color:var(--mc-verde);">'+_fmtRS(total)+'</span></div>'+(temObs?'<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">📝 '+temObs+'</div>':'')
+        '<div class="d" data-r="Quantidade"><b>'+_fmtNum(qtd)+'</b> '+_cpEsc(m.unidade||'')+'</div>'+
+        '<div class="d" data-r="Peso">'+_fmtKg(kg)+' kg</div>'+
+        '<div class="d" data-r="Preço por kg">'+_fmtRS(preco)+'</div>'+
+        '<div class="d" data-r="Total"><b>'+_fmtRS(total)+'</b></div>'
         :
-        '<div style="display:flex;gap:6px;align-items:center;margin-top:7px;flex-wrap:wrap;">'+
-          '<div style="flex:1;min-width:80px;"><div style="font-size:9px;color:var(--text-muted);">Qtd ('+(m.unidade||'un')+')</div><input type="number" min="0" step="any" value="'+(qtd||'')+'" oninput="compSetQtd(\''+escapeJsStr(k)+'\',this.value)" onchange="compReordenar()" placeholder="0" style="width:100%;font-size:14px;padding:7px;border-radius:7px;border:1px solid var(--border-md,#d1d5db);box-sizing:border-box;"></div>'+
-          '<div style="flex:0 0 auto;text-align:center;min-width:66px;"><div style="font-size:9px;color:var(--text-muted);">Kg</div><div id="ck-'+i+'" style="font-size:14px;font-weight:700;padding:7px 0;">'+_fmtKg(kg)+'</div></div>'+
-          '<div style="flex:1;min-width:80px;"><div style="font-size:9px;color:var(--text-muted);">Preço/kg</div><input type="number" min="0" step="0.01" value="'+(preco||'')+'" oninput="compSetPreco(\''+escapeJsStr(k)+'\',this.value)" placeholder="0,00" style="width:100%;font-size:14px;padding:7px;border-radius:7px;border:1px solid var(--border-md,#d1d5db);box-sizing:border-box;"></div>'+
-          '<div style="flex:0 0 auto;text-align:right;min-width:78px;"><div style="font-size:9px;color:var(--text-muted);">Total</div><div id="ct-'+i+'" style="font-size:14px;font-weight:700;color:var(--mc-verde);padding:7px 0;">'+_fmtRS(total)+'</div></div>'+
-        '</div>'+
-        '<button onclick="compEditarObs(\''+escapeJsStr(k)+'\')" style="background:none;border:none;color:var(--mc-azul);font-size:11px;cursor:pointer;padding:2px 0;margin-top:2px;">'+(temObs?'📝 '+temObs:'+ observação')+'</button>'
+        '<div class="d" data-r="Quantidade ('+_cpEsc(m.unidade||'un')+')"><input class="cp-in" type="number" inputmode="decimal" min="0" step="any" value="'+(qtd||'')+'" oninput="compSetQtd(\''+escapeJsStr(k)+'\',this.value)" onchange="compReordenar()" placeholder="0" aria-label="Quantidade de '+_cpEsc(m.nome)+'"></div>'+
+        '<div class="d" data-r="Peso"><span id="ck-'+i+'">'+_fmtKg(kg)+'</span> kg</div>'+
+        '<div class="d" data-r="Preço por kg"><input class="cp-in" type="number" inputmode="decimal" min="0" step="0.01" value="'+(preco||'')+'" oninput="compSetPreco(\''+escapeJsStr(k)+'\',this.value)" placeholder="0,00" aria-label="Preço por kg de '+_cpEsc(m.nome)+'"></div>'+
+        '<div class="d" data-r="Total"><b id="ct-'+i+'">'+_fmtRS(total)+'</b></div>'
       )+
+      '<div class="a"><button class="cp-ic" onclick="compToggleHist(\''+escapeJsStr(cod)+'\')" title="Histórico de compra deste item" aria-label="Histórico de compra">📊</button>'+
+        (bloqueado?'':'<button class="cp-ic" onclick="compEditarItem(\''+escapeJsStr(cod)+'\')" title="Editar o cadastro do item" aria-label="Editar item">✏️</button>')+'</div>'+
       (_compHistItem===cod? _compHistPanel(cod) : '')+
     '</div>';
   }).join('');
 }
 function _compHistPanel(cod){
   const h=_comprasHistItem(cod);
-  if(!h.length) return '<div style="margin-top:6px;background:var(--bg-page);border-radius:8px;padding:8px;font-size:11px;color:var(--text-secondary);">Sem histórico de compra deste item ainda.</div>';
-  return '<div style="margin-top:6px;background:var(--bg-page);border-radius:8px;padding:8px;">'+
-    '<div style="font-size:11px;font-weight:700;color:var(--mc-azul);margin-bottom:4px;">📊 Histórico de compra</div>'+
-    h.map(x=>'<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px dashed var(--border);"><span>'+(x.data||'—')+' · '+x.fornecedor+'</span><span>'+x.qtd+' '+(x.unidade||'')+' · '+_fmtRS(x.precoKg)+'/kg · '+_fmtRS(x.total)+'</span></div>').join('')+
-    '</div>';
+  if(!h.length) return '<div class="cp-hist">Sem histórico de compra deste item ainda.</div>';
+  return '<div class="cp-hist"><div style="font-weight:700;margin-bottom:4px;color:var(--tx);">Histórico de compra</div>'+
+    h.map(x=>'<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px solid var(--bd);"><span>'+_cpEsc(x.data||'—')+' · '+_cpEsc(x.fornecedor)+'</span><span style="white-space:nowrap;">'+x.qtd+' '+_cpEsc(x.unidade||'')+' · '+_fmtRS(x.precoKg)+'/kg · '+_fmtRS(x.total)+'</span></div>').join('')+'</div>';
 }
+
+function compRenderFooter(){
+  const el=document.getElementById('comp-footer'); if(!el) return;
+  const t=_compTotais(), sit=_cpSit(_compPedido), salvo=!!_compPedido.firestoreId;
+  let b='';
+  if(sit.k==='comprador'){
+    b='<button class="cp-b am larga" onclick="compSalvarPedido()">'+(salvo?'Salvar alterações':'Fazer solicitação')+'</button>'+
+      '<button class="cp-b esc larga" onclick="compConfirmarComprador()">✓ Confirmar compra (comprador)</button>'+
+      '<button class="cp-b larga" onclick="compExportar()">Enviar ao vendedor</button>'+
+      (salvo?'<button class="cp-b larga" onclick="compCancelarPedido()">Cancelar este pedido</button>':'');
+  } else if(sit.k==='receber'){
+    b='<button class="cp-b esc larga" onclick="compExportar()">Enviar ao fornecedor</button>'+
+      '<button class="cp-b larga" onclick="compReabrir()">Alterar o pedido</button>'+
+      '<button class="cp-b larga" onclick="compCancelarPedido()">Cancelar este pedido</button>';
+  } else {
+    b='<button class="cp-b larga" onclick="compExportar()">Exportar</button>'+
+      '<div class="cp-sub2" style="text-align:center;">'+(sit.k==='parcial'?'Recebimento em andamento: o pedido não pode mais ser alterado.':(sit.k==='recebido'?'Pedido encerrado.':''))+'</div>';
+  }
+  b+='<button class="cp-b larga" onclick="compNovoPedido()">＋ Outro pedido para este fornecedor</button>';
+  if(window.adminMode===true && salvo) b+='<button class="cp-link" style="color:var(--pe);margin:2px auto 0;" onclick="compExcluirPedido(\''+escapeJsStr(_compPedido.firestoreId)+'\')">Excluir este pedido</button>';
+  el.innerHTML='<div class="cp-rot">Total do pedido</div>'+
+    '<div style="font-size:30px;font-weight:700;letter-spacing:-.02em;margin-top:4px;font-variant-numeric:tabular-nums;">'+_fmtRS(t.rs)+'</div>'+
+    '<div class="cp-sub2" style="margin-bottom:14px;">'+t.n+' '+(t.n===1?'item':'itens')+' · '+_fmtKg(t.kg)+' kg</div>'+
+    '<div style="display:flex;flex-direction:column;gap:8px;">'+b+'</div>';
+}
+function compBuscaSet(v){ _compBusca=v; compRenderLista(); }
+window.compBuscaSet=compBuscaSet;
 function compToggleHist(cod){ _compHistItem=(_compHistItem===cod)?null:cod; compRenderLista(); }
 window.compToggleHist=compToggleHist;
 function compSetQtd(k,val){ _compQtd[k]=val; _compAtualizarRow(k); compRenderFooter(); }
@@ -20940,35 +21049,6 @@ function _compTotais(){
   let kg=0, rs=0, n=0;
   _compCatalogoDo(_compFornSel).forEach(m=>{ const k=m.firestoreId; const q=parseFloat(_compQtd[k])||0; if(q<=0)return; const kk=q*(parseFloat(m.kgPorUnidade)||0); kg+=kk; rs+=kk*(parseFloat(_compPreco[k])||0); n++; });
   return {kg,rs,n};
-}
-function compRenderFooter(){
-  const el=document.getElementById('comp-footer'); if(!el) return;
-  const t=_compTotais(), sit=_cpSit(_compPedido), salvo=!!_compPedido.firestoreId;
-  const sec='font-size:12.5px;';
-  let linha1='', linha2='';
-  if(sit.k==='comprador'){
-    linha1='<button class="btn btn-primary" style="flex:1;" onclick="compSalvarPedido()">📝 '+(salvo?'Salvar alterações':'Fazer solicitação')+'</button>'+
-           '<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Enviar ao vendedor</button>';
-    linha2='<button class="btn btn-secondary" style="width:100%;margin-top:6px;border-color:#2563eb;color:#2563eb;" onclick="compConfirmarComprador()">✅ Confirmar compra (comprador)</button>'+
-           (salvo?'<button class="btn btn-secondary" style="width:100%;margin-top:6px;'+sec+'" onclick="compCancelarPedido()">Cancelar este pedido</button>':'');
-  } else if(sit.k==='receber'){
-    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Enviar ao fornecedor</button>'+
-           '<button class="btn btn-secondary" style="flex:1;" onclick="compReabrir()">✏️ Alterar o pedido</button>';
-    linha2='<button class="btn btn-secondary" style="width:100%;margin-top:6px;'+sec+'" onclick="compCancelarPedido()">Cancelar este pedido</button>';
-  } else if(sit.k==='parcial' || sit.k==='recebido'){
-    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Exportar</button>';
-    linha2='<div style="text-align:center;font-size:12px;color:var(--text-secondary);margin-top:6px;">'+(sit.k==='parcial'?'Recebimento em andamento: o pedido não pode mais ser alterado.':'Pedido encerrado.')+'</div>';
-  } else {
-    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Exportar</button>';
-  }
-  linha2+='<button class="btn btn-secondary" style="width:100%;margin-top:6px;'+sec+'" onclick="compNovoPedido()">＋ Outro pedido para este fornecedor</button>';
-  // o admin pode apagar um pedido lançado errado, de dentro dele mesmo
-  const podeApagar = (window.adminMode===true) && salvo;
-  const btnApagar = podeApagar
-    ? '<button onclick="compExcluirPedido(\''+escapeJsStr(_compPedido.firestoreId)+'\')" style="width:100%;margin-top:6px;background:none;border:none;color:#dc2626;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;padding:6px;">🗑 Excluir este pedido</button>'
-    : '';
-  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px;"><span style="color:var(--text-secondary);">'+t.n+' item(ns) · '+_fmtKg(t.kg)+' kg</span><strong style="font-size:16px;color:var(--mc-verde);">'+_fmtRS(t.rs)+'</strong></div>'+
-    '<div style="display:flex;gap:8px;">'+linha1+'</div>'+linha2+btnApagar+'<div style="height:6px;"></div>';
 }
 function _compMontarItens(){
   const itens=[];
