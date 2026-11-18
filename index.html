@@ -3396,6 +3396,7 @@
         <div class="mc-page-sub">Selecione o dia</div>
       </div>
       <div class="mc-header-actions">
+        <button class="mc-act-btn-secondary" id="btn-exp-quebras" style="display:none;" onclick="expQuebrasAbrir()" title="Produtos finalizados com falta: data, produto e quantidade (admin)">📉 Quebras</button>
         <button class="mc-act-btn-secondary" id="btn-exp-dia" style="display:none;" onclick="expDiaAbrir()" title="Tudo o que foi liberado num dia (admin)">📋 Liberado no dia</button>
         <button class="mc-act-btn-secondary" onclick="goTo('s-exp-manual')" title="Lançar produto já pego antes da embalagem">📥 Já peguei</button>
       </div>
@@ -5647,7 +5648,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='18/11/2026 · 20';
+  var VERSAO='18/11/2026 · 21';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -6770,7 +6771,8 @@ function goTo(id, semHistorico){
      dizia "5 pendentes" num dia já 100% embalado. */
   if(id==='s-emb-produtos-pendentes') renderSelDataEmb();
 
-  if(id==='s-exp-sel-data'){ renderSelDataExp(); const b=document.getElementById('btn-exp-dia'); if(b) b.style.display=window.adminMode===true?'':'none'; }
+  if(id==='s-exp-sel-data'){ renderSelDataExp(); const b=document.getElementById('btn-exp-dia'); if(b) b.style.display=window.adminMode===true?'':'none';
+    const bq=document.getElementById('btn-exp-quebras'); if(bq) bq.style.display=window.adminMode===true?'':'none'; }
   if(id==='s-exp-dia' && typeof renderExpDia==='function') renderExpDia();
   if(id==='s-meus-reg') renderMeusReg();
   if(id==='s-conf-massas') renderConfMassas();
@@ -9279,16 +9281,20 @@ function _exdLancamentos(){
     const k=_erUnPorPct(r);
     ps.forEach(p=>{ const q=Number(p.qtd)||0; if(!q) return;
       const dia=_erDataDe(p.hora); if(!dia) return;
-      out.push({dia, hora:String(p.hora||'').slice(11,16), un:q, pct:q/k, r, antecipada:!!p.antecipada, lote:!!p.emLote}); });
+      out.push({dia, hora:String(p.hora||'').slice(11,16), un:q, pct:q/k, r, antecipada:!!p.antecipada, lote:!!p.emLote, sem:!!p.semContar,
+        tipo:p.semContar?'sem':(p.emLote?'lote':'normal')}); });
   });
   return out;
 }
 
 /* Filtros da tela: lote (todos / sem lote / só lote) e faixa de horário.
    Valem para os números, a tabela e o relatório de código e quantidade. */
-let _exdLote='todos', _exdDe='', _exdAte='';
-function exdLote(v){ _exdLote=v; renderExpDia(); }
-window.exdLote=exdLote;
+/* Tipos de liberação que entram na conta — dá para marcar mais de um:
+   normal = conferido produto a produto · lote = "liberar em lote" ·
+   sem = "liberar sem contabilizar". Este último começa desmarcado. */
+let _exdTipos={normal:true, lote:true, sem:false}, _exdDe='', _exdAte='';
+function exdTipo(v){ _exdTipos={..._exdTipos, [v]:!_exdTipos[v]}; renderExpDia(); }
+window.exdTipo=exdTipo;
 function exdHorario(){
   const de=(document.getElementById('exd-de')||{}).value||'', ate=(document.getElementById('exd-ate')||{}).value||'';
   const err=document.getElementById('exd-erro');
@@ -9300,11 +9306,12 @@ function exdLimparHorario(){ _exdDe=''; _exdAte=''; renderExpDia(); }
 window.exdLimparHorario=exdLimparHorario;
 function _exdFiltrados(dia){
   return _exdLancamentos().filter(x=>x.dia===dia &&
-    (_exdLote==='todos' || (_exdLote==='sem'?!x.lote:x.lote)) &&
+    _exdTipos[x.tipo] &&
     (!_exdDe || (x.hora && x.hora>=_exdDe)) && (!_exdAte || (x.hora && x.hora<=_exdAte)));
 }
 function _exdFiltroTxt(){
-  return [_exdLote==='sem'?'sem lote':(_exdLote==='so'?'só lote':''),
+  const nomesT={normal:'um a um', lote:'em lote', sem:'sem contabilizar'}, ligados=Object.keys(nomesT).filter(k=>_exdTipos[k]);
+  return [(ligados.length===2 && _exdTipos.normal && _exdTipos.lote)?'':(ligados.length?ligados.map(k=>nomesT[k]).join(' + '):'nenhum tipo marcado'),
     (_exdDe||_exdAte)?((_exdDe||'00:00')+' às '+(_exdAte||'23:59')):''].filter(Boolean).join(' · ');
 }
 /* Relatório: uma linha por código, com a soma do que está filtrado */
@@ -9363,7 +9370,7 @@ function renderExpDia(){
   doDia.forEach(x=>{
     const ch=(x.r.produto||'?')+'|'+(x.r.data||'');
     const o=porProd[ch]||(porProd[ch]={produto:x.r.produto||'?', prod:x.r.data||'', pct:0, un:0, n:0, horas:[], ant:0, lote:0, g:_erGrupo(x.r)});
-    o.pct+=x.pct; o.un+=x.un; o.n++; if(x.hora) o.horas.push(x.hora); if(x.antecipada) o.ant+=x.pct; if(x.lote) o.lote+=x.pct;
+    o.pct+=x.pct; o.un+=x.un; o.n++; if(x.hora) o.horas.push(x.hora); if(x.antecipada) o.ant+=x.pct; if(x.lote) o.lote+=x.pct; if(x.sem) o.sem=(o.sem||0)+x.pct;
   });
   const linhas=Object.values(porProd).sort((a,b)=>_erNum(a.prod)-_erNum(b.prod)||String(a.produto).localeCompare(String(b.produto),'pt-BR'));
   const tot=linhas.reduce((t,x)=>t+x.pct,0);
@@ -9387,7 +9394,10 @@ function renderExpDia(){
       '<button class="pt-btn" onclick="exdMover(1)">Próximo dia ›</button>'+
       '<button class="pt-btn pri" onclick="exdDia(fmtData(new Date()))">Hoje</button></div></div>';
   h+='<div class="pt-datas" style="margin-top:-4px;">'+
-    '<div class="pt-seg">'+[['todos','Todos'],['sem','Sem lote'],['so','Só lote']].map(([v,t])=>'<button class="'+(_exdLote===v?'on':'')+'" onclick="exdLote(\''+v+'\')">'+t+'</button>').join('')+'</div>'+
+    '<div style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center;" role="group" aria-label="Tipos de liberação">'+
+      [['normal','Um a um'],['lote','Em lote'],['sem','Sem contabilizar']].map(([v,t])=>{ const on=_exdTipos[v];
+        return '<button onclick="exdTipo(\''+v+'\')" role="checkbox" aria-checked="'+on+'" style="display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:10px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid '+(on?'#1e40af':'#cbd5e1')+';background:'+(on?'#eff6ff':'#fff')+';color:'+(on?'#1e40af':'#64748b')+';">'+
+          '<span style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(on?'#1e40af':'#94a3b8')+';background:'+(on?'#1e40af':'#fff')+';color:#fff;font-size:11px;line-height:12px;text-align:center;">'+(on?'✓':'')+'</span>'+t+'</button>'; }).join('')+'</div>'+
     '<label style="margin-left:8px;">Das</label><input class="pt-ctl" type="time" id="exd-de" value="'+_exdDe+'" style="width:120px;" onkeydown="if(event.key===\'Enter\')exdHorario()">'+
     '<label>às</label><input class="pt-ctl" type="time" id="exd-ate" value="'+_exdAte+'" style="width:120px;" onkeydown="if(event.key===\'Enter\')exdHorario()">'+
     '<button class="pt-btn pri" style="height:40px;padding:0 16px;" onclick="exdHorario()">Aplicar</button>'+
@@ -9410,7 +9420,7 @@ function renderExpDia(){
   }
   const tab=linhas.length
     ? '<div class="pt-tw"><table class="pt-tab" style="width:auto;min-width:min(100%,760px);"><thead><tr><th>Produto</th><th>Produção</th><th>Grupo</th><th class="c">Liberado</th><th>Lançamentos</th></tr></thead><tbody>'+
-        linhas.map(x=>'<tr><td style="padding-right:30px;"><b style="font-weight:600;">'+x.produto+'</b>'+(x.ant>0.5?' '+_ptPill('já peguei','amber',true):'')+(x.lote>0.5?' '+_ptPill('em lote','gray',true):'')+'</td>'+
+        linhas.map(x=>'<tr><td style="padding-right:30px;"><b style="font-weight:600;">'+x.produto+'</b>'+(x.ant>0.5?' '+_ptPill('já peguei','amber',true):'')+(x.lote>0.5?' '+_ptPill('em lote','gray',true):'')+(x.sem>0.5?' '+_ptPill('sem contabilizar','gray',true):'')+'</td>'+
           '<td style="padding-right:24px;color:'+(x.prod!==dia?'#b45309':'var(--pt-sub)')+';">'+(x.prod?x.prod.slice(0,5):'—')+(x.prod&&x.prod!==dia?' · outro dia':'')+'</td>'+
           '<td style="padding-right:24px;">'+(x.g.tipo==='salgado'?_ptPill(x.g.classe,'blue',true):(x.g.tipo==='pao'?_ptPill(x.g.classe,'amber',true):_ptPill('Outro','gray',true)))+'</td>'+
           '<td class="c" style="font-weight:800;">'+fmt(x.pct)+'</td>'+
@@ -10503,7 +10513,7 @@ function statusExpedicao(data){
   if(!regs.length)return'vazio';
   const completos=regs.filter(r=>{
     const exp=r.expedicao||{parciais:[],totalLiberado:0};
-    return exp.totalLiberado>=(r.embalagem.qtdEmbalada||r.qtd);
+    return expOk(r);
   }).length;
   return completos===regs.length?'completo':'pendente';
 }
@@ -10520,7 +10530,7 @@ function renderSelDataExp(){
     if(regs.length===0) return {d, data, idx, status:'vazio', total:0, pendentes:0, paesPend:0, salgPend:0};
     const pendList=regs.filter(r=>{
       const exp=r.expedicao||{totalLiberado:0};
-      return exp.totalLiberado<(r.embalagem.qtdEmbalada||r.qtd);
+      return !expOk(r);
     });
     const pendentes=pendList.length;
     const paesPend=pendList.filter(r=>r.origem==='quadra').length;
@@ -10593,7 +10603,7 @@ function renderExpViewSelData(){
     const total=x.regs.length;
     const completos=x.regs.filter(r=>{
       const e=r.expedicao||{totalLiberado:0};
-      return e.totalLiberado>=(r.embalagem.qtdEmbalada||r.qtd);
+      return expOk(r);
     }).length;
     const status=completos===total?'✅ Tudo liberado':completos>0?'🟡 Parcial: '+completos+'/'+total:'⏳ Aguardando';
     const cor=completos===total?'#4caf50':completos>0?'var(--mc-laranja)':'var(--text-secondary)';
@@ -10621,7 +10631,7 @@ function renderExpView(){
     const exp=r.expedicao||{parciais:[],totalLiberado:0};
     const qtdEmb=r.embalagem.qtdEmbalada||r.qtd;
     const totalLib=exp.totalLiberado||0;
-    const concluido=totalLib>=qtdEmb;
+    const concluido=expOk(r);
     const cor=concluido?'#4caf50':totalLib>0?'var(--mc-laranja)':'var(--text-secondary)';
     return '<div style="background:var(--bg-secondary);border:0.5px solid var(--border);border-left:3px solid '+cor+';border-radius:12px;padding:14px;margin-bottom:8px;">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'+
@@ -10654,7 +10664,7 @@ function renderExpedicao(){
   const total=regs.length;
   const completos=regs.filter(r=>{
     const exp=r.expedicao||{totalLiberado:0};
-    return exp.totalLiberado>=(r.embalagem.qtdEmbalada||r.qtd);
+    return expOk(r);
   }).length;
   const pct=Math.round(completos/total*100);
   const barColor=pct===100?'#4caf50':'var(--mc-laranja)';
@@ -10663,8 +10673,9 @@ function renderExpedicao(){
       const exp=r.expedicao||{parciais:[],totalLiberado:0};
       const qtdEmb=r.embalagem.qtdEmbalada||r.qtd;
       const totalLib=exp.totalLiberado||0;
-      const restante=qtdEmb-totalLib;
-      const concluido=totalLib>=qtdEmb;
+      const quebra=expQuebra(r);
+      const restante=expResto(r);
+      const concluido=expOk(r);
       const alterado=(typeof embFoiAlterado==='function')&&embFoiAlterado(r);
       return `<div class="emb-item ${concluido?'done':totalLib>0?'done-parcial':''}" ${alterado?'style="border:2px solid #2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12);"':''}>
         <div class="emb-item-header">
@@ -10674,7 +10685,11 @@ function renderExpedicao(){
             <div class="emb-item-qtd">
               Embalado: <strong>${qtdEmb} pct</strong> · Liberado: <strong style="color:${concluido?'#4caf50':'var(--mc-laranja)'};">${totalLib} pct</strong>
               ${!concluido?` · Restante: <strong>${restante}</strong>`:''}
+              ${quebra?` <span style="font-size:11px;font-weight:800;color:#b91c1c;background:#fee2e2;border-radius:99px;padding:1px 8px;white-space:nowrap;">finalizado com quebra de ${quebra}</span>`:''}
             </div>
+            ${quebra?`<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11.5px;color:var(--text-secondary);">
+              <span>${(exp.quebra.em||'')}${exp.quebra.por?' · '+exp.quebra.por:''}</span>
+              <button onclick="expDesfazerFalta('${r.firestoreId}')" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:4px 10px;font-family:inherit;font-size:12px;font-weight:700;color:#475569;cursor:pointer;">↩ Desfazer a finalização</button></div>`:''}
             ${r.embalagem&&r.embalagem.obs?`<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);font-style:italic;">📝 ${r.embalagem.obs}</div>`:''}
           </div>
         </div>
@@ -10682,7 +10697,7 @@ function renderExpedicao(){
         ${exp.parciais&&exp.parciais.length>0?`
           <div class="exp-parcial-list">
             ${exp.parciais.map((p,i)=>`<div class="exp-parcial-item" id="parcial-row-${r.firestoreId}-${i}">
-              <span>${p.hora}${p.emLote?' <em style="font-size:10px;color:#c2410c;">em lote'+(p.por?' · '+p.por:'')+'</em>':''}${p.editadoEm?' <em style="font-size:10px;">(edit. '+p.editadoEm+')</em>':''}</span>
+              <span>${p.hora}${p.emLote?' <em style="font-size:10px;color:#c2410c;">em lote'+(p.por?' · '+p.por:'')+'</em>':''}${p.semContar?' <em style="font-size:10px;color:#475569;">sem contabilizar'+(p.por?' · '+p.por:'')+'</em>':''}${p.editadoEm?' <em style="font-size:10px;">(edit. '+p.editadoEm+')</em>':''}</span>
               <div style="display:flex;align-items:center;gap:8px;">
                 <span class="exp-parcial-qtd">+${p.qtd} pct</span>
                 <button onclick="toggleEditParcial('${r.firestoreId}',${i},${p.qtd})" style="background:none;border:1px solid var(--mc-laranja);color:var(--mc-laranja);font-size:11px;padding:2px 8px;border-radius:6px;cursor:pointer;font-family:inherit;">Editar</button>
@@ -10695,14 +10710,18 @@ function renderExpedicao(){
             <span style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">Liberar:</span>
             <input type="number" class="emb-input-qtd" id="exp-input-${r.firestoreId}" placeholder="${restante}" min="1" max="${restante}" inputmode="numeric" style="border-color:var(--mc-laranja);" />
             <button class="btn-sm-laranja" onclick="adicionarLiberacao('${r.firestoreId}',${qtdEmb})">Confirmar</button>
-          </div>`:''
+            <button onclick="expFinalizarComFalta('${r.firestoreId}')" title="Finalizar mesmo faltando ${restante}: o que falta vira quebra" aria-label="Finalizar com falta"
+              style="flex:0 0 auto;border:1.5px solid #b91c1c;background:#fff;color:#b91c1c;border-radius:8px;padding:0 11px;height:38px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">✓ Finalizar com falta</button>
+          </div>
+          ${window.adminMode===true?`<button onclick="expLiberarSemContar('${r.firestoreId}')" title="Libera o que falta sem entrar no Liberado no dia"
+            style="width:100%;margin-top:8px;padding:8px;background:#fff;border:1px dashed #94a3b8;color:#475569;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;">Liberar sem contabilizar (${restante})</button>`:''}`:''
         }
       </div>`;
     };
 
   // Pendentes por grupo
-  const paesPend=paes.filter(r=>{const e=r.expedicao||{totalLiberado:0};return e.totalLiberado<(r.embalagem.qtdEmbalada||r.qtd);}).length;
-  const salgPend=salgados.filter(r=>{const e=r.expedicao||{totalLiberado:0};return e.totalLiberado<(r.embalagem.qtdEmbalada||r.qtd);}).length;
+  const paesPend=paes.filter(r=>{const e=r.expedicao||{totalLiberado:0};return !expOk(r);}).length;
+  const salgPend=salgados.filter(r=>{const e=r.expedicao||{totalLiberado:0};return !expOk(r);}).length;
 
   /* Pães e salgados em abas separadas. Ao abrir um dia, começa na aba
      que ainda tem o que liberar; depois fica onde a pessoa escolheu. */
@@ -10775,13 +10794,12 @@ function expLotePendentes(tipo){
     if(r.data!==dataSelExp || !(r.embalagem&&r.embalagem.feito)) return false;
     if(typeof libControlado==='function' && libControlado(r)) return false;
     if((r.origem==='quadra'?'pao':'salgado')!==tipo) return false;
-    const emb=Number(r.embalagem.qtdEmbalada||r.qtd)||0, lib=Number((r.expedicao||{}).totalLiberado)||0;
-    return emb-lib>0;
+    return !expOk(r);
   });
 }
 function expAbrirLote(){
   if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
-  const resto=r=>(Number(r.embalagem.qtdEmbalada||r.qtd)||0)-(Number((r.expedicao||{}).totalLiberado)||0);
+  const resto=r=>expResto(r);
   const bloco=(tipo, icone, nome, cor)=>{
     const lista=expLotePendentes(tipo), tot=lista.reduce((t,r)=>t+resto(r),0);
     return '<button '+(lista.length?('onclick="expConfirmarLote(\''+tipo+'\')"'):'disabled')+' '+
@@ -10811,7 +10829,7 @@ async function expConfirmarLote(tipo){
   if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
   const lista=expLotePendentes(tipo);
   if(!lista.length){ alert('Nada a liberar neste grupo.'); return; }
-  const resto=r=>(Number(r.embalagem.qtdEmbalada||r.qtd)||0)-(Number((r.expedicao||{}).totalLiberado)||0);
+  const resto=r=>expResto(r);
   const nome=tipo==='pao'?'pães':'salgados', tot=lista.reduce((t,r)=>t+resto(r),0);
   const amostra=lista.slice(0,6).map(r=>'• '+r.produto+' — '+resto(r)+' pct').join('\n');
   if(!confirm('Liberar todos os '+nome+' de '+dataSelExp+'?\n\n'+lista.length+' produto(s) · '+tot+' pacote(s)\n\n'+amostra+
@@ -10826,7 +10844,7 @@ async function expConfirmarLote(tipo){
   let feitos=0, erros=0;
   for(const r of lista){
     const emb=Number(r.embalagem.qtdEmbalada||r.qtd)||0, exp=r.expedicao||{parciais:[],totalLiberado:0};
-    const falta=emb-(Number(exp.totalLiberado)||0); if(falta<=0) continue;
+    const falta=expResto(r); if(falta<=0) continue;
     try{
       await updateDoc(doc(db,'registros',r.firestoreId),{expedicao:{
         parciais:[...(exp.parciais||[]),{qtd:falta, hora:agora(), emLote:true, por}], totalLiberado:emb}});
@@ -10838,6 +10856,94 @@ async function expConfirmarLote(tipo){
 }
 window.expConfirmarLote=expConfirmarLote;
 
+/* ── QUEBRA NA EXPEDIÇÃO ─────────────────────────────────────────────
+   A expedição pode FINALIZAR um produto mesmo sem ter recebido tudo o
+   que a embalagem lançou (embalado 100, chegaram 80 → quebra de 20).
+   A quebra fica em expedicao.quebra {qtd, em, por}; o "liberado"
+   continua sendo o que saiu de verdade (80). Para o app, o produto
+   está concluído quando liberado + quebra cobre o embalado.
+   Dá para desfazer (se os 20 aparecerem) e o admin tem o relatório. */
+function expQuebra(r){ const q=r && r.expedicao && r.expedicao.quebra; return q?(Number(q.qtd)||0):0; }
+function expResto(r){ return Math.max(0,(Number((r.embalagem||{}).qtdEmbalada||r.qtd)||0)-(Number((r.expedicao||{}).totalLiberado)||0)-expQuebra(r)); }
+function expOk(r){ return expResto(r)<=0; }
+Object.assign(window,{expQuebra,expResto,expOk});
+async function expFinalizarComFalta(fid){
+  const r=(registros||[]).find(x=>x.firestoreId===fid); if(!r) return;
+  const falta=expResto(r), emb=Number((r.embalagem||{}).qtdEmbalada||r.qtd)||0, lib=Number((r.expedicao||{}).totalLiberado)||0;
+  if(falta<=0) return;
+  if(!confirm('Finalizar '+r.produto+' com falta?\n\nEmbalado: '+emb+' pacotes\nLiberado: '+lib+' pacotes\nFaltam: '+falta+' pacotes\n\n'+
+    'O produto sai dos pendentes e os '+falta+' pacotes ficam registrados como QUEBRA (a embalagem lançou mais do que chegou).\n\nSe os pacotes aparecerem depois, dá para desfazer.')) return;
+  const exp={...(r.expedicao||{parciais:[],totalLiberado:0}), quebra:{qtd:falta, em:agora(), por:_demAutor()}};
+  try{ await updateDoc(doc(db,'registros',fid),{expedicao:exp}); r.expedicao=exp; }
+  catch(e){ alert('Erro: '+((e&&e.message)||e)); return; }
+  if(typeof renderExpedicao==='function') renderExpedicao();
+}
+async function expDesfazerFalta(fid){
+  const r=(registros||[]).find(x=>x.firestoreId===fid); if(!r || !expQuebra(r)) return;
+  if(!confirm('Desfazer a finalização de '+r.produto+'?\n\nOs '+expQuebra(r)+' pacotes voltam a ficar pendentes, para serem liberados.')) return;
+  const exp={...(r.expedicao||{})}; delete exp.quebra;
+  try{ await updateDoc(doc(db,'registros',fid),{expedicao:exp}); r.expedicao=exp; }
+  catch(e){ alert('Erro: '+((e&&e.message)||e)); return; }
+  if(typeof renderExpedicao==='function') renderExpedicao();
+  if(document.getElementById('exp-quebras')) expQuebrasAbrir();
+}
+/* ── LIBERAR SEM CONTABILIZAR (admin) ────────────────────────────────
+   Libera o que falta de um produto sem que isso entre no "Liberado no
+   dia" (lá há um filtro próprio para ver ou esconder). */
+async function expLiberarSemContar(fid){
+  if(window.adminMode!==true){ alert('Só o admin usa esta opção.'); return; }
+  const r=(registros||[]).find(x=>x.firestoreId===fid); if(!r) return;
+  const falta=expResto(r); if(falta<=0) return;
+  if(!confirm('Liberar sem contabilizar?\n\n'+r.produto+' · '+falta+' pacote(s)\n\nO produto fica liberado e sai dos pendentes, mas esses pacotes ficam marcados como “sem contabilizar” no Liberado no dia.')) return;
+  const ant=r.expedicao||{parciais:[],totalLiberado:0};
+  const exp={...ant, parciais:[...(ant.parciais||[]),{qtd:falta, hora:agora(), semContar:true, por:_demAutor()}], totalLiberado:(Number(ant.totalLiberado)||0)+falta};
+  try{ await updateDoc(doc(db,'registros',fid),{expedicao:exp}); r.expedicao=exp; }
+  catch(e){ alert('Erro: '+((e&&e.message)||e)); return; }
+  if(typeof renderExpedicao==='function') renderExpedicao();
+}
+Object.assign(window,{expFinalizarComFalta,expDesfazerFalta,expLiberarSemContar});
+
+/* Relatório de quebras (admin): data, produto e quantidade */
+let _eqPer='30';
+function expQuebrasPer(v){ _eqPer=v; expQuebrasAbrir(); }
+function _eqLista(){
+  const lim=new Date(); lim.setDate(lim.getDate()-(parseInt(_eqPer)||99999)); const limN=_eqPer==='tudo'?0:_erNum(fmtData(lim));
+  return (registros||[]).filter(r=>expQuebra(r)>0 && _erNum(_erDataDe((r.expedicao.quebra||{}).em)||r.data)>=limN)
+    .map(r=>({r, qtd:expQuebra(r), dia:_erDataDe(r.expedicao.quebra.em)||r.data, por:r.expedicao.quebra.por||'', emb:Number((r.embalagem||{}).qtdEmbalada||r.qtd)||0, lib:Number(r.expedicao.totalLiberado)||0}))
+    .sort((a,b)=>_erNum(b.dia)-_erNum(a.dia)||b.qtd-a.qtd);
+}
+function expQuebrasAbrir(){
+  if(window.adminMode!==true){ alert('Só o admin vê este relatório.'); return; }
+  document.getElementById('exp-quebras')?.remove();
+  const l=_eqLista(), tot=l.reduce((t,x)=>t+x.qtd,0);
+  const porProd={}; l.forEach(x=>{ porProd[x.r.produto]=(porProd[x.r.produto]||0)+x.qtd; });
+  const top=Object.entries(porProd).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const ov=document.createElement('div'); ov.id='exp-quebras';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:14px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:820px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">'+
+    '<div style="padding:20px 22px 12px;"><div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><div style="font-size:19px;font-weight:800;flex:1;">📉 Quebras na expedição</div>'+
+      '<div style="display:inline-flex;background:#f1f5f9;border-radius:10px;padding:3px;">'+[['7','7 dias'],['30','30 dias'],['90','90 dias'],['tudo','Tudo']].map(([v,t])=>'<button onclick="expQuebrasPer(\''+v+'\')" style="border:none;background:'+(_eqPer===v?'#fff':'none')+';box-shadow:'+(_eqPer===v?'0 1px 3px rgba(0,0,0,.12)':'none')+';border-radius:8px;padding:6px 12px;font-family:inherit;font-size:12.5px;font-weight:700;color:'+(_eqPer===v?'#0f172a':'#64748b')+';cursor:pointer;">'+t+'</button>').join('')+'</div></div>'+
+      '<div style="font-size:13px;color:#64748b;margin-top:6px;line-height:1.5;">Produtos que a expedição finalizou sem receber tudo o que a embalagem lançou.</div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">'+
+        '<div style="flex:1 1 130px;background:#fef2f2;border-radius:12px;padding:10px 14px;"><div style="font-size:11.5px;font-weight:700;color:#991b1b;">Pacotes de quebra</div><div style="font-size:24px;font-weight:800;color:#b91c1c;">'+Math.round(tot).toLocaleString('pt-BR')+'</div></div>'+
+        '<div style="flex:1 1 130px;background:#f8fafc;border-radius:12px;padding:10px 14px;"><div style="font-size:11.5px;font-weight:700;color:#475569;">Ocorrências</div><div style="font-size:24px;font-weight:800;">'+l.length+'</div></div>'+
+        '<div style="flex:2 1 220px;background:#f8fafc;border-radius:12px;padding:10px 14px;"><div style="font-size:11.5px;font-weight:700;color:#475569;">Onde mais acontece</div><div style="font-size:13px;margin-top:4px;line-height:1.5;">'+(top.length?top.map(t=>t[0]+' <b>'+Math.round(t[1])+'</b>').join(' · '):'—')+'</div></div></div></div>'+
+    '<div style="overflow:auto;padding:0 22px;flex:1;">'+
+      (l.length?'<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="text-align:left;color:#64748b;font-size:11.5px;"><th style="padding:8px 6px;border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:#fff;">Data</th><th style="padding:8px 6px;border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:#fff;">Produto</th><th style="padding:8px 6px;border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:#fff;">Produção</th><th style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:right;position:sticky;top:0;background:#fff;">Embalado</th><th style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:right;position:sticky;top:0;background:#fff;">Liberado</th><th style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:right;position:sticky;top:0;background:#fff;">Quebra</th><th style="padding:8px 6px;border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:#fff;">Quem finalizou</th><th style="border-bottom:1px solid #e2e8f0;position:sticky;top:0;background:#fff;"></th></tr></thead><tbody>'+
+        l.map(x=>'<tr><td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;white-space:nowrap;">'+x.dia.slice(0,5)+'</td><td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;"><b>'+x.r.produto+'</b></td><td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;white-space:nowrap;">'+String(x.r.data).slice(0,5)+'</td>'+
+          '<td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;text-align:right;">'+x.emb+'</td><td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;text-align:right;">'+x.lib+'</td><td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;text-align:right;color:#b91c1c;font-weight:800;">'+x.qtd+'</td>'+
+          '<td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;">'+(x.por||'—')+'</td><td style="padding:9px 6px;border-bottom:1px solid #f1f5f9;text-align:right;"><button onclick="expDesfazerFalta(\''+x.r.firestoreId+'\')" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:4px 9px;font-family:inherit;font-size:11.5px;font-weight:600;color:#475569;cursor:pointer;">Desfazer</button></td></tr>').join('')+'</tbody></table>'
+        :'<div style="text-align:center;color:#64748b;padding:34px 10px;font-size:14px;">Nenhuma quebra registrada neste período. 👍</div>')+'</div>'+
+    '<div style="display:flex;gap:8px;padding:14px 22px 18px;"><button class="btn btn-secondary" style="flex:1;margin:0;" onclick="document.getElementById(\'exp-quebras\').remove()">Fechar</button>'+
+      (l.length?'<button class="btn btn-primary" style="flex:1;margin:0;" id="eq-copiar">📋 Copiar (data, produto, quantidade)</button>':'')+'</div></div>';
+  document.body.appendChild(ov);
+  const b=document.getElementById('eq-copiar');
+  if(b) b.onclick=async function(){ const t=l.map(x=>x.dia+'\t'+x.r.produto+'\t'+x.qtd).join('\n');
+    try{ await navigator.clipboard.writeText(t); }catch(e){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); }catch(_){} ta.remove(); }
+    this.textContent='✓ Copiado'; };
+}
+Object.assign(window,{expQuebrasAbrir,expQuebrasPer});
+
 async function adicionarLiberacao(fid,qtdEmb){
   const val=parseInt(document.getElementById(`exp-input-${fid}`).value)||0;
   if(val<=0){alert('Informe a quantidade a liberar.');return;}
@@ -10845,7 +10951,7 @@ async function adicionarLiberacao(fid,qtdEmb){
   const exp=reg.expedicao||{parciais:[],totalLiberado:0};
   const parciais=[...(exp.parciais||[]),{qtd:val,hora:agora()}];
   const totalLiberado=Math.min((exp.totalLiberado||0)+val,qtdEmb);
-  await updateDoc(doc(db,'registros',fid),{expedicao:{parciais,totalLiberado}});
+  await updateDoc(doc(db,'registros',fid),{expedicao:{...exp, parciais,totalLiberado}});
 }
 
 // ===== EXPEDIÇÃO: LANÇAMENTO MANUAL ("JÁ PEGUEI") =====
@@ -10971,6 +11077,7 @@ async function removerParcialExp(fid,idx){
   const reg=registros.find(r=>r.firestoreId===fid);
   if(!reg)return;
   const exp=reg.expedicao||{parciais:[],totalLiberado:0};
+  if(expQuebra(reg)){ alert('Este produto foi finalizado com quebra. Desfaça a finalização antes de mexer nos lançamentos.'); return; }
   const parciais=[...(exp.parciais||[])];
   if(idx<0||idx>=parciais.length)return;
   if(!confirm('Apagar esta saída antecipada de +'+parciais[idx].qtd+' un?'))return;
@@ -12079,6 +12186,7 @@ async function salvarEditParcial(fid, idx){
   const reg=registros.find(r=>r.firestoreId===fid);
   if(!reg)return;
   const exp=reg.expedicao||{parciais:[],totalLiberado:0};
+  if(expQuebra(reg)){ alert('Este produto foi finalizado com quebra. Desfaça a finalização antes de editar os lançamentos.'); return; }
   const parciais=[...(exp.parciais||[])];
   const qtdAntiga=parciais[idx].qtd;
   parciais[idx]={...parciais[idx],qtd:novaQtd,editadoEm:agora()};
@@ -12131,7 +12239,7 @@ function renderAdm(t){
     const tRkg=rhH.reduce((s,r)=>s+r.qtdKg,0);
     const embF=rH.filter(r=>r.embalagem&&r.embalagem.feito).length;
     const embPct=rH.length?Math.round(embF/rH.length*100):0;
-    const expF=rH.filter(r=>{const exp=r.expedicao||{totalLiberado:0};return exp.totalLiberado>=(r.embalagem?.qtdEmbalada||r.qtd)&&r.embalagem?.feito;}).length;
+    const expF=rH.filter(r=>{const exp=r.expedicao||{totalLiberado:0};return expOk(r)&&r.embalagem?.feito;}).length;
     const expTotal=rH.filter(r=>r.embalagem&&r.embalagem.feito).length;
     const expPct=expTotal?Math.round(expF/expTotal*100):0;
     el.innerHTML=`
@@ -12222,7 +12330,7 @@ function renderAdm(t){
     el.innerHTML = makeSelect('sel-exp-adm', datasReg, df, 'expedicao');
     const filt=registros.filter(r=>r.data===df&&r.embalagem&&r.embalagem.feito);
     const total=filt.length;
-    const completos=filt.filter(r=>{const exp=r.expedicao||{totalLiberado:0};return exp.totalLiberado>=(r.embalagem.qtdEmbalada||r.qtd);}).length;
+    const completos=filt.filter(r=>{const exp=r.expedicao||{totalLiberado:0};return expOk(r);}).length;
     const pct=total?Math.round(completos/total*100):0;
     el.innerHTML+=`
       <div class="card" style="margin-bottom:10px;">
@@ -12238,7 +12346,7 @@ function renderAdm(t){
           const exp=r.expedicao||{parciais:[],totalLiberado:0};
           const qtdEmb=r.embalagem.qtdEmbalada||r.qtd;
           const totalLib=exp.totalLiberado||0;
-          const concluido=totalLib>=qtdEmb;
+          const concluido=expOk(r);
           const eb=concluido?'<span class="badge badge-exp">liberado ✓</span>':totalLib>0?`<span class="badge badge-parcial">parcial (${totalLib}/${qtdEmb})</span>`:'<span class="badge badge-pend">pendente</span>';
           return `<div class="reg-item laranja"><div class="reg-header"><span class="reg-produto">${r.produto}</span>${eb}</div>
             <div class="reg-detalhe" style="margin-top:4px;">Embalado: <strong>${qtdEmb} un</strong> · Liberado: <strong style="color:${concluido?'#4caf50':'var(--mc-laranja)'};">${totalLib} un</strong>${!concluido?` · Restante: <strong>${qtdEmb-totalLib}</strong>`:''}
@@ -12788,7 +12896,7 @@ async function gerarExcel(){
       const exp=r.expedicao||{parciais:[],totalLiberado:0};
       const qtdEmb=r.embalagem?.qtdEmbalada||r.qtd;
       const parcStr=(exp.parciais||[]).map(p=>`${p.hora}: +${p.qtd}`).join(' | ');
-      expRows.push([r.data,r.hora,r.produto,qtdEmb,exp.totalLiberado||0,qtdEmb-(exp.totalLiberado||0),parcStr,exp.totalLiberado>=qtdEmb?'Liberado':'Pendente']);
+      expRows.push([r.data,r.hora,r.produto,qtdEmb,exp.totalLiberado||0,qtdEmb-(exp.totalLiberado||0),parcStr,expOk(r)?(expQuebra(r)?('Finalizado com quebra de '+expQuebra(r)):'Liberado'):'Pendente']);
     });
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(expRows),'Expedição');
 
@@ -16395,7 +16503,7 @@ function renderAdmStatus(elId){
   // Expedição pendente
   const diasExpPend=ultimos14.filter(data=>{
     const regs=registros.filter(r=>r.data===data&&r.embalagem&&r.embalagem.feito);
-    return regs.some(r=>{const e=r.expedicao||{totalLiberado:0};return e.totalLiberado<(r.embalagem.qtdEmbalada||r.qtd);});
+    return regs.some(r=>{const e=r.expedicao||{totalLiberado:0};return !expOk(r);});
   });
   if(diasExpPend.length>0) criticos.push({
     icone:'🚚', titulo:'Expedição com pendências',
@@ -16649,7 +16757,7 @@ function renderBuscarProduto(){
     const expPend=regs.filter(r=>{
       if(!r.embalagem||!r.embalagem.feito)return false;
       const e=r.expedicao||{totalLiberado:0};
-      return e.totalLiberado<(r.embalagem.qtdEmbalada||r.qtd);
+      return !expOk(r);
     }).length;
 
     const safeId='busc-'+produto.replace(/[^a-zA-Z0-9]/g,'_');
@@ -26692,7 +26800,7 @@ function libAtualizarBadges(){
     (registros||[]).forEach(r=>{
       if(!(r.embalagem&&r.embalagem.feito) || !libControlado(r)) return;
       const e=r.expedicao||{totalLiberado:0};
-      if((e.totalLiberado||0) < (r.embalagem.qtdEmbalada||r.qtd)) n++;
+      if(!expOk(r)) n++;
     });
   }catch(e){}
   ['lib-badge-emb','lib-badge-conf'].forEach(id=>{
@@ -26709,7 +26817,7 @@ function libRender(){
   const total=regs.length;
   const completos=regs.filter(r=>{
     const e=r.expedicao||{totalLiberado:0};
-    return (e.totalLiberado||0) >= (r.embalagem.qtdEmbalada||r.qtd);
+    return expOk(r);
   }).length;
   const pct=total?Math.round(completos/total*100):0;
 
@@ -26718,7 +26826,7 @@ function libRender(){
   registros.forEach(r=>{
     if(!(r.embalagem&&r.embalagem.feito) || !libControlado(r)) return;
     const e=r.expedicao||{totalLiberado:0};
-    if((e.totalLiberado||0) < (r.embalagem.qtdEmbalada||r.qtd)){
+    if(!expOk(r)){
       dias[r.data]=(dias[r.data]||0)+1;
     }
   });
@@ -26752,7 +26860,7 @@ function libRender(){
   h+=regs.map(r=>{
     const exp=r.expedicao||{parciais:[],totalLiberado:0};
     const qtdEmb=r.embalagem.qtdEmbalada||r.qtd;
-    const lib=exp.totalLiberado||0, resta=qtdEmb-lib, ok=lib>=qtdEmb;
+    const lib=exp.totalLiberado||0, resta=Math.max(0,qtdEmb-lib-expQuebra(r)), ok=expOk(r);
     return '<div class="card" style="margin-bottom:8px;border-left:4px solid '+(ok?'#16a34a':'var(--mc-laranja,#d97706)')+';">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'+
         '<div style="flex:1;min-width:0;">'+
