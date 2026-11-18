@@ -5647,7 +5647,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='17/11/2026 · 17';
+  var VERSAO='18/11/2026 · 18';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -31274,13 +31274,10 @@ window.cozRecheiosAbrir=cozRecheiosAbrir;
    folga quanto plano não cadastrado, e a cozinha não sabe o que fazer. */
 function crecDiagnostico(dataBR){
   const diaNome=_crecDiaSemana(dataBR);
-  const semAlvo=(typeof _acCozSemanaSel!=='undefined' && _acCozSemanaSel)
-    ? _acCozSemanaSel
-    : (typeof semanaAtual==='function'?semanaAtual():'');
+  const semAlvo=_crecSemanaDe(dataBR);
   const todos=(typeof planos!=='undefined'?planos:[]);
   const daConf=todos.filter(p=>!p.setor||p.setor==='conf');
-  const plano=daConf.find(p=>p.semana===semAlvo)
-    || daConf.sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0];
+  const plano=_crecPlanoDaSemana(dataBR);
   const itensDia=plano?_crecItensDoDia(plano.itens, diaNome):[];
   // dos itens do dia, quantos têm recheio na ficha
   let comRecheio=0, semFicha=[], semRecheio=[], ocultos=[];
@@ -31350,8 +31347,11 @@ function renderCozRecheios(){
       motivo='Não há nenhum plano de produção da confeitaria cadastrado.';
       comoResolver='O plano é montado em Planejamento e salvo com "Salvar Plano".';
     } else if(!dg.planoUsado){
-      motivo='Não achei o plano da semana '+dg.semanaProcurada+'.';
-      comoResolver='Monte o plano desta semana no Planejamento.';
+      const rotSem=(typeof semanaLabel==='function' && semanaLabel(dg.semanaProcurada)) || dg.semanaProcurada;
+      motivo='Não há plano de produção gravado para a semana '+rotSem+'.';
+      comoResolver=(typeof semanaAtual==='function' && dg.semanaProcurada<semanaAtual())
+        ? 'É uma semana que já passou: sem plano gravado, não há o que mostrar aqui.'
+        : 'Monte e salve o plano desta semana no Planejamento.';
     } else if(!dg.semanaBate){
       motivo='O plano mais recente é da semana '+dg.planoUsado+', não da semana atual ('+dg.semanaProcurada+').';
       comoResolver='Monte e salve o plano desta semana no Planejamento.';
@@ -31439,21 +31439,35 @@ function renderCozRecheios(){
 window.renderCozRecheios=renderCozRecheios;
 
 function _crecSeletorDia(){
-  // os dias da semana, para olhar o de amanhã também
   const hoje0=hoje();
+  const seg=_crecSegundaDaSemana(_crecDia||hoje0) || _crecSegundaDaSemana(hoje0);
   const dias=[];
-  const p=String(hoje0).split('/');
-  const base=new Date(+p[2], +p[1]-1, +p[0]);
-  for(let i=-1;i<=2;i++){
-    const dt=new Date(base); dt.setDate(base.getDate()+i);
-    const br=String(dt.getDate()).padStart(2,'0')+'/'+String(dt.getMonth()+1).padStart(2,'0')+'/'+dt.getFullYear();
-    dias.push({br, nome: i===0?'hoje':(i===1?'amanhã':(i===-1?'ontem':_crecDiaSemana(br).slice(0,3)))});
-  }
-  return '<div style="display:flex;gap:6px;margin-bottom:12px;">'+
-    dias.map(x=>'<button onclick="crecSetDia(\''+x.br+'\')" style="flex:1;background:'+(_crecDia===x.br?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(_crecDia===x.br?'#fff':'var(--text-secondary)')+';border:1px solid '+(_crecDia===x.br?'var(--mc-azul,#2563eb)':'var(--border)')+';border-radius:10px;padding:10px 4px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">'+
-      x.nome+'<br><span style="font-size:10px;font-weight:400;opacity:.8;">'+x.br.slice(0,5)+'</span></button>').join('')+
+  for(let i=0;i<6;i++){ const dt=new Date(seg); dt.setDate(seg.getDate()+i); dias.push({br:_crecDataBR(dt), nome:CREC_DIAS[i]}); }
+  const segHoje=_crecSegundaDaSemana(hoje0);
+  const dif=Math.round((seg-segHoje)/(7*864e5));         // quantas semanas de distância da atual
+  const rot=dif===0?'Esta semana':(dif===-1?'Semana passada':(dif===1?'Semana que vem':(dif<0?('Há '+(-dif)+' semanas'):('Daqui a '+dif+' semanas'))));
+  const btn='background:#fff;border:1px solid var(--border);color:var(--text-primary);border-radius:10px;min-width:44px;height:40px;font-size:18px;font-weight:700;cursor:pointer;font-family:inherit;';
+  return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'+
+      '<button onclick="crecSemana(-1)" style="'+btn+'" aria-label="Semana anterior" title="Semana anterior">‹</button>'+
+      '<div style="flex:1;text-align:center;line-height:1.3;"><div style="font-size:14px;font-weight:800;">'+rot+'</div>'+
+        '<div style="font-size:11.5px;color:var(--text-secondary);">'+dias[0].br.slice(0,5)+' a '+dias[5].br.slice(0,5)+'</div></div>'+
+      (dif!==0?'<button onclick="crecSetDia(\''+hoje0+'\')" style="'+btn+'font-size:12.5px;padding:0 12px;">Hoje</button>':'')+
+      '<button onclick="crecSemana(1)" style="'+btn+'" aria-label="Próxima semana" title="Próxima semana">›</button>'+
+    '</div>'+
+    '<div style="display:flex;gap:6px;margin-bottom:12px;">'+
+    dias.map(x=>{ const sel=_crecDia===x.br, eHoje=x.br===hoje0;
+      return '<button onclick="crecSetDia(\''+x.br+'\')" style="flex:1;min-width:0;background:'+(sel?'var(--mc-azul,#2563eb)':'#fff')+';color:'+(sel?'#fff':'var(--text-secondary)')+';border:'+(eHoje&&!sel?'2px solid var(--mc-azul,#2563eb)':'1px solid '+(sel?'var(--mc-azul,#2563eb)':'var(--border)'))+';border-radius:10px;padding:8px 2px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1.35;">'+
+        x.nome.slice(0,3)+(eHoje?' · hoje':'')+'<br><span style="font-size:10px;font-weight:400;opacity:.8;">'+x.br.slice(0,5)+'</span></button>'; }).join('')+
   '</div>';
 }
+/* muda de semana mantendo o mesmo dia da semana */
+function crecSemana(n){
+  const p=String(_crecDia||hoje()).split('/');
+  const d=new Date(+p[2], +p[1]-1, +p[0], 12); d.setDate(d.getDate()+7*n);
+  if(d.getDay()===0) d.setDate(d.getDate()+1);            // domingo não tem plano: vai para a segunda
+  _crecDia=_crecDataBR(d); renderCozRecheios();
+}
+window.crecSemana=crecSemana;
 function crecSetDia(d){ _crecDia=d; renderCozRecheios(); }
 window.crecSetDia=crecSetDia;
 
@@ -31761,7 +31775,7 @@ function crecDados(dataBR){
   const diaNome=_crecDiaSemana(dataBR);
   if(!diaNome) return {dia:dataBR, diaNome:'', recheios:[], semPlano:true};
 
-  const plano=_crecPlanoDaSemana();
+  const plano=_crecPlanoDaSemana(dataBR);
   if(!plano) return {dia:dataBR, diaNome, recheios:[], semPlano:true};
 
   const itensDia=_crecItensDoDia(plano.itens, diaNome);
@@ -31829,14 +31843,26 @@ function crecDados(dataBR){
 window.crecDados=crecDados;
 
 /* O plano da confeitaria da semana que cobre esta data */
-function _crecPlanoDaSemana(){
+/* A semana (AAAA-Wnn) de uma data dd/mm/aaaa */
+function _crecSemanaDe(dataBR){
+  const p=String(dataBR||'').split('/');
+  if(p.length!==3 || typeof semanaDeData!=='function') return (typeof semanaAtual==='function'?semanaAtual():'');
+  return semanaDeData(new Date(+p[2], +p[1]-1, +p[0], 12));
+}
+/* Antes a tela usava sempre o plano da semana atual, mesmo olhando outro
+   dia. Agora é o plano da semana da data escolhida — é o que permite
+   ver a semana passada. Só na semana ATUAL, se o plano dela ainda não
+   foi cadastrado, vale o plano mais recente (como já era). Em outra
+   semana sem plano, a tela diz que não há plano, em vez de mostrar o
+   de outra semana. */
+function _crecPlanoDaSemana(dataBR){
   const todos=(typeof planos!=='undefined'?planos:[]).filter(p=>!p.setor||p.setor==='conf');
   if(!todos.length) return null;
-  const sem=(typeof _acCozSemanaSel!=='undefined' && _acCozSemanaSel)
-    ? _acCozSemanaSel
-    : (typeof semanaAtual==='function'?semanaAtual():'');
-  return todos.find(p=>p.semana===sem)
-      || todos.slice().sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0];
+  const sem=_crecSemanaDe(dataBR||hoje());
+  const exato=todos.find(p=>p.semana===sem);
+  if(exato) return exato;
+  if(typeof semanaAtual==='function' && sem!==semanaAtual()) return null;
+  return todos.slice().sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0];
 }
 
 function _crecItensDoDia(itens, diaNome){
