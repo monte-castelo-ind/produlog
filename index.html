@@ -4989,7 +4989,7 @@
       <button class="mc-header-back" onclick="goTo(window.setorAtual==='simone'?'s-simone-home':'s-adm-hub')">‹</button>
       <div class="mc-brand"><div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div><div class="mc-brand-text"><div class="mc-brand-name">Monte Castelo</div><div class="mc-brand-sub">Compras</div></div></div>
       <div class="mc-divider-v"></div>
-      <div class="mc-page-info"><div class="mc-page-title">🛒 Pedidos de Matéria-Prima</div><div class="mc-page-sub">Por fornecedor</div></div>
+      <div class="mc-page-info"><div class="mc-page-title">🛒 Pedidos de Matéria-Prima</div><div class="mc-page-sub">Todos os pedidos · pendentes primeiro</div></div>
       <div class="mc-header-actions">
         <button class="mc-act-btn-secondary" onclick="compAbrirConfig()" title="Fornecedores e catálogo">⚙️</button>
       </div>
@@ -5648,7 +5648,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='18/11/2026 · 21';
+  var VERSAO='18/11/2026 · 24';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -5777,7 +5777,7 @@
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, arrayUnion, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, arrayUnion, runTransaction, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // MODO TV VIA LINK (?tv=1): detectado logo no início, antes de qualquer snapshot do Firebase
@@ -10636,10 +10636,13 @@ function renderExpView(){
     return '<div style="background:var(--bg-secondary);border:0.5px solid var(--border);border-left:3px solid '+cor+';border-radius:12px;padding:14px;margin-bottom:8px;">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">'+
       '<div style="flex:1;"><div style="font-size:14px;font-weight:600;color:var(--text-primary);">'+r.produto+'</div>'+
-      '<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Embalado: <strong>'+qtdEmb+' un</strong> · Liberado: <strong style="color:'+cor+';">'+totalLib+' un</strong></div></div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);margin-top:4px;">Embalado: <strong>'+qtdEmb+' pct</strong> · Liberado: <strong style="color:'+cor+';">'+totalLib+' pct</strong></div>'+
+      (expQuebra(r)?'<div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-size:11px;font-weight:800;color:#b91c1c;background:#fee2e2;border-radius:99px;padding:2px 9px;">a expedição finalizou com quebra de '+expQuebra(r)+'</span>'+
+        '<button onclick="expDesfazerFalta(\''+r.firestoreId+'\')" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:5px 11px;font-family:inherit;font-size:12px;font-weight:700;color:#475569;cursor:pointer;">↩ Desfazer a finalização</button></div>':'')+
+      '</div>'+
       '<span style="font-size:11px;font-weight:700;color:'+cor+';background:'+(concluido?'rgba(76,175,80,0.15)':totalLib>0?'rgba(245,158,11,0.15)':'rgba(0,0,0,0.05)')+';padding:3px 10px;border-radius:10px;white-space:nowrap;">'+(concluido?'✓ Completo':totalLib>0?'parcial':'pendente')+'</span>'+
       '</div>'+
-      (exp.parciais&&exp.parciais.length>0?'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:11px;color:var(--text-secondary);">'+exp.parciais.map(p=>p.hora+': +'+p.qtd+' un').join(' · ')+'</div>':'')+
+      (exp.parciais&&exp.parciais.length>0?'<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid var(--border);font-size:11px;color:var(--text-secondary);">'+exp.parciais.map(p=>p.hora+': +'+p.qtd+' pct').join(' · ')+'</div>':'')+
       '</div>';
   }).join('');
 }
@@ -10885,6 +10888,7 @@ async function expDesfazerFalta(fid){
   try{ await updateDoc(doc(db,'registros',fid),{expedicao:exp}); r.expedicao=exp; }
   catch(e){ alert('Erro: '+((e&&e.message)||e)); return; }
   if(typeof renderExpedicao==='function') renderExpedicao();
+  if(typeof renderExpView==='function') renderExpView();          // a visão que a embalagem tem da expedição
   if(document.getElementById('exp-quebras')) expQuebrasAbrir();
 }
 /* ── LIBERAR SEM CONTABILIZAR (admin) ────────────────────────────────
@@ -19803,69 +19807,375 @@ function _reqAtualizarBadge(){
   const sub=document.getElementById('req-rafael-sub');
   if(sub) sub.textContent = n>0 ? (n+' requisição(ões) para receber') : 'Nenhuma requisição pendente';
 }
-// Gera a requisição a partir de um pedido (chamado quando a OC é gerada)
+/* ══ PEDIDOS DE MATÉRIA-PRIMA — reestruturação (nov/2026) ═══════════
+   O que mudou no processo:
+   · UMA situação por pedido, calculada sempre do mesmo jeito:
+     aguardando comprador → aguardando recebimento → recebido em parte
+     → recebido (ou cancelado). Os status antigos (rascunho, pronto, OC
+     gerada, arquivado) continuam sendo lidos, mas caem nessas cinco.
+   · Cada pedido tem um NÚMERO de requisição interna (#0042), o mesmo
+     na tela de quem pede, de quem compra e de quem recebe.
+   · Dá para ter VÁRIOS pedidos do mesmo fornecedor ao mesmo tempo.
+     Pedido novo não arquiva mais o anterior.
+   · A requisição do recebimento ACOMPANHA o pedido: alterar um pedido
+     confirmado cancela a requisição antiga e confirmar de novo gera a
+     certa. Com recebimento já lançado, o pedido não pode mais mudar.
+   · O recebimento tem QUANTIDADE por item e pode ser em partes.
+   · A tela inicial é uma tabela de todos os pedidos, pendentes
+     primeiro, com filtros. */
+const CP_SIT={
+  comprador:{rot:'Aguardando comprador',   curto:'Comprador',  ord:0, cor:'#7a5b00', bg:'#fdf0b8', pt:'#e2b100'},
+  receber:  {rot:'Aguardando recebimento', curto:'A receber',  ord:1, cor:'#1f2937', bg:'#e9ebee', pt:'#374151'},
+  parcial:  {rot:'Recebido em parte',      curto:'Em parte',   ord:1, cor:'#9a3412', bg:'#ffedd5', pt:'#ea580c'},
+  recebido: {rot:'Recebido',               curto:'Recebido',   ord:3, cor:'#166534', bg:'#dcfce7', pt:'#16a34a'},
+  cancelado:{rot:'Cancelado',              curto:'Cancelado',  ord:4, cor:'#6b7280', bg:'#f1f1ef', pt:'#9ca3af'}
+};
+function _cpReqsDe(p){ return (requisicoes||[]).filter(r=>p && r.pedidoId===p.firestoreId && r.status!=='cancelado'); }
+function _cpTemRecebimento(r){ return !!r && (r.status==='parcial' || r.status==='recebido' || (r.itens||[]).some(it=>(parseFloat(it.rec)||0)>0)); }
+/* a situação do pedido, olhando o pedido E a requisição dele */
+function _cpSit(p){
+  const st=(p&&p.status)||'solicitado';
+  let k;
+  if(st==='cancelado' || st==='arquivado') k='cancelado';
+  else if(st==='confirmado' || st==='oc_gerada' || st==='recebido'){
+    const rs=_cpReqsDe(p);
+    if(!rs.length) k=(st==='recebido')?'recebido':'receber';
+    else if(rs.every(r=>r.status==='recebido')) k='recebido';
+    else if(rs.some(_cpTemRecebimento)) k='parcial';
+    else k='receber';
+  } else k='comprador';
+  const req=_cpReqsDe(p)[0]||null;
+  const prev=((req&&req.previsaoEntrega)||(p&&p.previsaoEntrega)||'').trim();
+  const dias=(k==='receber'||k==='parcial')?_compPrevEmDias(prev):null;      // >0 = atrasado há N dias
+  return {k, ...CP_SIT[k], req, prev, atraso:(dias!==null&&dias>0)?dias:0, emDias:(dias!==null&&dias<=0)?-dias:null,
+    comFalta:!!(req&&req.comFalta), arquivado:st==='arquivado'};
+}
+const _cpTravado=st=>['confirmado','oc_gerada','recebido','cancelado','arquivado'].includes(st||'solicitado');
+/* número da requisição interna. Pedido antigo, sem número gravado, usa a posição dele na ordem de criação. */
+let _cpRank=null, _cpRankDe=null;
+function _cpNumero(p){
+  if(!p) return '';
+  if(p.numero) return '#'+String(p.numero).padStart(4,'0');
+  if(_cpRankDe!==comprasPedidos){ _cpRankDe=comprasPedidos; _cpRank={};
+    comprasPedidos.filter(x=>!x.numero).sort((a,b)=>(a.criadoEm2||0)-(b.criadoEm2||0)).forEach((x,i)=>{ _cpRank[x.firestoreId]=i+1; }); }
+  const n=_cpRank[p.firestoreId];
+  return n?('#'+String(n).padStart(4,'0')):'novo';
+}
+/* próximo número: contador único no banco, dentro de uma transação (dois pedidos salvos ao mesmo tempo não pegam o mesmo) */
+async function _cpNovoNumero(){
+  const base=comprasPedidos.filter(x=>!x.numero).length, maior=comprasPedidos.reduce((m,x)=>Math.max(m,Number(x.numero)||0),0);
+  try{
+    return await runTransaction(db, async t=>{
+      const ref=doc(db,'configuracoes','comprasSeq'); const sn=await t.get(ref);
+      const n=Math.max(sn.exists()?(Number(sn.data().n)||0):0, base, maior)+1;
+      t.set(ref,{n, atualizadoEm:agora()});
+      return n;
+    });
+  }catch(e){ console.error('número do pedido', e); return Math.max(base, maior)+1; }
+}
+
+/* ── requisição acompanha o pedido ── */
 async function _reqGerarDoPedido(pedido){
   if(!pedido || !pedido.firestoreId){ console.warn('req: pedido sem id',pedido); return false; }
   if(!(pedido.itens||[]).length){ console.warn('req: pedido sem itens',pedido); return false; }
-  // evita duplicar: se já existe requisição desse pedido, não cria outra
-  if(requisicoes.some(r=>r.pedidoId===pedido.firestoreId)){ console.log('req: já existe para',pedido.firestoreId); return false; }
   const itens=(pedido.itens||[]).map(it=>({
     codigo:it.codigo||'', nome:it.nome||it.produto||'', qtd:it.qtd||0, unidade:it.unidade||'',
-    kg:it.kg||0, precoKg:it.precoKg||0, total:it.total||0, obs:'', ok:true
+    kg:it.kg||0, kgPorUnidade:it.kgPorUnidade||0, precoKg:it.precoKg||0, total:it.total||0, obs:'', rec:0
   }));
+  const ped=comprasPedidos.find(x=>x.firestoreId===pedido.firestoreId)||pedido;
+  const numero=ped.numero||pedido.numero||0;
+  const atual=(requisicoes||[]).find(r=>r.pedidoId===pedido.firestoreId && r.status!=='cancelado');
   try{
+    if(atual){
+      // já existe: sem recebimento lançado, passa a refletir o pedido de agora; com recebimento, não mexe
+      if(_cpTemRecebimento(atual)) return false;
+      await updateDoc(doc(db,'requisicoes',atual.firestoreId),{itens, previsaoEntrega:pedido.previsaoEntrega||'', fornecedorNome:pedido.fornecedorNome||'', numero, atualizadoEm:agora()});
+      return true;
+    }
     await addDoc(collection(db,'requisicoes'),{
-      pedidoId:pedido.firestoreId,
+      pedidoId:pedido.firestoreId, numero,
       fornecedorNome:pedido.fornecedorNome||'',
       previsaoEntrega:pedido.previsaoEntrega||'',
-      itens,
-      status:'pendente',
-      criadoEm:hoje(), criadoEm2:agora(),
-      geradoPor:_demAutor()
+      itens, status:'pendente',
+      criadoEm:hoje(), criadoEm2:agora(), geradoPor:_demAutor()
     });
     return true;
-  }catch(e){ console.error('gerar requisicao',e); alert('⚠ A compra foi confirmada, mas houve um erro ao gerar a requisição para o Rafael: '+e.message); return false; }
+  }catch(e){ console.error('gerar requisicao',e); alert('⚠ A compra foi confirmada, mas houve um erro ao gerar a requisição para o recebimento: '+e.message); return false; }
 }
+/* cancela a requisição ainda sem recebimento (pedido alterado ou cancelado) */
+async function _cpCancelarReq(pedidoId, motivo){
+  for(const r of (requisicoes||[]).filter(x=>x.pedidoId===pedidoId && x.status!=='cancelado' && !_cpTemRecebimento(x))){
+    await updateDoc(doc(db,'requisicoes',r.firestoreId),{status:'cancelado', canceladoEm:agora(), canceladoPor:_demAutor(), motivoCancel:motivo||''});
+    r.status='cancelado';
+  }
+}
+/* "Alterar o pedido": volta para o comprador. Só enquanto nada foi recebido. */
+async function compReabrir(){
+  if(!_compPedido.firestoreId) return;
+  const s=_cpSit(_compPedido);
+  if(s.k==='parcial' || s.k==='recebido'){ alert('Este pedido já tem recebimento lançado e não pode mais ser alterado.\n\nSe faltou algo, faça um pedido novo para o mesmo fornecedor.'); return; }
+  if(s.k==='receber' && !confirm('Alterar o pedido '+_cpNumero(_compPedido)+'?\n\nEle volta para “Aguardando comprador” e a requisição que está com o recebimento é cancelada. Ao confirmar a compra de novo, uma requisição nova é gerada com os itens certos.')) return;
+  try{
+    await _cpCancelarReq(_compPedido.firestoreId, 'pedido alterado');
+    await updateDoc(doc(db,'comprasPedidos',_compPedido.firestoreId),{status:'solicitado', reabertoEm:agora(), reabertoPor:_demAutor(), atualizadoEm:agora()});
+    _compPedido.status='solicitado'; renderCompraForn();
+  }catch(e){ alert('Erro: '+e.message); }
+}
+async function compCancelarPedido(){
+  if(!_compPedido.firestoreId) return;
+  const s=_cpSit(_compPedido);
+  if(s.k==='parcial' || s.k==='recebido'){ alert('Este pedido já tem recebimento lançado e não pode ser cancelado.'); return; }
+  const motivo=prompt('Cancelar o pedido '+_cpNumero(_compPedido)+' de '+(_compPedido.fornecedorNome||'')+'?\n\nEle sai dos pendentes e fica no histórico como cancelado.'+(s.k==='receber'?' A requisição do recebimento também é cancelada.':'')+'\n\nMotivo (opcional):','');
+  if(motivo===null) return;
+  try{
+    await _cpCancelarReq(_compPedido.firestoreId, 'pedido cancelado');
+    await updateDoc(doc(db,'comprasPedidos',_compPedido.firestoreId),{status:'cancelado', canceladoEm:agora(), canceladoPor:_demAutor(), motivoCancel:motivo.trim(), atualizadoEm:agora()});
+    goTo('s-compras'); renderCompras();
+  }catch(e){ alert('Erro: '+e.message); }
+}
+/* pedido novo, em branco, para um fornecedor — sem mexer nos outros pedidos dele */
+function compNovoPedidoDe(fornId){
+  _compFornSel=fornId; _compBusca=''; _compHistItem=null; _compAvisoVarios=null;
+  _compPedido={fornecedorId:fornId, fornecedorNome:(_compForn(fornId)||{}).nome||'', status:'solicitado', itens:[], semana:(typeof semanaAtual==='function'?semanaAtual():'')};
+  _compQtd={}; _compPreco={}; _compObs={};
+  _compCatalogoDo(fornId).forEach(m=>{ if(m.precoKg) _compPreco[m.firestoreId]=m.precoKg; });
+  goTo('s-compra-forn'); renderCompraForn();
+}
+async function compNovoPedido(){ if(_compFornSel) compNovoPedidoDe(_compFornSel); }
+Object.assign(window,{compReabrir, compCancelarPedido, compNovoPedidoDe, compNovoPedido});
 
-// card de uma requisição (usado nas duas telas)
+/* ── RECEBIMENTO com quantidade ── */
+function _reqSitTxt(r){ return r.status==='recebido'?(r.comFalta?'✓ Recebido · com falta':'✓ Recebido'):(r.status==='parcial'?'Recebido em parte':(r.status==='cancelado'?'Cancelada':'Pendente')); }
 function _reqCard(r, editavel){
-  const recebido = r.status==='recebido';
+  const fim=r.status==='recebido' || r.status==='cancelado';
   const itens=r.itens||[];
   const totalGeral=itens.reduce((s,it)=>s+(parseFloat(it.total)||0),0);
-  let h='<div class="card" style="margin-bottom:12px;border-left:4px solid '+(recebido?'var(--mc-verde)':'var(--mc-azul)')+';">'+
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">'+
-      '<div><div style="font-size:15px;font-weight:800;">'+(r.fornecedorNome||'Fornecedor')+'</div>'+
+  const cor=r.status==='recebido'?['#dcfce7','#166534']:(r.status==='parcial'?['#ffedd5','#9a3412']:['#fdf0b8','#7a5b00']);
+  const pedR=(comprasPedidos||[]).find(p=>p.firestoreId===r.pedidoId);
+  const num=r.numero?('#'+String(r.numero).padStart(4,'0')):(pedR?_cpNumero(pedR):'');      // requisição antiga: usa o número do pedido dela
+  let h='<div class="card" style="margin-bottom:12px;padding:14px;">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;">'+
+      '<div><div style="font-size:15px;font-weight:800;">'+(num?('<span style="color:var(--text-secondary);font-weight:700;">'+num+'</span> · '):'')+(r.fornecedorNome||'Fornecedor')+'</div>'+
         '<div style="font-size:11px;color:var(--text-secondary);">Gerada em '+(r.criadoEm||'')+(r.previsaoEntrega?' · Previsão: '+r.previsaoEntrega:'')+'</div></div>'+
-      '<span style="flex-shrink:0;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:'+(recebido?'rgba(22,163,74,.12)':'rgba(37,99,235,.12)')+';color:'+(recebido?'#16a34a':'#2563eb')+';">'+(recebido?'✓ Recebido':'Pendente')+'</span>'+
+      '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;background:'+cor[0]+';color:'+cor[1]+';white-space:nowrap;">'+_reqSitTxt(r)+'</span>'+
     '</div>';
-  // itens
   itens.forEach((it,idx)=>{
+    const ped=parseFloat(it.qtd)||0, rec=parseFloat(it.rec)||0, falta=Math.max(0,ped-rec);
     const temObs=it.obs&&it.obs.trim();
-    h+='<div style="border:1px solid '+(temObs?'#fde68a':'var(--border)')+';background:'+(temObs?'#fffbeb':'#fff')+';border-radius:8px;padding:8px 10px;margin-bottom:6px;">'+
-      '<div style="display:flex;justify-content:space-between;gap:8px;">'+
+    h+='<div style="padding:9px 0;border-top:1px solid var(--border);">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">'+
         '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;">'+(it.nome||it.codigo||'item')+'</div>'+
-          '<div style="font-size:11px;color:var(--text-secondary);">'+_reqQtdTxt(it)+(it.total?(' · R$ '+_fmtNum(it.total)):'')+'</div></div>'+
+          '<div style="font-size:11px;color:var(--text-secondary);">Pedido: '+_reqQtdTxt(it)+
+            (rec>0?(' · <b style="color:'+(falta>0?'#9a3412':'#166534')+';">recebido '+_fmtNum(rec)+' '+(it.unidade||'')+'</b>'+(falta>0?(' · faltam '+_fmtNum(falta)):'')):'')+'</div></div>'+
+        (editavel && !fim?'<div style="flex:0 0 108px;"><div style="font-size:9.5px;color:var(--text-muted);text-align:right;">chegou agora ('+(it.unidade||'un')+')</div>'+
+          '<input type="number" inputmode="decimal" min="0" step="any" id="req-in-'+r.firestoreId+'-'+idx+'" value="'+(falta>0?falta:0)+'" style="width:100%;text-align:right;font-size:16px;font-weight:700;padding:7px 8px;border-radius:8px;border:1.5px solid var(--mc-azul);"></div>':'')+
       '</div>';
-    if(editavel && !recebido){
+    if(editavel && !fim){
       h+='<input type="text" placeholder="Observação (se algo não bater)" value="'+(it.obs||'').replace(/"/g,'&quot;')+'" '+
         'onchange="_reqSetObs(\''+r.firestoreId+'\','+idx+',this.value)" '+
-        'style="width:100%;margin-top:6px;font-size:12px;padding:6px 8px;border:1px solid var(--border-md,#d1d5db);border-radius:6px;box-sizing:border-box;">';
+        'style="width:100%;margin-top:6px;font-size:13px;padding:7px 9px;border-radius:8px;border:1px solid var(--border);">';
     } else if(temObs){
-      h+='<div style="margin-top:6px;font-size:12px;color:#b45309;background:#fffbeb;border-radius:6px;padding:5px 8px;">⚠ '+it.obs+'</div>';
+      h+='<div style="font-size:11.5px;color:#9a3412;margin-top:4px;">⚠ '+it.obs+'</div>';
     }
     h+='</div>';
   });
-  h+='<div style="text-align:right;font-size:13px;font-weight:800;margin-top:4px;">Total: R$ '+_fmtNum(totalGeral)+'</div>';
-  if(editavel && !recebido){
-    h+='<button class="btn btn-verde" style="width:100%;margin-top:10px;" onclick="_reqConfirmarRecebimento(\''+r.firestoreId+'\')">✓ Confirmar recebimento</button>';
-  } else if(recebido){
-    h+='<div style="font-size:11px;color:var(--text-secondary);margin-top:8px;">Recebido em '+(r.recebidoEm||'')+(r.recebidoPor?(' por '+r.recebidoPor):'')+'</div>';
+  h+='<div style="text-align:right;font-size:12.5px;font-weight:700;padding-top:8px;border-top:1px solid var(--border);">Total do pedido: R$ '+_fmtNum(totalGeral)+'</div>';
+  // o que já chegou, entrega por entrega
+  if((r.recebimentos||[]).length){
+    h+='<div style="font-size:11px;color:var(--text-secondary);margin-top:8px;line-height:1.6;">'+r.recebimentos.map((x,i)=>'📦 '+(i+1)+'ª entrega · '+(x.em||'')+(x.por?(' · '+x.por):'')+(x.nf?(' · NF '+x.nf):'')).join('<br>')+'</div>';
   }
-  // botão excluir (protegido por senha do admin) — disponível nas duas telas
-  h+='<button onclick="_reqExcluir(\''+r.firestoreId+'\')" style="width:100%;margin-top:8px;background:none;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:7px;font-size:12px;font-weight:600;cursor:pointer;">🔒 Excluir requisição</button>';
+  if(editavel && !fim){
+    h+='<div style="display:flex;gap:8px;margin-top:10px;align-items:center;">'+
+      '<input type="text" id="req-nf-'+r.firestoreId+'" placeholder="Nº da nota (opcional)" style="flex:1;min-width:0;font-size:14px;padding:9px 10px;border-radius:8px;border:1px solid var(--border);">'+
+      '<button class="btn btn-verde" style="flex:0 0 auto;margin:0;padding:0 16px;height:42px;" onclick="_reqConfirmarRecebimento(\''+r.firestoreId+'\')">✓ Registrar recebimento</button></div>';
+  } else if(r.status==='recebido'){
+    h+='<div style="font-size:11px;color:var(--text-secondary);margin-top:8px;">Encerrado em '+(r.recebidoEm||'')+(r.recebidoPor?(' por '+r.recebidoPor):'')+(r.comFalta?' · <b style="color:#9a3412;">encerrado com falta</b>':'')+'</div>';
+  }
+  h+='<button onclick="_reqExcluir(\''+r.firestoreId+'\')" style="background:none;border:none;color:var(--text-muted);font-size:11px;margin-top:8px;cursor:pointer;font-family:inherit;">🔒 Excluir requisição</button>';
   h+='</div>';
   return h;
 }
+async function _reqConfirmarRecebimento(reqId){
+  const r=requisicoes.find(x=>x.firestoreId===reqId); if(!r) return;
+  const chegou=(r.itens||[]).map((it,idx)=>{ const el=document.getElementById('req-in-'+reqId+'-'+idx); return Math.max(0, parseFloat(String((el||{}).value||'0').replace(',','.'))||0); });
+  if(!chegou.some(v=>v>0) && !confirm('Você não informou nenhuma quantidade.\n\nContinuar mesmo assim? Na próxima tela você escolhe se o pedido ainda vai chegar ou se encerra com falta.')) return;
+  const itens=(r.itens||[]).map((it,idx)=>({...it, rec:(parseFloat(it.rec)||0)+chegou[idx]}));
+  const faltando=itens.filter(it=>(parseFloat(it.rec)||0) < (parseFloat(it.qtd)||0)-0.0001);
+  const nf=((document.getElementById('req-nf-'+reqId)||{}).value||'').trim();
+  const entrega={em:agora(), por:_demAutor(), nf, itens:chegou.map((q,i)=>({i,qtd:q})).filter(x=>x.qtd>0)};
+  const gravar=async(status, comFalta)=>{
+    const dados={itens, status, recebimentos:entrega.itens.length?[...(r.recebimentos||[]), entrega]:(r.recebimentos||[])};
+    if(status==='recebido'){ dados.recebidoEm=hoje(); dados.recebidoEm2=agora(); dados.recebidoPor=_demAutor(); dados.comFalta=!!comFalta; }
+    try{ await updateDoc(doc(db,'requisicoes',reqId), dados); Object.assign(r, dados); }
+    catch(e){ alert('Erro: '+e.message); return; }
+    const t=document.querySelector('.screen.active')?.id;
+    if(t==='s-req-rafael') renderReqRafael(); if(t==='s-req-admin') renderReqAdmin();
+    _reqAtualizarBadge();
+  };
+  if(!faltando.length){ await gravar('recebido', false); return; }
+  // faltou alguma coisa: o resto ainda vem, ou encerra com falta?
+  document.getElementById('req-falta')?.remove();
+  const ov=document.createElement('div'); ov.id='req-falta';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3400;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:440px;width:100%;padding:22px;">'+
+    '<div style="font-size:18px;font-weight:800;">Faltou chegar</div>'+
+    '<div style="font-size:13px;color:#475569;margin:8px 0 12px;line-height:1.6;">'+faltando.map(it=>'<b>'+(it.nome||it.codigo)+'</b>: recebido '+_fmtNum(it.rec)+' de '+_fmtNum(it.qtd)+' '+(it.unidade||'')).join('<br>')+'</div>'+
+    '<button id="req-falta-vem" class="btn btn-primary" style="width:100%;margin:0 0 8px;">📦 O resto ainda vai chegar</button>'+
+    '<button id="req-falta-fim" class="btn btn-secondary" style="width:100%;margin:0 0 8px;">Não vai chegar · encerrar com falta</button>'+
+    '<button id="req-falta-volta" style="width:100%;border:none;background:none;color:#64748b;font-family:inherit;font-size:13px;padding:8px;cursor:pointer;">Voltar sem registrar</button></div>';
+  document.body.appendChild(ov);
+  document.getElementById('req-falta-vem').onclick=async()=>{ ov.remove(); await gravar('parcial', false); };
+  document.getElementById('req-falta-fim').onclick=async()=>{ ov.remove(); await gravar('recebido', true); };
+  document.getElementById('req-falta-volta').onclick=()=>ov.remove();
+}
+Object.assign(window,{_reqConfirmarRecebimento});
+
+/* situação da entrega (usada pelo histórico e por outras telas) */
+function _compEntregaSit(p){
+  if(!p || !p.firestoreId) return {estado:'sem-req', txt:'sem requisição'};
+  const s=_cpSit(p);
+  if(s.k==='cancelado') return {estado:'cancelado', txt:'cancelado'};
+  if(s.k==='comprador') return {estado:'nao-pedido', txt:'ainda não confirmado'};
+  if(s.k==='recebido') return {estado:'entregue', txt:'entregue'+(s.req&&s.req.recebidoEm?(' em '+s.req.recebidoEm):'')+(s.comFalta?' (com falta)':'')};
+  return {estado:'falta', txt:s.k==='parcial'?'recebido em parte':'aguardando entrega', parcial:s.k==='parcial', prev:s.prev};
+}
+
+/* ── TELA INICIAL: a tabela de todos os pedidos ── */
+let _cpF={sit:'pend', forn:'', entrega:'', busca:'', lim:60};
+function cpFiltro(campo,v){ _cpF={..._cpF, [campo]:v, lim:60}; renderCompras();
+  if(campo==='busca'){ const i=document.getElementById('cp-busca'); if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} } } }
+function cpMais(){ _cpF.lim+=60; renderCompras(); }
+Object.assign(window,{cpFiltro, cpMais});
+function _cpCss(){
+  if(document.getElementById('cp-css')) return;
+  const st=document.createElement('style'); st.id='cp-css';
+  st.textContent=`
+.cp{--tx:#1f1f1c;--sub:#6f6e68;--mut:#a3a199;--bd:#e7e5de;--am:#f6c945;--esc:#2a2a27;
+  min-height:100%;box-sizing:border-box;padding:24px 26px 44px;color:var(--tx);font-family:inherit;
+  background:radial-gradient(900px 480px at 100% 0%,#fbf4d9 0%,transparent 60%),linear-gradient(180deg,#f4f2ec,#ecebe5);}
+.cp *{box-sizing:border-box;}
+.cp-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px;}
+.cp-top h1{margin:0;font-size:34px;font-weight:400;letter-spacing:-.02em;color:var(--tx);flex:1;min-width:180px;}
+.cp-b{border:1px solid var(--bd);background:#fff;color:var(--tx);border-radius:99px;height:40px;padding:0 16px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;}
+.cp-b:hover{border-color:#cfcdc4;}
+.cp-b.esc{background:var(--esc);border-color:var(--esc);color:#fff;}
+.cp-b.am{background:var(--am);border-color:var(--am);color:#3b2f00;}
+.cp-b:focus-visible,.cp-seg:focus-visible,.cp-sel:focus-visible,.cp-lin:focus-visible{outline:2px solid var(--esc);outline-offset:2px;}
+.cp-faixa{display:flex;gap:8px;margin-bottom:18px;align-items:flex-end;overflow-x:auto;padding:2px 2px 4px;}
+.cp-seg{flex:1 1 0;min-width:190px;border:none;background:none;padding:0;text-align:left;cursor:pointer;font-family:inherit;color:inherit;}
+.cp-seg .r{font-size:13.5px;font-weight:600;color:var(--tx);margin:0 0 7px 4px;white-space:nowrap;}
+.cp-seg .p{height:42px;border-radius:99px;display:flex;align-items:center;padding:0 16px;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;border:1px solid transparent;}
+.cp-seg.on .p{box-shadow:0 0 0 2px var(--esc);}
+.cp-seg.vz .p{background:repeating-linear-gradient(135deg,#eceae3 0 6px,#f6f5f0 6px 12px)!important;color:var(--mut)!important;}
+.cp-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.cp-sel{appearance:none;-webkit-appearance:none;border:1px solid var(--bd)!important;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236f6e68' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 14px center!important;border-radius:99px!important;height:40px!important;padding:0 34px 0 16px!important;font-family:inherit;font-size:13px!important;font-weight:600;color:var(--tx)!important;cursor:pointer;width:auto!important;max-width:230px;}
+.cp-busca{border:1px solid var(--bd)!important;background:#fff!important;border-radius:99px!important;height:40px!important;padding:0 16px!important;font-family:inherit;font-size:14px!important;color:var(--tx)!important;flex:1 1 200px;min-width:160px;max-width:340px;width:auto!important;}
+.cp-card{background:#fff;border-radius:26px;box-shadow:0 1px 2px rgba(31,31,28,.04),0 14px 34px rgba(31,31,28,.06);overflow:hidden;}
+.cp-tw{overflow-x:auto;}
+.cp-tab{width:100%;border-collapse:collapse;font-size:13.5px;}
+.cp-tab th{text-align:left;font-size:11.5px;font-weight:600;color:var(--mut);padding:16px 14px 12px;white-space:nowrap;border-bottom:1px solid var(--bd);}
+.cp-tab td{padding:13px 14px;border-bottom:1px solid #f1efe9;vertical-align:middle;white-space:nowrap;}
+.cp-tab tr:last-child td{border-bottom:none;}
+.cp-tab th:first-child,.cp-tab td:first-child{padding-left:24px;} .cp-tab th:last-child,.cp-tab td:last-child{padding-right:22px;}
+.cp-lin{cursor:pointer;} .cp-lin:hover td{background:#faf8f1;} .cp-lin.dest td{background:#fdf6d8;} .cp-lin.dest:hover td{background:#fbf0c2;}
+.cp-lin.apag td{color:var(--mut);} 
+.cp-av{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex:0 0 32px;}
+.cp-pil{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:4px 11px;font-size:12px;font-weight:700;white-space:nowrap;}
+.cp-pil i{width:7px;height:7px;border-radius:50%;display:inline-block;}
+.cp-tag{display:inline-block;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:700;margin-left:6px;}
+.cp-num{font-variant-numeric:tabular-nums;color:var(--sub);font-weight:600;}
+.cp-vazio{text-align:center;color:var(--sub);padding:46px 16px;font-size:14px;}
+@media (max-width:900px){ .cp{padding:16px 12px 36px;} .cp-top h1{font-size:26px;} .cp-seg{flex:0 0 190px;} .cp-oc{display:none;} .cp-busca{max-width:none;font-size:16px!important;} }
+`;
+  document.head.appendChild(st);
+}
+function renderCompras(){
+  const el=document.getElementById('comp-hub-content'); if(!el) return;
+  _cpCss(); el.style.padding='0'; el.style.background='#ecebe5';
+  if(!comprasFornecedores.length){
+    el.innerHTML='<div class="cp"><div class="cp-card cp-vazio"><div style="font-size:17px;font-weight:700;color:#1f1f1c;margin-bottom:6px;">Nenhum fornecedor ainda</div>'+
+      'Cadastre os fornecedores e o catálogo para começar a pedir.<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:16px;">'+
+      '<button class="cp-b esc" onclick="goTo(\'s-compras-fornlist\')">Cadastrar fornecedores</button><button class="cp-b" onclick="compCarregarCatalogo()">Carregar catálogo padrão</button></div></div></div>';
+    return;
+  }
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const linhas=(comprasPedidos||[]).filter(p=>(p.itens||[]).length || p.firestoreId).map(p=>({p, s:_cpSit(p)}));
+  const cont={comprador:0, receber:0, parcial:0, recebido:0, cancelado:0}; linhas.forEach(x=>cont[x.s.k]++);
+  const atrasados=linhas.filter(x=>x.s.atraso>0).length;
+  const F=_cpF, q=_normNome(F.busca||'').trim();
+  const hojeI=new Date(); hojeI.setHours(0,0,0,0);
+  const fimSemana=(7-((hojeI.getDay()+6)%7))-1;                      // dias até domingo
+  const passaEntrega=x=>{
+    if(!F.entrega) return true;
+    const pend=x.s.k==='receber'||x.s.k==='parcial';
+    if(F.entrega==='atrasados') return x.s.atraso>0;
+    if(F.entrega==='semprev') return pend && !x.s.prev;
+    if(!pend || x.s.emDias===null) return false;
+    if(F.entrega==='hoje') return x.s.emDias===0;
+    if(F.entrega==='semana') return x.s.emDias<=fimSemana;
+    if(F.entrega==='proxima') return x.s.emDias>fimSemana && x.s.emDias<=fimSemana+7;
+    return true;
+  };
+  const vis=linhas.filter(x=>
+      (F.sit==='todos' || (F.sit==='pend' ? (x.s.k==='comprador'||x.s.k==='receber'||x.s.k==='parcial') : x.s.k===F.sit)) &&
+      (!F.forn || x.p.fornecedorId===F.forn) && passaEntrega(x) &&
+      (!q || _normNome((x.p.fornecedorNome||'')+' '+_cpNumero(x.p)+' '+(x.p.itens||[]).map(i=>i.nome).join(' ')+' '+(x.p.solicitadoPor||'')).includes(q)))
+    .sort((a,b)=>(a.s.ord-b.s.ord) || (b.s.atraso-a.s.atraso) || ((b.p.criadoEm2||0)-(a.p.criadoEm2||0)));
+  const pend=cont.comprador+cont.receber+cont.parcial;
+
+  const seg=(k,rot,n,bg,cor)=>'<button class="cp-seg'+(F.sit===k?' on':'')+(n?'':' vz')+'" onclick="cpFiltro(\'sit\',\''+(F.sit===k?'pend':k)+'\')" aria-pressed="'+(F.sit===k)+'">'+
+    '<div class="r">'+rot+'</div><div class="p" style="background:'+bg+';color:'+cor+';">'+n+'</div></button>';
+  const fornOpc=comprasFornecedores.slice().sort((a,b)=>_normNome(a.nome).localeCompare(_normNome(b.nome)))
+    .filter(f=>linhas.some(x=>x.p.fornecedorId===f.firestoreId));
+  let h='<div class="cp"><div class="cp-top"><h1>Pedidos</h1>'+
+      '<button class="cp-b" onclick="goTo(\'s-req-admin\');renderReqAdmin()" title="O que o recebimento já conferiu">📥 Recebimentos</button>'+
+      '<button class="cp-b" onclick="compAbrirConfig()" title="Fornecedores e catálogo">⚙ Cadastros</button>'+
+      '<button class="cp-b am" onclick="compEscolherFornecedor()">＋ Novo pedido</button></div>'+
+    '<div class="cp-faixa">'+
+      seg('comprador','Aguardando comprador',cont.comprador,'#f6c945','#3b2f00')+
+      seg('receber','Aguardando recebimento',cont.receber,'#2a2a27','#fff')+
+      seg('parcial','Recebido em parte',cont.parcial,'#fdba74','#7c2d12')+
+      seg('recebido','Recebidos',cont.recebido,'#fff','#166534')+
+      seg('cancelado','Cancelados',cont.cancelado,'#fff','#6b7280')+
+    '</div>'+
+    '<div class="cp-filtros">'+
+      '<button class="cp-b'+(F.sit==='pend'?' esc':'')+'" onclick="cpFiltro(\'sit\',\'pend\')">Pendentes · '+pend+'</button>'+
+      '<button class="cp-b'+(F.sit==='todos'?' esc':'')+'" onclick="cpFiltro(\'sit\',\'todos\')">Todos · '+linhas.length+'</button>'+
+      '<select class="cp-sel" aria-label="Fornecedor" onchange="cpFiltro(\'forn\',this.value)"><option value="">Todos os fornecedores</option>'+fornOpc.map(f=>'<option value="'+esc(f.firestoreId)+'"'+(F.forn===f.firestoreId?' selected':'')+'>'+esc(f.nome)+'</option>').join('')+'</select>'+
+      '<select class="cp-sel" aria-label="Situação" onchange="cpFiltro(\'sit\',this.value)">'+[['pend','Situação: pendentes'],['todos','Situação: todas'],['comprador','Aguardando comprador'],['receber','Aguardando recebimento'],['parcial','Recebido em parte'],['recebido','Recebidos'],['cancelado','Cancelados']].map(([v,t])=>'<option value="'+v+'"'+(F.sit===v?' selected':'')+'>'+t+'</option>').join('')+'</select>'+
+      '<select class="cp-sel" aria-label="Entrega" onchange="cpFiltro(\'entrega\',this.value)">'+[['','Entrega: qualquer data'],['atrasados','Atrasados'+(atrasados?(' ('+atrasados+')'):'')],['hoje','Chega hoje'],['semana','Até o fim desta semana'],['proxima','Semana que vem'],['semprev','Sem previsão']].map(([v,t])=>'<option value="'+v+'"'+(F.entrega===v?' selected':'')+'>'+t+'</option>').join('')+'</select>'+
+      '<input class="cp-busca" id="cp-busca" type="search" placeholder="Buscar fornecedor, item ou nº" value="'+esc(F.busca)+'" oninput="cpFiltro(\'busca\',this.value)">'+
+    '</div>';
+
+  const CORES=['#b45309','#0f766e','#1d4ed8','#7c3aed','#be185d','#15803d','#b91c1c','#475569'];
+  const corDe=n=>{ let t=0; for(const c of String(n||'')) t=(t*31+c.charCodeAt(0))>>>0; return CORES[t%CORES.length]; };
+  const inic=n=>String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+  const corpo=vis.slice(0,F.lim).map(({p,s})=>{
+    const itens=p.itens||[], kg=Number(p.totalKg)||itens.reduce((t,i)=>t+(Number(i.kg)||0),0), rs=Number(p.totalRS)||itens.reduce((t,i)=>t+(Number(i.total)||0),0);
+    const entrega=(s.k==='comprador'||s.k==='cancelado') ? '<span style="color:var(--mut);">—</span>'
+      : (s.prev ? (esc(s.prev)+(s.atraso?('<span class="cp-tag" style="background:#fee2e2;color:#b91c1c;">atrasado '+s.atraso+' d</span>'):(s.emDias!==null&&s.k!=='recebido'?('<span class="cp-tag" style="background:#f1efe9;color:#6f6e68;">'+(s.emDias===0?'hoje':(s.emDias===1?'amanhã':('em '+s.emDias+' d')))+'</span>'):'')))
+                : '<span style="color:var(--mut);">sem previsão</span>');
+    return '<tr class="cp-lin'+(s.k==='comprador'?' dest':'')+(s.k==='cancelado'?' apag':'')+'" tabindex="0" onclick="compAbrirPedidoId(\''+escapeJsStr(p.firestoreId)+'\')" onkeydown="if(event.key===\'Enter\')compAbrirPedidoId(\''+escapeJsStr(p.firestoreId)+'\')">'+
+      '<td class="cp-num">'+_cpNumero(p)+'</td>'+
+      '<td><div style="display:flex;align-items:center;gap:10px;"><span class="cp-av" style="background:'+corDe(p.fornecedorNome)+';">'+esc(inic(p.fornecedorNome))+'</span><b style="font-weight:600;">'+esc(p.fornecedorNome||'—')+'</b></div></td>'+
+      '<td class="cp-oc" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;" title="'+esc(itens.map(i=>i.nome).join(', '))+'"><b style="font-weight:600;">'+itens.length+'</b> <span style="color:var(--sub);">'+(itens.length===1?'item':'itens')+' · '+esc(itens.slice(0,2).map(i=>i.nome).join(', '))+(itens.length>2?'…':'')+'</span></td>'+
+      '<td class="cp-oc" style="text-align:right;font-variant-numeric:tabular-nums;">'+_fmtKg(kg)+' kg</td>'+
+      '<td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">'+_fmtRS(rs)+'</td>'+
+      '<td class="cp-oc">'+esc(p.criadoEm||'—')+(p.solicitadoPor?(' <span style="color:var(--mut);">· '+esc(p.solicitadoPor)+'</span>'):'')+'</td>'+
+      '<td>'+entrega+'</td>'+
+      '<td><span class="cp-pil" style="background:'+s.bg+';color:'+s.cor+';">'+(s.k==='recebido'?'✓':'<i style="background:'+s.pt+';"></i>')+' '+s.rot+(s.comFalta?' · com falta':'')+'</span></td>'+
+      '<td style="color:var(--mut);font-size:18px;text-align:right;">›</td></tr>';
+  }).join('');
+  h+='<div class="cp-card">'+(vis.length?
+      '<div class="cp-tw"><table class="cp-tab"><thead><tr><th>Nº</th><th>Fornecedor</th><th class="cp-oc">Itens</th><th class="cp-oc" style="text-align:right;">Peso</th><th style="text-align:right;">Valor</th><th class="cp-oc">Pedido em</th><th>Entrega</th><th>Situação</th><th></th></tr></thead><tbody>'+corpo+'</tbody></table></div>'+
+      (vis.length>F.lim?'<div style="text-align:center;padding:14px;border-top:1px solid #f1efe9;"><button class="cp-b" onclick="cpMais()">Mostrar mais '+Math.min(60,vis.length-F.lim)+' de '+(vis.length-F.lim)+'</button></div>':'')
+      :'<div class="cp-vazio">'+(linhas.length?(F.sit==='pend'&&!F.forn&&!F.entrega&&!q?'Nenhum pedido pendente. 👍<div style="margin-top:12px;"><button class="cp-b" onclick="cpFiltro(\'sit\',\'todos\')">Ver todos os pedidos</button></div>':'Nenhum pedido com esses filtros.'):'Nenhum pedido ainda. Comece em “＋ Novo pedido”.')+'</div>')+'</div>';
+  h+='<div style="font-size:11.5px;color:var(--mut);margin-top:12px;line-height:1.6;">Pendentes primeiro: aguardando o comprador, depois o que está para chegar (atrasados em cima). O número é o da requisição interna — o mesmo que aparece para o recebimento.</div></div>';
+  el.innerHTML=h;
+}
+window.renderCompras=renderCompras;
+
+// card de uma requisição (usado nas duas telas)
 function _reqQtdTxt(it){
   if(it.kg&&parseFloat(it.kg)>0) return _fmtNum(it.qtd)+' '+(it.unidade||'')+' ('+_fmtNum(it.kg)+' kg)';
   return _fmtNum(it.qtd)+' '+(it.unidade||'');
@@ -19881,17 +20191,6 @@ async function _reqSetObs(reqId, idx, valor){
 }
 window._reqSetObs=_reqSetObs;
 
-async function _reqConfirmarRecebimento(reqId){
-  const r=requisicoes.find(x=>x.firestoreId===reqId); if(!r) return;
-  const comObs=(r.itens||[]).filter(it=>it.obs&&it.obs.trim()).length;
-  let msg='Confirmar o recebimento desta requisição de '+(r.fornecedorNome||'')+'?';
-  if(comObs) msg+='\n\n⚠ '+comObs+' item(ns) com observação de divergência.';
-  if(!confirm(msg)) return;
-  try{
-    await updateDoc(doc(db,'requisicoes',reqId),{status:'recebido', recebidoEm:hoje(), recebidoEm2:agora(), recebidoPor:_demAutor()});
-    alert('✓ Recebimento confirmado!');
-  }catch(e){ alert('Erro: '+e.message); }
-}
 window._reqConfirmarRecebimento=_reqConfirmarRecebimento;
 
 // Exclui uma requisição — protegido pela senha do admin (evita exclusão acidental do Rafael)
@@ -20139,24 +20438,6 @@ window.setCompAba=setCompAba;
 
 /* Situação da ENTREGA de um pedido: ela é marcada na requisição, não no
    pedido, por isso o status sozinho não mostra o que falta chegar. */
-function _compEntregaSit(p){
-  if(!p || !p.firestoreId) return {estado:'sem-req', txt:'sem requisição'};
-  if(p.status==='cancelado') return {estado:'cancelado', txt:'cancelado'};
-  const reqs=(requisicoes||[]).filter(r=>r.pedidoId===p.firestoreId);
-  if(!reqs.length){
-    return (p.status==='solicitado'||p.status==='rascunho')
-      ? {estado:'nao-pedido', txt:'ainda não confirmado'}
-      : {estado:'falta', txt:'aguardando entrega'};
-  }
-  const receb=reqs.filter(r=>r.status==='recebido');
-  if(receb.length===reqs.length){
-    const u=receb.slice().sort((a,b)=>String(b.recebidoEm2||'').localeCompare(String(a.recebidoEm2||'')))[0];
-    return {estado:'entregue', txt:'entregue'+(u&&u.recebidoEm?(' em '+u.recebidoEm):'')};
-  }
-  const pend=reqs.filter(r=>r.status!=='recebido'&&r.status!=='cancelado');
-  return {estado:'falta', txt:'falta entregar', parcial:receb.length>0, total:reqs.length, recebidas:receb.length,
-          prev:(pend[0]||{}).previsaoEntrega||p.previsaoEntrega||''};
-}
 window._compEntregaSit=_compEntregaSit;
 
 function _compDiasAteEntrega(f){
@@ -20191,43 +20472,6 @@ function _compAguardando(){
     });
 }
 
-function renderCompras(){
-  const el=document.getElementById('comp-hub-content'); if(!el) return;
-
-  if(!comprasFornecedores.length){
-    el.innerHTML='<div class="card" style="text-align:center;padding:26px;">'+
-      '<div style="font-size:15px;font-weight:700;margin-bottom:6px;">Nenhum fornecedor ainda</div>'+
-      '<div style="font-size:13px;color:var(--text-secondary);margin-bottom:14px;">Cadastre os fornecedores e o catálogo para começar a pedir.</div>'+
-      '<button class="btn btn-primary" style="width:100%;" onclick="goTo(\'s-compras-fornlist\')">🏢 Cadastrar fornecedores</button>'+
-      '<button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="compCarregarCatalogo()">📦 Carregar catálogo padrão</button></div>';
-    return;
-  }
-
-  const aguard=_compAguardando();
-  const atrasados=aguard.filter(x=>x.atraso!==null && x.atraso>0);
-  const emAberto=comprasFornecedores.filter(f=>_compPedidoEmMontagem(f.firestoreId)).length;
-
-  const aba=(v,emoji,txt,n,cor)=>'<button onclick="setCompAba(\''+v+'\')" style="flex:1;min-width:104px;background:'+(_compAba===v?(cor||'var(--mc-azul,#2563eb)'):'#fff')+';color:'+(_compAba===v?'#fff':'var(--text-secondary)')+';border:1px solid '+(_compAba===v?(cor||'var(--mc-azul,#2563eb)'):'var(--border)')+';border-radius:10px;padding:10px 8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">'+
-    emoji+' '+txt+(n?('<span style="display:inline-block;background:'+(_compAba===v?'rgba(255,255,255,.28)':(cor||'var(--mc-azul,#2563eb)'))+';color:#fff;border-radius:99px;padding:0 7px;margin-left:5px;font-size:11px;">'+n+'</span>'):'')+'</button>';
-
-  let html='<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">'+
-    aba('pedir','🛒','Pedir',emAberto)+
-    aba('aguardando','🚚','Chegando',aguard.length, atrasados.length?'#dc2626':'#d97706')+
-    aba('historico','📚','Histórico',0)+
-  '</div>';
-
-  if(atrasados.length && _compAba!=='aguardando'){
-    html+='<button onclick="setCompAba(\'aguardando\')" class="card" style="display:flex;align-items:center;gap:10px;width:100%;margin-bottom:12px;cursor:pointer;border:2px solid #dc2626;background:#fef2f2;text-align:left;font-family:inherit;">'+
-      '<span style="font-size:22px;">⏰</span>'+
-      '<span style="flex:1;min-width:0;font-size:13px;font-weight:800;color:#b91c1c;">'+atrasados.length+' pedido(s) com entrega atrasada</span>'+
-      '<span style="font-size:18px;color:#dc2626;">›</span></button>';
-  }
-
-  if(_compAba==='pedir')      html+=_compAbaPedir();
-  if(_compAba==='aguardando') html+=_compAbaAguardando(aguard);
-  if(_compAba==='historico')  html+=_compAbaHistorico();
-  el.innerHTML=html;
-}
 
 /* ── ABA PEDIR ──────────────────────────────────────────────────── */
 function _compAbaPedir(){
@@ -20297,7 +20541,7 @@ function compEscolherFornecedor(){
   ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3200;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.innerHTML='<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:90vh;display:flex;flex-direction:column;">'+
     '<div style="padding:18px 18px 10px;border-bottom:1px solid var(--border);">'+
-      '<div style="font-size:17px;font-weight:800;">+ Novo pedido</div>'+
+      '<div style="font-size:17px;font-weight:800;">＋ Novo pedido</div>'+
       '<div style="font-size:12px;color:var(--text-secondary);margin-top:3px;">Escolha o fornecedor. Quem entrega antes aparece primeiro.</div>'+
       '<input type="text" id="comp-novo-busca" oninput="compNovoFiltrar(this.value)" placeholder="🔍 Buscar fornecedor" autocomplete="off" style="width:100%;padding:12px;min-height:46px;border:1px solid var(--border-md,#d1d5db);border-radius:9px;font-size:16px;font-family:inherit;box-sizing:border-box;margin-top:10px;"></div>'+
     '<div id="comp-novo-lista" style="flex:1;overflow-y:auto;padding:10px 16px;"></div>'+
@@ -20320,12 +20564,12 @@ function compNovoFiltrar(v){
   if(!lista.length){ box.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-secondary);font-size:13px;">Nenhum fornecedor encontrado.</div>'; return; }
   box.innerHTML=lista.map(({f,dias,ped})=>{
     const urgente=dias<=1;
-    return '<button onclick="document.getElementById(\'comp-novo-modal\').remove();compAbrirPedido(\''+escapeJsStr(f.firestoreId)+'\')" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid '+(urgente?'#d97706':'var(--border)')+';border-radius:10px;padding:11px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit;">'+
+    return '<button onclick="document.getElementById(\'comp-novo-modal\').remove();compNovoPedidoDe(\''+escapeJsStr(f.firestoreId)+'\')" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid '+(urgente?'#d97706':'var(--border)')+';border-radius:10px;padding:11px 12px;margin-bottom:6px;cursor:pointer;font-family:inherit;">'+
       '<span style="flex:1;min-width:0;">'+
         '<span style="display:block;font-size:14px;font-weight:700;">'+f.nome+'</span>'+
         '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:1px;">'+
           (f.diaEntrega?('📅 '+f.diaEntrega+(dias<90?(' · '+(dias<=0?'hoje':(dias===1?'amanhã':'em '+dias+' dias'))):'')):'sem dia de entrega')+
-          (ped?' · <strong style="color:#d97706;">já tem pedido em montagem</strong>':'')+'</span></span>'+
+          (()=>{ const n=_compPedidosAtivosDo(f.firestoreId).length; return n?(' · <strong style="color:#d97706;">'+n+' pedido(s) em aberto</strong>'):''; })()+'</span></span>'+
       '<span style="font-size:18px;color:var(--text-muted);">›</span></button>';
   }).join('');
 }
@@ -20531,27 +20775,6 @@ function compCopiarUltimo(){
 window.compCopiarUltimo=compCopiarUltimo;
 
 // Arquiva o pedido atual (manda pro histórico) e abre um novo em branco da semana atual
-async function compNovoPedido(){
-  const temItens=(_compPedido.itens||[]).length>0 || Object.values(_compQtd).some(v=>parseFloat(v)>0);
-  const msg = temItens
-    ? 'Arquivar o pedido atual (vai para o histórico) e começar um pedido NOVO em branco?'
-    : 'Começar um pedido novo em branco?';
-  if(!confirm(msg)) return;
-  // arquiva o pedido atual se ele já existe no Firebase e não está finalizado
-  if(_compPedido.firestoreId){
-    const st=_compPedido.status||'solicitado';
-    if(st!=='oc_gerada' && st!=='recebido' && st!=='cancelado'){
-      try{
-        await updateDoc(doc(db,'comprasPedidos',_compPedido.firestoreId), {status:'arquivado', arquivadoEm:agora(), arquivadoData:hoje(), arquivadoPor:_demAutor()});
-      }catch(e){ alert('Erro ao arquivar: '+e.message); return; }
-    }
-  }
-  // abre um novo em branco da semana atual
-  _compPedido = {fornecedorId:_compFornSel, fornecedorNome:(_compForn(_compFornSel)||{}).nome||'', status:'solicitado', itens:[], semana:(typeof semanaAtual==='function'?semanaAtual():'')};
-  _compQtd={}; _compPreco={}; _compObs={}; _compBusca=''; _compHistItem=null;
-  _compCatalogoDo(_compFornSel).forEach(m=>{ const k=m.firestoreId; if(m.precoKg) _compPreco[k]=m.precoKg; });
-  renderCompraForn();
-}
 window.compNovoPedido=compNovoPedido;
 function compFornEditarAtual(){ if(_compFornSel) editarCompForn(_compFornSel); }
 function renderCompraForn(){
@@ -20569,7 +20792,7 @@ function renderCompraForn(){
   const el=document.getElementById('comp-forn-content'); if(!el) return;
   const f=_compForn(_compFornSel); if(!f){ el.innerHTML='<div class="empty">Fornecedor não encontrado.</div>'; return; }
   const st=_compPedido.status||'solicitado'; const si=_compStatusInfo(st);
-  const bloqueado = (st==='oc_gerada'||st==='recebido');
+  const bloqueado = _cpTravado(st);
   const semLbl = (_compPedido.semana && typeof semanaLabel==='function')?semanaLabel(_compPedido.semana):'';
   let html=_avisoVarios;
   // cabeçalho do fornecedor
@@ -20579,10 +20802,13 @@ function renderCompraForn(){
     '<div style="font-size:11px;color:var(--text-secondary);margin-top:3px;">'+([f.diaEntrega?'📅 '+f.diaEntrega:'', f.vendedor?'👤 '+f.vendedor:'', f.contato?'📞 '+f.contato:'', f.tempoMedioEntrega?'⏱ '+f.tempoMedioEntrega:''].filter(Boolean).join(' · ')||'sem dados de contato')+'</div></div>'+
     '<button class="btn btn-secondary" style="font-size:12px;padding:6px 10px;white-space:nowrap;" onclick="compFornEditarAtual()">✏️ Editar</button>'+
     '</div></div>';
-  // status + linha do tempo
-  html+='<div style="margin-bottom:10px;padding:8px 12px;border-radius:10px;background:'+si.bg+';border:1px solid '+si.cor+';">'+
+  // número, situação e linha do tempo
+  const _sitP=_cpSit(_compPedido);
+  html+='<div style="margin-bottom:10px;padding:10px 12px;border-radius:12px;background:#fff;border:1px solid var(--border);">'+
     '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'+
-    '<span style="font-size:13px;font-weight:700;color:'+si.cor+';">'+si.emoji+' '+si.label+'</span>'+
+    '<span style="font-size:14px;font-weight:800;">Pedido '+_cpNumero(_compPedido)+'</span>'+
+    '<span style="font-size:12px;font-weight:700;border-radius:99px;padding:3px 10px;background:'+_sitP.bg+';color:'+_sitP.cor+';">'+(_sitP.k==='recebido'?'✓ ':'')+_sitP.rot+(_sitP.comFalta?' · com falta':'')+'</span>'+
+    (_sitP.atraso?'<span style="font-size:11px;font-weight:700;border-radius:99px;padding:3px 9px;background:#fee2e2;color:#b91c1c;">atrasado '+_sitP.atraso+' d</span>':'')+
     (semLbl?'<span style="font-size:10px;color:var(--text-secondary);">· '+semLbl+'</span>':'')+
     '</div>'+
     '<div style="font-size:10px;color:var(--text-secondary);margin-top:3px;">'+
@@ -20591,14 +20817,24 @@ function renderCompraForn(){
     (_compPedido.ocEm?' · 📄 OC gerada '+_compPedido.ocEm+(_compPedido.ocPor?' por '+_compPedido.ocPor:''):'')+
     '</div>'+
     ((_compPedido.previsaoEntrega||st==='confirmado'||st==='oc_gerada')?'<div style="font-size:12px;font-weight:700;color:var(--mc-verde);margin-top:5px;">🚚 Previsão de entrega: '+(_compPedido.previsaoEntrega||'— não definida')+(st!=='oc_gerada'?' <span onclick="compEditarPrevisao()" style="color:var(--mc-azul);font-weight:500;cursor:pointer;text-decoration:underline;font-size:11px;">editar</span>':'')+'</div>':'')+
-    (st==='confirmado'?'<div style="font-size:11px;color:var(--mc-azul);font-weight:600;margin-top:4px;">👉 Comprador deu OK. Gere a ordem de compra e confirme abaixo.</div>':'')+
+    (_sitP.k==='receber'?'<div style="font-size:11.5px;color:#1f2937;font-weight:600;margin-top:4px;">Compra confirmada. A requisição '+_cpNumero(_compPedido)+' está com o recebimento.</div>':'')+
+    (_compPedido.status==='cancelado'?'<div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Cancelado'+(_compPedido.canceladoEm?(' em '+_compPedido.canceladoEm):'')+(_compPedido.canceladoPor?(' por '+_compPedido.canceladoPor):'')+(_compPedido.motivoCancel?(' · '+_compPedido.motivoCancel):'')+'</div>':'')+
+    (_compPedido.status==='arquivado'?'<div style="font-size:11.5px;color:#6b7280;margin-top:4px;">Arquivado pelo processo antigo'+(_compPedido.arquivadoData?(' em '+_compPedido.arquivadoData):'')+'.</div>':'')+
     (st==='solicitado'&&_compPedido.firestoreId?'<div style="font-size:12px;color:var(--mc-verde);font-weight:700;margin-top:5px;background:rgba(22,163,74,.10);border-radius:8px;padding:6px 10px;">✅ Solicitação feita! Aguardando o comprador confirmar com o vendedor.</div>':'')+
     (st==='solicitado'&&!_compPedido.firestoreId?'<div style="font-size:11px;color:#d97706;font-weight:600;margin-top:4px;">👉 Monte o pedido e clique em "Fazer solicitação".</div>':'')+
     '</div>';
-  // botão "Novo pedido" — aparece quando há um pedido aberto salvo com itens
-  if(_compPedido.firestoreId && !bloqueado && (_compPedido.itens||[]).length>0){
-    html+='<button class="btn btn-secondary" style="width:100%;margin-bottom:10px;border:1px solid var(--mc-azul);color:var(--mc-azul);font-weight:700;" onclick="compNovoPedido()">🆕 Novo pedido (arquivar o atual)</button>';
-  }
+  // o que o recebimento já lançou (quantidade por item, entregas e nota)
+  { const rq=_sitP.req;
+    if(rq && _cpTemRecebimento(rq)){
+      html+='<div class="card" style="margin-bottom:10px;padding:12px 14px;border-left:4px solid '+(rq.status==='recebido'&&!rq.comFalta?'#16a34a':'#ea580c')+';">'+
+        '<div style="font-size:13px;font-weight:800;margin-bottom:6px;">📥 Recebimento</div>'+
+        (rq.itens||[]).map(it=>{ const ped=parseFloat(it.qtd)||0, rec=parseFloat(it.rec)||0, ok=rec>=ped-0.0001;
+          return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0;border-top:1px solid var(--border);"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(it.nome||it.codigo)+'</span>'+
+            '<span style="white-space:nowrap;font-weight:700;color:'+(ok?'#166534':'#9a3412')+';">'+_fmtNum(rec)+' de '+_fmtNum(ped)+' '+(it.unidade||'')+(ok?' ✓':'')+'</span></div>'+
+            (it.obs&&it.obs.trim()?'<div style="font-size:11.5px;color:#9a3412;padding-bottom:3px;">⚠ '+it.obs+'</div>':''); }).join('')+
+        ((rq.recebimentos||[]).length?'<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;line-height:1.6;">'+rq.recebimentos.map((x,i)=>(i+1)+'ª entrega · '+(x.em||'')+(x.por?(' · '+x.por):'')+(x.nf?(' · NF '+x.nf):'')).join('<br>')+'</div>':'')+
+      '</div>';
+    } }
   // copiar último (quando pedido novo/vazio)
   if(!bloqueado && !_compPedido.firestoreId){
     html+='<button class="btn btn-secondary" style="width:100%;margin-bottom:10px;" onclick="compCopiarUltimo()">📋 Copiar quantidades do último pedido</button>';
@@ -20619,7 +20855,7 @@ function compBuscaSet(v){ _compBusca=v; compRenderLista(); }
 window.compBuscaSet=compBuscaSet;
 function compRenderLista(){
   const cont=document.getElementById('comp-lista'); if(!cont) return;
-  const st=_compPedido.status||'solicitado'; const bloqueado=(st==='oc_gerada'||st==='recebido');
+  const st=_compPedido.status||'solicitado'; const bloqueado=_cpTravado(st);
   let cat=_compCatalogoDo(_compFornSel);
   if(bloqueado){ cat=cat.filter(m=>(parseFloat(_compQtd[m.firestoreId])||0)>0); } // requisição mostra só o pedido
   if(_compBusca){ const q=_normNome(_compBusca); cat=cat.filter(m=>_normNome(m.nome+' '+m.codigo).includes(q)); }
@@ -20684,7 +20920,7 @@ function _compAtualizarRow(k){
   const cat=_compCatalogoDo(_compFornSel);
   let visiveis=cat; if(_compBusca){ const q=_normNome(_compBusca); visiveis=cat.filter(x=>_normNome(x.nome+' '+x.codigo).includes(q)); }
   // aplica a MESMA ordenação da renderização (preenchidos no topo) para achar o índice certo
-  const st=_compPedido.status||'solicitado'; const bloqueado=(st==='oc_gerada'||st==='recebido');
+  const st=_compPedido.status||'solicitado'; const bloqueado=_cpTravado(st);
   if(!bloqueado){
     visiveis=visiveis.slice().sort((a,b)=>{
       const qa=(parseFloat(_compQtd[a.firestoreId])||0)>0?0:1;
@@ -20707,27 +20943,31 @@ function _compTotais(){
 }
 function compRenderFooter(){
   const el=document.getElementById('comp-footer'); if(!el) return;
-  const st=_compPedido.status||'solicitado'; const t=_compTotais();
+  const t=_compTotais(), sit=_cpSit(_compPedido), salvo=!!_compPedido.firestoreId;
+  const sec='font-size:12.5px;';
   let linha1='', linha2='';
-  if(st==='solicitado'){
-    linha1='<button class="btn btn-primary" style="flex:1;" onclick="compSalvarPedido()">📝 Fazer solicitação</button>'+
+  if(sit.k==='comprador'){
+    linha1='<button class="btn btn-primary" style="flex:1;" onclick="compSalvarPedido()">📝 '+(salvo?'Salvar alterações':'Fazer solicitação')+'</button>'+
            '<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Enviar ao vendedor</button>';
-    linha2='<button class="btn btn-secondary" style="width:100%;margin-top:6px;border-color:var(--mc-azul);color:var(--mc-azul);" onclick="compConfirmarComprador()">✅ Confirmar compra (comprador)</button>';
-  } else if(st==='confirmado'){
-    // a requisição já foi criada ao confirmar: não faz sentido oferecer "gerar OC"
-    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Enviar ao fornecedor</button>';
-    linha2='<div style="text-align:center;font-size:12px;color:var(--mc-verde);font-weight:700;margin-top:6px;">✅ Compra confirmada · requisição já enviada ao Rafael</div>'+
-           '<button class="btn btn-secondary" style="width:100%;margin-top:6px;font-size:12px;" onclick="compReabrir()">↩️ Voltar p/ solicitado</button>';
+    linha2='<button class="btn btn-secondary" style="width:100%;margin-top:6px;border-color:#2563eb;color:#2563eb;" onclick="compConfirmarComprador()">✅ Confirmar compra (comprador)</button>'+
+           (salvo?'<button class="btn btn-secondary" style="width:100%;margin-top:6px;'+sec+'" onclick="compCancelarPedido()">Cancelar este pedido</button>':'');
+  } else if(sit.k==='receber'){
+    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Enviar ao fornecedor</button>'+
+           '<button class="btn btn-secondary" style="flex:1;" onclick="compReabrir()">✏️ Alterar o pedido</button>';
+    linha2='<button class="btn btn-secondary" style="width:100%;margin-top:6px;'+sec+'" onclick="compCancelarPedido()">Cancelar este pedido</button>';
+  } else if(sit.k==='parcial' || sit.k==='recebido'){
+    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Exportar</button>';
+    linha2='<div style="text-align:center;font-size:12px;color:var(--text-secondary);margin-top:6px;">'+(sit.k==='parcial'?'Recebimento em andamento: o pedido não pode mais ser alterado.':'Pedido encerrado.')+'</div>';
   } else {
-    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Exportar OC</button>'+
-           '<button class="btn btn-secondary" style="flex:1;" onclick="compReabrir()">↩️ Reabrir</button>';
+    linha1='<button class="btn btn-secondary" style="flex:1;" onclick="compExportar()">📲 Exportar</button>';
   }
+  linha2+='<button class="btn btn-secondary" style="width:100%;margin-top:6px;'+sec+'" onclick="compNovoPedido()">＋ Outro pedido para este fornecedor</button>';
   // o admin pode apagar um pedido lançado errado, de dentro dele mesmo
-  const podeApagar = (window.adminMode===true) && _compPedido && _compPedido.firestoreId;
+  const podeApagar = (window.adminMode===true) && salvo;
   const btnApagar = podeApagar
-    ? '<button onclick="compExcluirPedido(\''+escapeJsStr(_compPedido.firestoreId)+'\')" style="width:100%;margin-top:8px;background:#fff;border:1px solid #fecaca;color:#dc2626;border-radius:9px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🗑 Excluir este pedido</button>'
+    ? '<button onclick="compExcluirPedido(\''+escapeJsStr(_compPedido.firestoreId)+'\')" style="width:100%;margin-top:6px;background:none;border:none;color:#dc2626;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;padding:6px;">🗑 Excluir este pedido</button>'
     : '';
-  el.innerHTML='<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:8px;padding:0 2px;"><span style="color:var(--text-secondary);">'+t.n+' item(ns) · '+_fmtKg(t.kg)+' kg</span><strong style="font-size:16px;color:var(--mc-verde);">'+_fmtRS(t.rs)+'</strong></div>'+
+  el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px;"><span style="color:var(--text-secondary);">'+t.n+' item(ns) · '+_fmtKg(t.kg)+' kg</span><strong style="font-size:16px;color:var(--mc-verde);">'+_fmtRS(t.rs)+'</strong></div>'+
     '<div style="display:flex;gap:8px;">'+linha1+'</div>'+linha2+btnApagar+'<div style="height:6px;"></div>';
 }
 function _compMontarItens(){
@@ -20740,9 +20980,9 @@ async function _compPersistir(extra){
   const t=_compTotais();
   const dados=Object.assign({ fornecedorId:_compFornSel, fornecedorNome:(_compForn(_compFornSel)||{}).nome||'', itens, totalKg:t.kg, totalRS:t.rs, atualizadoEm:agora() }, extra||{});
   if(_compPedido.firestoreId){ await updateDoc(doc(db,'comprasPedidos',_compPedido.firestoreId),dados); _compPedido={..._compPedido,...dados}; }
-  else{ dados.criadoEm=hoje(); dados.criadoEm2=Date.now(); dados.solicitadoPor=dados.solicitadoPor||_demAutor(); dados.semana=_compPedido.semana||(typeof semanaAtual==='function'?semanaAtual():''); const ref=doc(collection(db,'comprasPedidos')); await setDoc(ref,dados); _compPedido={firestoreId:ref.id,..._compPedido,...dados}; }
-  // salva preços no catálogo
-  for(const it of itens){ if(it.precoKg>0 && it.mpKey){ updateDoc(doc(db,'comprasMP',it.mpKey),{precoKg:it.precoKg}).catch(()=>{}); } }
+  else{ dados.numero=await _cpNovoNumero(); dados.criadoEm=hoje(); dados.criadoEm2=Date.now(); dados.solicitadoPor=dados.solicitadoPor||_demAutor(); dados.semana=_compPedido.semana||(typeof semanaAtual==='function'?semanaAtual():''); const ref=doc(collection(db,'comprasPedidos')); await setDoc(ref,dados); _compPedido={firestoreId:ref.id,..._compPedido,...dados}; }
+  // o preço digitado só vira o preço do catálogo quando a compra é CONFIRMADA (um rascunho não muda o preço-base)
+  if((extra||{}).status==='confirmado') for(const it of itens){ if(it.precoKg>0 && it.mpKey){ updateDoc(doc(db,'comprasMP',it.mpKey),{precoKg:it.precoKg}).catch(()=>{}); } }
   return itens;
 }
 async function compSalvarPedido(){
@@ -20780,19 +21020,19 @@ async function compConfirmarComprador(){
   const sug = _compPedido.previsaoEntrega || _compProximaEntrega(f.diaEntrega) || '';
   const prev = prompt('📦 Previsão de entrega\n\nPode ser um dia (ex: 08/06/2026) ou um intervalo (ex: 10/06 - 12/06).'+(f.diaEntrega?'\n\nEntrega fixa do fornecedor: '+f.diaEntrega:''), sug);
   if(prev===null) return; // cancelou
-  if(!confirm('Confirmar a compra? Isso registra que você (comprador) já falou com o vendedor e ajustou o preço.\n\nUma requisição de recebimento será gerada automaticamente para o Rafael.')) return;
+  if(!confirm('Confirmar a compra? Isso registra que você (comprador) já falou com o vendedor e ajustou o preço.\n\nA requisição vai para o recebimento conferir quando chegar.')) return;
   try{
     const itensSalvos = await _compPersistir({status:'confirmado', confirmadoEm:hoje(), confirmadoPor:_demAutor(), previsaoEntrega:(prev||'').trim()});
     // gera a requisição de recebimento para o Rafael assim que o comprador dá o OK
     // (usa _compPedido já atualizado pelo _compPersistir, com firestoreId e itens corretos)
     await _reqGerarDoPedido({
-      firestoreId:_compPedido.firestoreId,
+      firestoreId:_compPedido.firestoreId, numero:_compPedido.numero||0,
       fornecedorNome:_compPedido.fornecedorNome||'',
       previsaoEntrega:(prev||'').trim(),
       itens: itensSalvos && itensSalvos.length ? itensSalvos : (_compPedido.itens||[]),
       status:'confirmado'
     });
-    alert('✅ Compra confirmada! Requisição gerada para o Rafael receber.');
+    alert('✅ Compra confirmada! A requisição '+_cpNumero(_compPedido)+' foi para o recebimento.');
     renderCompraForn();
   }catch(e){ alert('Erro: '+e.message); }
 }
@@ -20807,17 +21047,14 @@ async function compConcluirOC(){
     goTo('s-compras');
   }catch(e){ alert('Erro: '+e.message); }
 }
-async function compReabrir(){
-  if(!_compPedido.firestoreId)return;
-  const novo = (_compPedido.status==='confirmado')?'solicitado':'solicitado';
-  try{ await updateDoc(doc(db,'comprasPedidos',_compPedido.firestoreId),{status:novo,atualizadoEm:agora()}); _compPedido.status=novo; renderCompraForn(); }catch(e){ alert('Erro: '+e.message); }
-}
 async function compEditarPrevisao(){
   const f=_compForn(_compFornSel)||{};
   const sug=_compPedido.previsaoEntrega || _compProximaEntrega(f.diaEntrega) || '';
   const prev=prompt('📦 Previsão de entrega (um dia ou intervalo, ex: 10/06 - 12/06):', sug);
   if(prev===null) return;
-  try{ if(_compPedido.firestoreId){ await updateDoc(doc(db,'comprasPedidos',_compPedido.firestoreId),{previsaoEntrega:(prev||'').trim(),atualizadoEm:agora()}); } _compPedido.previsaoEntrega=(prev||'').trim(); renderCompraForn(); }catch(e){ alert('Erro: '+e.message); }
+  try{ if(_compPedido.firestoreId){ await updateDoc(doc(db,'comprasPedidos',_compPedido.firestoreId),{previsaoEntrega:(prev||'').trim(),atualizadoEm:agora()});
+      for(const r of _cpReqsDe(_compPedido).filter(x=>x.status!=='recebido')){ await updateDoc(doc(db,'requisicoes',r.firestoreId),{previsaoEntrega:(prev||'').trim()}); r.previsaoEntrega=(prev||'').trim(); } }
+    _compPedido.previsaoEntrega=(prev||'').trim(); renderCompraForn(); }catch(e){ alert('Erro: '+e.message); }
 }
 window.compEditarPrevisao=compEditarPrevisao;
 window.compSalvarPedido=compSalvarPedido; window.compConfirmarComprador=compConfirmarComprador; window.compConcluirOC=compConcluirOC; window.compReabrir=compReabrir;
