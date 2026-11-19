@@ -5648,7 +5648,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='18/11/2026 · 25';
+  var VERSAO='19/11/2026 · 26';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -8233,6 +8233,12 @@ function _erNxCss(){
 .nx-datas input{background:var(--pill) !important;border:1px solid var(--bd) !important;color:var(--tx) !important;border-radius:12px !important;padding:8px 10px !important;font-family:inherit;font-size:14px;color-scheme:dark;width:auto !important;}
 .nx.claro .nx-datas input{color-scheme:light;}
 .nx-scroll{overflow-x:auto;}
+.nx-cmp-ctl{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
+.nx-cmp-ctl label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--sub);}
+.nx-cmp-ctl label span{display:flex;align-items:center;gap:6px;}
+.nx-cmp-ctl input{background:var(--pill) !important;border:1px solid var(--bd) !important;color:var(--tx) !important;border-radius:12px !important;padding:9px 11px !important;font-family:inherit;font-size:15px !important;font-weight:600;color-scheme:dark;width:auto !important;box-shadow:none !important;min-height:42px;}
+.nx.claro .nx-cmp-ctl input{color-scheme:light;}
+.nx-cmp-ctl .sp{flex:0 0 1px;align-self:stretch;background:var(--bd);margin:0 4px;}
 #s-emb-rend.nx-on .mc-header{background:#0a100e;border-bottom-color:rgba(255,255,255,.08);box-shadow:none;}
 #s-emb-rend.nx-on .mc-page-title,#s-emb-rend.nx-on .mc-brand-name{color:#f2f5f3;}
 #s-emb-rend.nx-on .mc-page-sub,#s-emb-rend.nx-on .mc-brand-sub{color:rgba(242,245,243,.55);}
@@ -8457,6 +8463,7 @@ function _erNovo(el){
       '<div class="nx-pills" role="group" aria-label="Turno">'+tPills.map(([v,t,c])=>'<button class="'+(_erTurno===v?('on '+c):'')+'" onclick="erTurno(\''+v+'\')">'+t+'</button>').join('')+'</div>'+
       _erNxPer()+
       '<button class="nx-btn pri" onclick="erVista(\'plano\')">🗓 Plano da embalagem</button>'+
+      '<button class="nx-btn" onclick="erVista(\'comparar\')">⇄ Comparar dois dias</button>'+
       (window.adminMode===true?'<button class="nx-btn" onclick="erVista(\'saldo\')">Início e fim do dia</button><button class="nx-btn" onclick="erClassesPao()">Classes dos pães</button>':'')+
       _erNxTemaBtn()+
     '</div></div>'+_erNxDatas();
@@ -8964,10 +8971,147 @@ function _erPlanoTela(el){
   el.innerHTML=h;
 }
 
+/* ══ COMPARAR DOIS DIAS (rendimento da embalagem) ═══════════════════
+   Dois dias lado a lado, num mesmo intervalo de horário — por exemplo,
+   o que foi embalado das 14:00 às 18:00 em cada um. Conta os mesmos
+   lançamentos do rendimento (o "embalar em lote" e o "sem
+   contabilizar" ficam fora). O horário é o do lançamento na embalagem.
+   Pacotes por hora usa as horas trabalhadas pela Embalação DENTRO do
+   intervalo, pelas batidas do ponto. */
+let _erCmp={a:'', b:'', de:'00:00', ate:'23:59'};
+const _erCmpIso=br=>{ const p=String(br||'').split('/'); return p.length===3?(p[2]+'-'+p[1]+'-'+p[0]):''; };
+const _erCmpBr=iso=>{ const p=String(iso||'').split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):''; };
+function erCmp(campo, v){
+  if(campo==='a'||campo==='b'){ const br=_erCmpBr(v); if(!br) return; _erCmp[campo]=br; }
+  else if(campo==='faixa'){ const [d,a]=String(v).split('-'); _erCmp.de=d; _erCmp.ate=a; }
+  else { if(!/^\d{2}:\d{2}$/.test(v)) return; _erCmp[campo]=v; }
+  renderEmbRend._forcar=true; try{ renderEmbRend(); } finally{ renderEmbRend._forcar=false; }
+}
+function erCmpTrocar(){ const t=_erCmp.a; _erCmp.a=_erCmp.b; _erCmp.b=t; renderEmbRend(); }
+Object.assign(window,{erCmp, erCmpTrocar});
+/* minutos trabalhados dentro de [ini,fim) (em minutos do dia), pelas batidas em pares */
+function _erMinNaFaixa(batidas, ini, fim){
+  const b=(batidas||[]).map(_pontoMin).filter(x=>x!==null);
+  for(let i=1;i<b.length;i++) if(b[i]<b[i-1]) b[i]+=1440;
+  let m=0; for(let i=0;i+1<b.length;i+=2) m+=Math.max(0, Math.min(b[i+1],fim)-Math.max(b[i],ini));
+  return m;
+}
+function _erCmpEquipe(diaBR, ini, fim){
+  if(typeof pontoMeses==='undefined') return null;
+  const p3=diaBR.split('/'), ch=p3[2]+'-'+p3[1], dm=p3[0]+'/'+p3[1];
+  let min=0; const pes=new Set(); let achou=false;
+  ((pontoMeses[ch]||{}).ponto||[]).forEach(p=>{
+    const setor=_normNome((typeof _pmesSetorDe==='function'?_pmesSetorDe(p,ch):'')||p.setor||'');
+    if(setor.indexOf('EMBALA')<0) return;
+    (p.dias||[]).forEach(d=>{ if(d.data!==dm || !d.batidas || !d.batidas.length) return; achou=true;
+      const m=_erMinNaFaixa(d.batidas, ini, fim); if(m>0){ min+=m; pes.add(String(p.codigo||p.nome)); } });
+  });
+  return achou?{min, pessoas:pes.size}:null;
+}
+function _erCompararTela(el){
+  _erNxLigar(el);
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const f1=n=>(Math.round(n*10)/10).toLocaleString('pt-BR');
+  const sem=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase();
+  const {ev}=_erEventos();
+  // dias padrão: hoje (B) e o último dia anterior com embalagem (A)
+  const hojeS=fmtData(new Date());
+  if(!_erCmp.b) _erCmp.b=hojeS;
+  if(!_erCmp.a){ _erCmp.a=[...new Set(ev.filter(x=>_erNum(x.dia)<_erNum(_erCmp.b)).map(x=>x.dia))].sort((a,b)=>_erNum(b)-_erNum(a))[0] || (()=>{ const d=new Date(); d.setDate(d.getDate()-1); return fmtData(d); })(); }
+  const C=_erCmp, A=C.a, B=C.b;
+  const min=t=>{ const m=String(t).match(/^(\d{2}):(\d{2})$/); return m?(+m[1]*60+ +m[2]):0; };
+  let ini=min(C.de), fim=min(C.ate); const diaInteiro=(ini===0 && fim>=1439);
+  if(fim<=ini) fim=ini+1;
+  const dentro=x=>{ if(diaInteiro) return true; if(!x.hora) return false; const m=min(x.hora); return m>=ini && m<fim; };
+  // somas
+  const tot={[A]:0,[B]:0}, semHora={[A]:0,[B]:0}, porHora={[A]:{},[B]:{}}, prods={};
+  ev.forEach(x=>{
+    if(x.dia!==A && x.dia!==B) return;
+    if(!x.hora) semHora[x.dia]+=x.pct;
+    if(!dentro(x)) return;
+    tot[x.dia]+=x.pct;
+    if(x.hora){ const hh=parseInt(x.hora.slice(0,2),10); porHora[x.dia][hh]=(porHora[x.dia][hh]||0)+x.pct; }
+    const g=x.r.manual?{tipo:'outro',classe:''}:_erGrupo(x.r);
+    const k=x.r.produto||'?'; const o=prods[k]||(prods[k]={nome:k, g, a:0, b:0}); if(x.dia===A) o.a+=x.pct; else o.b+=x.pct;
+  });
+  if(A===B){ /* mesmo dia nos dois lados: evita somar em dobro na tabela */ Object.values(prods).forEach(o=>{ o.a=o.b; }); tot[A]=tot[B]; }
+  // equipe no intervalo
+  const meses=pontoMesesDe([A,B]); const pontoOk=pontoMesesProntos(meses);
+  if(!pontoOk) pontoGarantirMeses(meses).then(()=>{ if(document.querySelector('.screen.active')?.id==='s-emb-rend' && _erVista==='comparar') renderEmbRend(); });
+  const eqA=pontoOk?_erCmpEquipe(A,ini,fim):null, eqB=pontoOk?_erCmpEquipe(B,ini,fim):null;
+  const ph=(v,e)=>(e&&e.min>0)?v/(e.min/60):null;
+  const phA=ph(tot[A],eqA), phB=ph(tot[B],eqB);
+  const dif=tot[B]-tot[A], pct=tot[A]>0.5?Math.round((tot[B]/tot[A]-1)*100):null;
+  const hhmm=m=>(typeof _pontoHhmm==='function')?_pontoHhmm(Math.round(m)):(Math.round(m/60)+'h');
+  const faixaTxt=diaInteiro?'dia inteiro':('das '+C.de+' às '+C.ate);
+  const corA='var(--or)', corB='var(--tl)';
+
+  const presets=[['00:00-23:59','Dia inteiro'],['00:00-12:00','Manhã'],['12:00-23:59','Tarde'],['06:00-10:00','6h–10h'],['10:00-14:00','10h–14h'],['14:00-18:00','14h–18h']];
+  let h='<div class="nx'+(_erTema==='claro'?' claro':'')+'"><div class="nx-top"><div><h1>Comparar dois dias</h1><p>'+A.slice(0,5)+' ('+sem(A)+') × '+B.slice(0,5)+' ('+sem(B)+') · '+faixaTxt+' · em pacotes</p></div>'+
+    '<div class="nx-acoes"><button class="nx-btn" onclick="erVista(\'rend\')">‹ Voltar ao rendimento</button>'+_erNxTemaBtn()+'</div></div>';
+  // controles
+  h+='<div class="nx-card" style="margin-bottom:14px;"><div class="nx-cmp-ctl">'+
+      '<label><span><i class="nx-pt" style="background:'+corA+';"></i> Dia A</span><input type="date" value="'+_erCmpIso(A)+'" onchange="erCmp(\'a\',this.value)"></label>'+
+      '<button class="nx-btn ic" onclick="erCmpTrocar()" title="Trocar os dois dias de lado" aria-label="Trocar os dias" style="align-self:flex-end;margin-bottom:2px;">⇄</button>'+
+      '<label><span><i class="nx-pt" style="background:'+corB+';"></i> Dia B</span><input type="date" value="'+_erCmpIso(B)+'" onchange="erCmp(\'b\',this.value)"></label>'+
+      '<span class="sp"></span>'+
+      '<label><span>Das</span><input type="time" value="'+C.de+'" onchange="erCmp(\'de\',this.value)"></label>'+
+      '<label><span>Até</span><input type="time" value="'+(C.ate==='23:59'?'23:59':C.ate)+'" onchange="erCmp(\'ate\',this.value)"></label>'+
+    '</div>'+
+    '<div style="margin-top:12px;"><div class="nx-pills" role="group" aria-label="Horário">'+presets.map(([v,t])=>'<button class="'+((C.de+'-'+C.ate)===v?'on':'')+'" onclick="erCmp(\'faixa\',\''+v+'\')">'+t+'</button>').join('')+'</div></div></div>';
+
+  // três cartões: A, B e a diferença
+  const cartao=(rot,dia,v,cor,eq,phv)=>'<div class="nx-card"><div class="nx-rot"><span class="nx-pt" style="background:'+cor+';"></span>'+rot+' · '+dia.slice(0,5)+'<span class="ax">'+sem(dia)+'</span></div>'+
+    '<div class="nx-num">'+fmt(v)+'<small>pacotes</small></div>'+
+    '<div class="nx-sub">'+(eq?(phv?(f1(phv)+' pct por hora · '+eq.pessoas+' pessoa(s) · '+hhmm(eq.min)+' trabalhadas no horário'):'ninguém da Embalação com batida neste horário'):(pontoOk?'sem ponto da Embalação neste dia':'carregando o ponto…'))+'</div></div>';
+  const melhorPh=(phA&&phB)?(phB>=phA?'B':'A'):'';
+  h+='<div class="nx-g" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));">'+
+    cartao('Dia A',A,tot[A],corA,eqA,phA)+cartao('Dia B',B,tot[B],corB,eqB,phB)+
+    '<div class="nx-card"><div class="nx-rot">Diferença<span class="ax">B − A</span></div>'+
+      '<div class="nx-num" style="color:'+(Math.abs(dif)<0.5?'var(--tx)':(dif>0?'var(--ok)':'var(--bad)'))+';">'+(dif>0.5?'+':'')+fmt(dif)+'<small>pacotes</small></div>'+
+      '<div class="nx-sub">'+(pct===null?(tot[B]>0.5?'o dia A não teve embalagem neste horário':'sem embalagem neste horário nos dois dias'):('<span class="nx-chip '+(pct>=0?'up':'dn')+'">'+(pct>=0?'▲ +':'▼ ')+pct+'%</span> &nbsp;'+(Math.abs(pct)<3?'praticamente igual':('o dia '+(pct>0?'B':'A')+' embalou mais'))))+
+        (melhorPh&&Math.abs(phB-phA)>0.05?('<br>Por hora trabalhada, o dia <b>'+melhorPh+'</b> rendeu '+Math.round((Math.max(phA,phB)/Math.min(phA,phB)-1)*100)+'% mais.'):'')+'</div></div>'+
+  '</div>';
+
+  // hora a hora, os dois dias lado a lado
+  const horas=[...new Set(Object.keys(porHora[A]).concat(Object.keys(porHora[B])).map(Number))];
+  let h0=diaInteiro?(horas.length?Math.min(...horas):6):Math.floor(ini/60), h1=diaInteiro?(horas.length?Math.max(...horas):17):Math.floor((fim-1)/60);
+  if(diaInteiro){ h0=Math.min(h0,6); h1=Math.max(h1,17); }
+  const mx=Math.max(1,...horas.map(x=>Math.max(porHora[A][x]||0, porHora[B][x]||0)));
+  let barras='';
+  for(let x=h0;x<=h1;x++){ const va=porHora[A][x]||0, vb=porHora[B][x]||0;
+    const col=(v,cor)=>'<div style="flex:0 0 28px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0;"><span style="font-size:10.5px;font-weight:700;color:var(--sub);margin-bottom:4px;">'+(v>0.5?fmt(v):'')+'</span>'+
+      '<i style="display:block;width:26px;border-radius:7px;height:'+Math.max(v>0.5?3:0,Math.round(v/mx*150))+'px;background:'+cor+';"></i></div>';
+    barras+='<div style="flex:1;min-width:34px;height:100%;display:flex;flex-direction:column;"><div style="flex:1;display:flex;gap:4px;align-items:flex-end;justify-content:center;">'+col(va,corA)+col(vb,corB)+'</div><div style="text-align:center;font-size:10.5px;color:var(--mut);margin-top:7px;">'+x+'h</div></div>'; }
+  h+='<div class="nx-g"><div class="nx-card"><div class="nx-h"><b>Hora a hora</b><span>pacotes lançados em cada hora, '+faixaTxt+'</span>'+
+    '<span class="dir"><span><span class="nx-pt" style="background:'+corA+';"></span> A · '+A.slice(0,5)+'</span><span><span class="nx-pt" style="background:'+corB+';"></span> B · '+B.slice(0,5)+'</span></span></div>'+
+    (horas.length?'<div class="nx-scroll"><div class="nx-bars" style="gap:10px;height:210px;min-width:'+((h1-h0+1)*44)+'px;">'+barras+'</div></div>':'<div class="nx-vazio">Nenhum lançamento com horário neste intervalo, nos dois dias.</div>')+'</div></div>';
+
+  // produto a produto
+  const lista=Object.values(prods).filter(o=>Math.abs(o.a)>0.001||Math.abs(o.b)>0.001).sort((x,y)=>Math.max(y.a,y.b)-Math.max(x.a,x.b));
+  const corTipo=t=>t==='pao'?'var(--pao)':(t==='salgado'?'var(--salg)':'var(--mut)');
+  const z='<span class="m">—</span>';
+  h+='<div class="nx-g"><div class="nx-card"><div class="nx-h"><b>Produto a produto</b><span>'+lista.length+' produto(s) · '+faixaTxt+'</span></div>'+
+    (lista.length?'<div class="nx-scroll"><table class="nx-tab"><thead><tr><th>Produto</th><th class="e">Classe</th><th>A · '+A.slice(0,5)+'</th><th>B · '+B.slice(0,5)+'</th><th>Diferença</th></tr></thead><tbody>'+
+      lista.map(o=>{ const d=o.b-o.a;
+        return '<tr><td><b style="font-weight:600;">'+o.nome+'</b></td><td class="e"><span class="nx-chip"><span class="nx-pt" style="background:'+corTipo(o.g.tipo)+';width:7px;height:7px;flex-basis:7px;"></span>'+(o.g.tipo==='outro'?'Outro':o.g.classe)+'</span></td>'+
+          '<td style="color:'+corA+';">'+(Math.abs(o.a)>0.5?fmt(o.a):z)+'</td><td style="color:'+corB+';">'+(Math.abs(o.b)>0.5?fmt(o.b):z)+'</td>'+
+          '<td><b style="color:'+(Math.abs(d)<0.5?'var(--mut)':(d>0?'var(--ok)':'var(--bad)'))+';">'+(Math.abs(d)<0.5?'=':((d>0?'+':'')+fmt(d)))+'</b></td></tr>'; }).join('')+
+      '<tr><td><b>Total</b></td><td></td><td><b>'+fmt(tot[A])+'</b></td><td><b>'+fmt(tot[B])+'</b></td><td><b style="color:'+(Math.abs(dif)<0.5?'var(--mut)':(dif>0?'var(--ok)':'var(--bad)'))+';">'+(Math.abs(dif)<0.5?'=':((dif>0?'+':'')+fmt(dif)))+'</b></td></tr>'+
+      '</tbody></table></div>':'<div class="nx-vazio">Nada embalado neste horário nos dois dias.</div>')+'</div></div>';
+  const sh=(!diaInteiro && (semHora[A]>0.5||semHora[B]>0.5))?(' Ficaram fora, por não terem horário gravado: '+fmt(semHora[A])+' pacotes no dia A e '+fmt(semHora[B])+' no dia B.'):'';
+  h+='<div class="nx-nota">Conta o que foi lançado na embalagem dentro do horário escolhido (o horário é o do lançamento, não o da produção). O “embalar em lote” e o “sem contabilizar” ficam fora, como no rendimento. '+
+    'O intervalo vai do horário inicial até um minuto antes do final: “14:00 às 18:00” pega de 14:00 a 17:59.'+sh+'</div></div>';
+  el.innerHTML=h;
+}
+
 function renderEmbRend(){
   const el=document.getElementById('emb-rend-content'); if(!el) return;
   if(_plnArr) return;                                   // no meio de um arrasto, não redesenha
-  if(_erVista==='plano') _erPlanoTela(el);
+  // quem está digitando uma data ou um horário na comparação não perde o campo quando a tela se atualiza sozinha
+  if(_erVista==='comparar' && document.activeElement && el.contains(document.activeElement) && /^(date|time)$/.test(document.activeElement.type||'') && !renderEmbRend._forcar){ return; }
+  if(_erVista==='comparar') _erCompararTela(el);
+  else if(_erVista==='plano') _erPlanoTela(el);
   else if(_erVista==='saldo' && window.adminMode===true) _erSaldoNovo(el);
   else _erNovo(el);
 }
