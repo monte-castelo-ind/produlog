@@ -560,7 +560,8 @@ function _montarProdutos(){
   const usados=new Set();
   produtos=_produtosBase.map(p=>{
     const k=_codChave(p.cod), v=porCod[k]; usados.add(k);
-    return {...p, desc:p.desc||(v&&v.nome)||'', totalPeriodo:v?v.totalPeriodo:0, porDia:v?{...v.porDia}:vazio(), topCarreg:v?v.topCarreg:[]};
+    // produto que só tem o estoque gravado (sem setor): usa a mesma regra dos que vêm dos carregamentos
+    return {...p, setor:p.setor||(parseInt(p.cod)<200?'quadra':'conf'), desc:p.desc||(v&&v.nome)||'', totalPeriodo:v?v.totalPeriodo:0, porDia:v?{...v.porDia}:vazio(), topCarreg:v?v.topCarreg:[]};
   });
   // produto que saiu em carregamento mas nunca foi importado no planejamento
   Object.keys(porCod).forEach(k=>{
@@ -797,7 +798,12 @@ function temFaltaEstoque(cod){
 
 // Listener Firebase
 onSnapshot(collection(db, 'planejProdutos'), snap => {
-  _produtosBase = snap.docs.map(d => ({id: d.id, ...d.data()}));
+  /* O código do produto é o próprio nome do documento. Desde que as
+     vendas passaram a vir dos carregamentos, ninguém mais importa o
+     relatório de vendas — e era ele que gravava o campo "cod". O estoque
+     colado criava o documento só com {estoque}; sem "cod", ele não
+     casava com o produto da lista e o estoque aparecia 0 para todos. */
+  _produtosBase = snap.docs.map(d => { const x=d.data()||{}; return {id: d.id, ...x, cod: (x.cod!=null && String(x.cod).trim()!=='') ? x.cod : d.id}; });
   _montarProdutos();
   console.log('📊 Produtos carregados:', produtos.length);
   render();
@@ -2128,7 +2134,8 @@ window.processarEstoque = async () => {
     // Pular cabeçalho
     if(idx === 0 && linha.includes('Produto')) return;
     
-    const partes = linha.split('\t');
+    let partes = linha.split('\t');
+    if(partes.length < 2) partes = linha.trim().split(/\s*;\s*|\s{1,}/);   // sem TAB: separa por espaço ou ponto e vírgula
     if(partes.length < 2) return;
     
     let cod = String(partes[0]).trim();
@@ -2165,13 +2172,13 @@ window.processarEstoque = async () => {
       return;
     }
     
-    batch.push(setDoc(doc(db, 'planejProdutos', cod), {estoque}, {merge: true}));
+    batch.push(setDoc(doc(db, 'planejProdutos', cod), {cod, estoque}, {merge: true}));
     processados++;
   });
   
   await Promise.all(batch);
   console.log('✅ Processados:', processados, '| Ignorados:', ignorados);
-  alert('✓ '+processados+' estoques atualizados!');
+  alert('✓ '+processados+' estoques atualizados!'+(ignorados?('\n\n'+ignorados+' linha(s) ignorada(s) por não terem um código numérico.'):''));
   window.fecharModal();
 };
 
