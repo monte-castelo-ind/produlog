@@ -1929,6 +1929,11 @@
         <div style="flex:1;"><div class="hb-title">Rendimento da Embalagem</div><div class="hb-desc">O que foi embalado por dia e o que falta embalar</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
+      <button class="home-btn" onclick="eqpAbrir('embalagem')" style="border-left-color:#2563eb;margin-bottom:4px;">
+        <div class="hb-icon" style="background:#dbeafe;">👥</div>
+        <div style="flex:1;"><div class="hb-title">Minha equipe</div><div class="hb-desc">Faltas e atrasos da equipe da Embalagem</div></div>
+        <span style="color:var(--text-secondary);font-size:20px;">›</span>
+      </button>
       <button class="home-btn" onclick="goTo('s-emb-inconformidades')" style="border-left-color:var(--mc-vermelho);margin-bottom:4px;">
         <div class="hb-icon" style="background:var(--mc-vermelho-claro);">⚠️</div>
         <div style="flex:1;"><div class="hb-title">Produtos com Inconformidade</div><div class="hb-desc" id="inconf-badge">Produtos com problema</div></div>
@@ -4918,6 +4923,26 @@
   </div>
 
   <!-- RH: entrada do setor -->
+  <!-- MINHA EQUIPE (ponto do setor, resumido) -->
+  <div class="screen" id="s-eqp">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Equipe</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title" id="eqp-titulo">👥 Equipe</div>
+        <div class="mc-page-sub">Faltas e atrasos de quem trabalha com você</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:16px;background:var(--bg-page);overflow-y:auto;" id="eqp-content"></div>
+  </div>
+
   <!-- OPERADOR DA EMBALAGEM -->
   <div class="screen" id="s-embop-home">
     <div class="mc-header">
@@ -5648,7 +5673,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='19/11/2026 · 26';
+  var VERSAO='19/11/2026 · 27';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -6509,6 +6534,7 @@ function atualizarTela(){
   if(tela==='s-conf-home') renderConfHome();
   if(tela==='s-emb-rend') renderEmbRend();
   if(tela==='s-embop-home') renderEmbop();
+  if(tela==='s-eqp') renderEqp();
   if(tela==='s-exp-dia') renderExpDia();
   if(tela==='s-ppr'){ const a=document.activeElement; if(!(a && a.closest && a.closest('#ppr-content') && /INPUT|SELECT/.test(a.tagName))) renderPpr(); }
   if(tela==='s-adm-hub' && typeof _pprBadge==='function') _pprBadge();
@@ -9117,6 +9143,124 @@ function renderEmbRend(){
 }
 window.renderEmbRend=renderEmbRend;
 
+
+/* ══ MINHA EQUIPE (ponto do setor, só o essencial) ══════════════════
+   Uma tela só, para o gestor do setor ver a própria equipe: quem
+   falta, quem chega atrasado e como foi cada dia. Mostra apenas as
+   pessoas do setor (pela mesma regra do Painel da Produção: os setores
+   do ponto ligados ao setor) e não dá acesso ao resto do Controle de
+   Ponto. Lê os mesmos dados; não grava nada. */
+let _eqpSetor='embalagem', _eqpPer='mes', _eqpOrd='atencao', _eqpAberta='';
+const EQP_NOME={embalagem:'Embalagem', confeitaria:'Confeitaria', cozinha:'Cozinha', quadra:'Quadra'};
+function _eqpMeses(){
+  const h=new Date(), ch=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  const m0=new Date(h.getFullYear(),h.getMonth(),1), m1=new Date(h.getFullYear(),h.getMonth()-1,1), m2=new Date(h.getFullYear(),h.getMonth()-2,1);
+  return _eqpPer==='ant'?[ch(m1)]:(_eqpPer==='tri'?[ch(m2),ch(m1),ch(m0)]:[ch(m0)]);
+}
+async function eqpAbrir(setor){
+  _eqpSetor=setor||'embalagem'; _eqpAberta='';
+  goTo('s-eqp'); renderEqp();
+  try{ await _pprCarregarCfg(); }catch(e){}
+  renderEqp();
+}
+function eqpSet(campo,v){ if(campo==='per'){ _eqpPer=v; _eqpAberta=''; } else if(campo==='ord') _eqpOrd=v; else if(campo==='pessoa') _eqpAberta=(_eqpAberta===v?'':v); renderEqp(); }
+Object.assign(window,{eqpAbrir, eqpSet});
+function renderEqp(){
+  const el=document.getElementById('eqp-content'); if(!el) return;
+  const tit=document.getElementById('eqp-titulo'); if(tit) tit.textContent='👥 Equipe · '+(EQP_NOME[_eqpSetor]||_eqpSetor);
+  const meses=_eqpMeses();
+  const pills=(campo,atual,ops)=>'<div style="display:inline-flex;background:#eef1f6;border-radius:99px;padding:3px;gap:2px;flex-wrap:wrap;">'+ops.map(([v,t])=>'<button onclick="eqpSet(\''+campo+'\',\''+v+'\')" style="border:none;border-radius:99px;padding:7px 13px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;background:'+(atual===v?'#fff':'none')+';color:'+(atual===v?'var(--text-primary)':'var(--text-secondary)')+';'+(atual===v?'box-shadow:0 1px 3px rgba(15,23,42,.15);':'')+'">'+t+'</button>').join('')+'</div>';
+  const topo='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">'+
+    pills('per',_eqpPer,[['mes','Este mês'],['ant','Mês passado'],['tri','Últimos 3 meses']])+
+    '<span style="flex:1;"></span>'+
+    '<span style="font-size:12px;color:var(--text-secondary);">Ordenar:</span>'+pills('ord',_eqpOrd,[['atencao','Precisa de atenção'],['faltas','Faltas'],['atrasos','Atrasos'],['nome','Nome']])+'</div>';
+  if(!pontoMesesProntos(meses)){
+    el.innerHTML='<div style="max-width:980px;margin:0 auto;">'+topo+'<div class="card" style="text-align:center;padding:34px;color:var(--text-secondary);">Carregando o ponto…</div></div>';
+    pontoGarantirMeses(meses).then(()=>{ if(document.querySelector('.screen.active')?.id==='s-eqp') renderEqp(); });
+    return;
+  }
+  // junta as pessoas do setor nos meses do período
+  const P={}; let atualizado='';
+  meses.forEach(ch=>{
+    const mes=pontoMeses[ch]||{}; if(mes.importadoEm && ch===meses[meses.length-1]) atualizado=mes.importadoEm;
+    const ano=ch.slice(0,4);
+    (mes.ponto||[]).forEach(p=>{
+      if(!_pprPontoCasa(_eqpSetor, _pmesSetorDe(p,ch)||p.setor||'')) return;
+      const k=String(p.codigo||_normNome(p.nome||''));
+      const o=P[k]||(P[k]={k, nome:p.nome||'', cargo:p.cargo||'', demissao:'', dias:[], faltas:0, atrasos:0, minAtraso:0, saldo:0, presentes:0, afast:0});
+      if(p.cargo) o.cargo=p.cargo; if(p.demissao) o.demissao=p.demissao;
+      (p.dias||[]).forEach(d=>{
+        if(d.foraDoPeriodo) return;
+        const atrasado=d.atraso!==null && d.atraso!==undefined && d.atraso>PONTO_TOL_ATRASO;
+        const temBatida=d.batidas && d.batidas.length;
+        const tipo=d.falta?'f':(d.afastamento&&!temBatida?'a':(temBatida?(atrasado?'t':'p'):'o'));
+        o.dias.push({n:parseInt(ano+d.data.slice(3,5)+d.data.slice(0,2),10), data:d.data, sem:d.semana||'', tipo, entrada:d.entrada||(temBatida?d.batidas[0]:''), saida:d.saida||'', atraso:d.atraso, obs:d.afastamento||d.feriado||d.obs||''});
+        if(tipo==='f') o.faltas++; if(tipo==='t'){ o.atrasos++; o.minAtraso+=d.atraso; } if(tipo==='p'||tipo==='t') o.presentes++; if(tipo==='a') o.afast++;
+        if(typeof d.minSaldo==='number') o.saldo+=d.minSaldo;
+      });
+    });
+  });
+  const lista=Object.values(P).filter(o=>o.dias.length);
+  lista.forEach(o=>o.dias.sort((a,b)=>a.n-b.n));
+  const hh=m=>{ const a=Math.abs(Math.round(m)); return (m<0?'−':'')+Math.floor(a/60)+'h'+String(a%60).padStart(2,'0'); };
+  const ord={atencao:(a,b)=>(b.faltas*3+b.atrasos)-(a.faltas*3+a.atrasos)||b.minAtraso-a.minAtraso, faltas:(a,b)=>b.faltas-a.faltas||b.atrasos-a.atrasos, atrasos:(a,b)=>b.atrasos-a.atrasos||b.minAtraso-a.minAtraso, nome:()=>0};
+  lista.sort((a,b)=>(ord[_eqpOrd]||ord.atencao)(a,b) || String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+  const tF=lista.reduce((t,o)=>t+o.faltas,0), tA=lista.reduce((t,o)=>t+o.atrasos,0);
+  const maisF=lista.slice().sort((a,b)=>b.faltas-a.faltas)[0], maisA=lista.slice().sort((a,b)=>b.atrasos-a.atrasos||b.minAtraso-a.minAtraso)[0];
+  const semNada=lista.filter(o=>!o.faltas && !o.atrasos).length;
+  const perTxt=_eqpPer==='mes'?'neste mês':(_eqpPer==='ant'?'no mês passado':'nos últimos 3 meses');
+  const prim=n=>String(n||'').trim().split(/\s+/).slice(0,2).map(w=>w.charAt(0)+w.slice(1).toLowerCase()).join(' ');
+  const COR={p:'#22c55e', t:'#f59e0b', f:'#ef4444', a:'#60a5fa', o:'#e2e8f0'};
+  const ROT={p:'no horário', t:'atrasou', f:'faltou', a:'afastado', o:'folga'};
+
+  let h='<div style="max-width:980px;margin:0 auto;">'+topo;
+  if(!lista.length){
+    el.innerHTML=h+'<div class="card" style="text-align:center;padding:34px;color:var(--text-secondary);"><div style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">Sem ponto da equipe '+perTxt+'</div>O ponto deste período ainda não foi importado, ou nenhum setor do ponto está ligado a '+(EQP_NOME[_eqpSetor]||_eqpSetor)+'. Peça ao RH ou ao admin para atualizar o ponto.</div></div>';
+    return;
+  }
+  // a frase que resume
+  h+='<div class="card" style="padding:16px 18px;margin-bottom:12px;font-size:15px;line-height:1.6;">'+
+    '<b>'+lista.length+' pessoas</b> na equipe '+perTxt+': <b style="color:'+(tF?'#dc2626':'#16a34a')+';">'+tF+' falta'+(tF===1?'':'s')+'</b> e <b style="color:'+(tA?'#d97706':'#16a34a')+';">'+tA+' atraso'+(tA===1?'':'s')+'</b>.'+
+    (maisF&&maisF.faltas?(' Quem mais faltou: <b>'+prim(maisF.nome)+'</b> ('+maisF.faltas+').'):'')+
+    (maisA&&maisA.atrasos?(' Quem mais atrasou: <b>'+prim(maisA.nome)+'</b> ('+maisA.atrasos+' vez'+(maisA.atrasos===1?'':'es')+', '+hh(maisA.minAtraso)+' no total).'):'')+
+    (semNada?(' <span style="color:#16a34a;">'+semNada+' sem nenhuma ocorrência.</span>'):'')+
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--text-secondary);">'+['p','t','f','a','o'].map(k=>'<span style="display:inline-flex;align-items:center;gap:6px;"><i style="width:12px;height:12px;border-radius:4px;background:'+COR[k]+';display:inline-block;"></i>'+ROT[k]+'</span>').join('')+
+      '<span style="margin-left:auto;">'+(atualizado?('ponto atualizado em '+String(atualizado).slice(0,16)):'')+'</span></div></div>';
+  // uma linha por pessoa
+  lista.forEach((o,i)=>{
+    const grave=o.faltas>=3 || o.atrasos>=5, medio=!grave && (o.faltas>0 || o.atrasos>=2);
+    const aberta=_eqpAberta===o.k;
+    const chip=(txt,cor,bg)=>'<span style="display:inline-flex;align-items:center;border-radius:99px;padding:4px 11px;font-size:12.5px;font-weight:700;background:'+bg+';color:'+cor+';white-space:nowrap;">'+txt+'</span>';
+    const tam=o.dias.length>45?9:13;
+    h+='<div class="card" style="padding:0;margin-bottom:8px;overflow:hidden;border-left:4px solid '+(grave?'#ef4444':(medio?'#f59e0b':'#22c55e'))+';">'+
+      '<button onclick="eqpSet(\'pessoa\',\''+escapeJsStr(o.k)+'\')" aria-expanded="'+aberta+'" style="display:block;width:100%;text-align:left;border:none;background:none;padding:13px 16px;cursor:pointer;font-family:inherit;color:inherit;">'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
+          '<div style="flex:1 1 220px;min-width:0;"><div style="font-size:15px;font-weight:700;">'+_pontoEsc(o.nome)+(o.demissao?' <span style="font-size:11px;font-weight:700;color:#64748b;background:#e2e8f0;border-radius:99px;padding:1px 8px;">desligado '+o.demissao.slice(0,5)+'</span>':'')+'</div>'+
+            '<div style="font-size:12px;color:var(--text-secondary);margin-top:1px;">'+_pontoEsc(o.cargo||'')+(o.cargo?' · ':'')+o.presentes+' dia(s) trabalhado(s)'+(o.afast?(' · '+o.afast+' afastado'):'')+'</div></div>'+
+          chip(o.faltas?(o.faltas+' falta'+(o.faltas===1?'':'s')):'sem faltas', o.faltas?'#b91c1c':'#15803d', o.faltas?'#fee2e2':'#dcfce7')+
+          chip(o.atrasos?(o.atrasos+' atraso'+(o.atrasos===1?'':'s')+' · '+hh(o.minAtraso)):'sem atrasos', o.atrasos?'#b45309':'#15803d', o.atrasos?'#fef3c7':'#dcfce7')+
+          '<span style="color:var(--text-secondary);font-size:18px;transform:rotate('+(aberta?'90':'0')+'deg);">›</span>'+
+        '</div>'+
+        '<div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:10px;">'+o.dias.map(d=>'<i title="'+d.data+' '+d.sem+' · '+ROT[d.tipo]+(d.tipo==='t'?(' '+d.atraso+' min'):'')+'" style="width:'+tam+'px;height:'+tam+'px;border-radius:'+(tam>10?4:2)+'px;background:'+COR[d.tipo]+';display:inline-block;"></i>').join('')+'</div>'+
+      '</button>';
+    if(aberta){
+      const oc=o.dias.filter(d=>d.tipo==='f'||d.tipo==='t'||d.tipo==='a').slice().reverse();
+      h+='<div style="border-top:1px solid var(--border);padding:10px 16px 14px;background:#fafbfc;">'+
+        (oc.length?'<div style="font-size:11px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;margin-bottom:6px;">OCORRÊNCIAS</div>'+
+          oc.map(d=>'<div style="display:flex;gap:10px;align-items:baseline;font-size:13.5px;padding:5px 0;border-bottom:1px solid #eef1f5;">'+
+            '<span style="flex:0 0 78px;font-weight:700;">'+d.data+' <span style="font-weight:400;color:var(--text-secondary);font-size:11.5px;">'+_pontoEsc(String(d.sem).slice(0,3))+'</span></span>'+
+            '<span style="flex:0 0 12px;"><i style="width:10px;height:10px;border-radius:3px;background:'+COR[d.tipo]+';display:inline-block;"></i></span>'+
+            '<span style="flex:1;">'+(d.tipo==='f'?'<b style="color:#b91c1c;">Faltou</b>':(d.tipo==='t'?('<b style="color:#b45309;">Chegou '+d.atraso+' min atrasado</b> · entrou às '+_pontoEsc(d.entrada||'—')):('Afastado'+(d.obs?(' · '+_pontoEsc(d.obs)):''))))+'</span></div>').join('')
+          :'<div style="font-size:13.5px;color:#15803d;font-weight:600;">Nenhuma falta nem atraso '+perTxt+'. 👍</div>')+
+        '<div style="font-size:12px;color:var(--text-secondary);margin-top:10px;">Saldo de horas no período: <b style="color:'+(o.saldo<0?'#b91c1c':'#15803d')+';">'+(o.saldo>0?'+':'')+hh(o.saldo)+'</b></div></div>';
+    }
+    h+='</div>';
+  });
+  h+='<div style="font-size:11.5px;color:var(--text-muted);line-height:1.6;margin-top:10px;">Cada quadradinho é um dia da pessoa no período, do mais antigo para o mais novo. Atraso conta a partir de '+(PONTO_TOL_ATRASO+1)+' minutos depois do horário. Os dados vêm do ponto (Símix) e mostram só a equipe deste setor. Toque numa pessoa para ver as datas.</div></div>';
+  el.innerHTML=h;
+}
+window.renderEqp=renderEqp;
+
 /* ══ OPERADOR DA EMBALAGEM (setor) ══════════════════════════════════
    Tela direta para quem está embalando: procura o produto, escolhe o
    lote (a produção de um dia) e informa quantos pacotes embalou.
@@ -9293,6 +9437,7 @@ window.renderEmbop=renderEmbop;
    Guarda em configuracoes/acessosSetores: { setores: { patrick:[ids] } } */
 const ACX_EXTRAS=[
   {id:'x:emb-rend',  nome:'Rendimento da Embalagem', ic:'📈', grupo:'Embalagem', desc:'Embalado por dia e por turno, ritmo da equipe e o que falta', abrir:"embRendAbrir()"},
+  {id:'x:eqp-emb',   nome:'Equipe da Embalagem',     ic:'👥', grupo:'Embalagem', desc:'Faltas e atrasos da equipe da Embalagem, pelo ponto', abrir:"eqpAbrir('embalagem')"},
   {id:'x:emb-plano', nome:'Plano da Embalagem',      ic:'🗓️', grupo:'Embalagem', desc:'O que embalar em cada dia da semana, com o andamento', abrir:"embPlanoAbrir()"},
   {id:'x:exp-dia',   nome:'Liberado no dia',         ic:'📋', grupo:'Expedição', desc:'Tudo o que a expedição lançou num dia, por horário', abrir:"expDiaAbrir()"}
 ];
