@@ -5673,7 +5673,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='19/11/2026 · 27';
+  var VERSAO='23/11/2026 · 28';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -9271,14 +9271,24 @@ window.renderEqp=renderEqp;
    inteira era regravada e um dos dois podia se perder. */
 let _eoBusca='', _eoProd='', _eoUlt=null;
 const _eoId=()=>'l'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+/* Produtos com os lotes (produções) dos últimos 30 dias: os que ainda
+   estão abertos e os que já foram finalizados. Um lote "aberto" é o que
+   a embalagem ainda não finalizou — mesmo que já tenham lançado tudo. */
 function _eoGrupos(){
+  const lim=new Date(); lim.setDate(lim.getDate()-30);
+  const limN=+(lim.getFullYear()+String(lim.getMonth()+1).padStart(2,'0')+String(lim.getDate()).padStart(2,'0'));
   const g={};
-  _erPendentes().forEach(p=>{
-    const k=_normNome(p.r.produto||'');
-    const o=g[k]||(g[k]={k, nome:p.r.produto||'?', falta:0, lotes:[], tipo:p.tipo, classe:p.classe});
-    o.falta+=p.falta; o.lotes.push(p);
+  (registros||[]).forEach(r=>{
+    if(_erNum(r.data)<limN) return;
+    const total=Number(r.qtd)||0; if(total<=0) return;
+    const e=r.embalagem||{}, lanc=(e.parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
+    const fechado=!!e.feito;
+    const k=_normNome(r.produto||'');
+    const o=g[k]||(g[k]={k, nome:r.produto||'?', falta:0, lotes:[], fechados:[]});
+    if(fechado) o.fechados.push({r, total, emb:Number(e.qtdEmbalada)||lanc});
+    else { const falta=Math.max(0,total-lanc); o.falta+=falta; o.lotes.push({r, total, lanc, falta}); }
   });
-  return Object.values(g).map(o=>{ o.lotes.sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)); return o; });
+  return Object.values(g).map(o=>{ o.lotes.sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data)); o.fechados.sort((a,b)=>_erNum(b.r.data)-_erNum(a.r.data)); return o; });
 }
 function eoBuscar(v){ _eoBusca=v; _eoProd=''; renderEmbop(); }
 window.eoBuscar=eoBuscar;
@@ -9293,18 +9303,18 @@ function _eoAviso(html, ms){
   el.innerHTML=html; document.body.appendChild(el);
   setTimeout(()=>{ if(el.isConnected) el.remove(); }, ms||6000);
 }
-async function eoLancar(fid){
+async function eoLancar(fid, semPerguntar){
   const inp=document.getElementById('eo-q-'+fid);
   const val=parseInt((inp||{}).value)||0;
-  if(val<=0){ alert('Digite quantos pacotes foram embalados.'); if(inp) inp.focus(); return; }
+  if(val<=0){ alert('Digite quantos pacotes foram embalados.'); if(inp) inp.focus(); return false; }
   const reg=(registros||[]).find(r=>r.firestoreId===fid); if(!reg) return;
-  if(reg.embalagem && reg.embalagem.feito){ alert('Este lote já foi finalizado pela Embalagem.'); renderEmbop(); return; }
+  if(reg.embalagem && reg.embalagem.feito){ alert('Este lote já foi finalizado. Para corrigir a quantidade, use “Corrigir quantidade” no lote.'); renderEmbop(); return false; }
   const total=(Number(reg.qtd)||0), feito=((reg.embalagem||{}).parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
-  if(feito+val>total && !confirm('Com esses '+val+', o lote passa do que foi produzido ('+(feito+val)+' de '+total+' pacotes).\n\nLançar assim mesmo?')) return;
+  if(feito+val>total && !confirm('Com esses '+val+', o lote passa do que foi produzido ('+(feito+val)+' de '+total+' pacotes).\n\nLançar assim mesmo?')) return false;
   const lanc={id:_eoId(), qtd:val, hora:agora(), setor:'embop', por:_demAutor()};
   try{
     await updateDoc(doc(db,'registros',fid),{'embalagem.parciais':arrayUnion(lanc)});
-  }catch(e){ alert('Não consegui lançar: '+((e&&e.message)||e)); return; }
+  }catch(e){ alert('Não consegui lançar: '+((e&&e.message)||e)); return false; }
   // já mostra, sem esperar a volta do servidor
   if(!reg.embalagem) reg.embalagem={feito:false, parciais:[]};
   if(!Array.isArray(reg.embalagem.parciais)) reg.embalagem.parciais=[];
@@ -9315,6 +9325,7 @@ async function eoLancar(fid){
   _eoAviso('<span>✓ '+val+' pacote(s) lançado(s) · '+(reg.produto||'')+' ('+String(reg.data||'').slice(0,5)+')</span><button onclick="eoDesfazer()" style="border:1px solid rgba(255,255,255,.5);background:none;color:#fff;border-radius:9px;padding:6px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Desfazer</button>', 9000);
   // completou o lote: oferece finalizar (igual ao "Confirmar" da Embalagem)
   const novo=feito+val;
+  if(semPerguntar) return true;
   if(novo>=total && total>0){
     setTimeout(async ()=>{
       if(!confirm('Esse lote completou: '+novo+' de '+total+' pacotes.\n\nFinalizar o produto? Ele fica disponível para a Expedição.')) return;
@@ -9323,8 +9334,56 @@ async function eoLancar(fid){
       catch(e){ alert('Não consegui finalizar: '+((e&&e.message)||e)); }
     }, 250);
   }
+  return true;
 }
 window.eoLancar=eoLancar;
+/* Finalizar o lote com o que foi embalado, mesmo que seja menos do que o
+   produzido (produziu 100, embalou 98). Se houver número digitado no
+   campo, ele é lançado antes. É o mesmo "Confirmar" da Embalagem. */
+async function eoFinalizar(fid){
+  const reg=(registros||[]).find(r=>r.firestoreId===fid); if(!reg) return;
+  if(reg.embalagem && reg.embalagem.feito){ renderEmbop(); return; }
+  const inp=document.getElementById('eo-q-'+fid);
+  if(inp && (parseInt(inp.value)||0)>0){ const ok=await eoLancar(fid, true); if(!ok) return; }
+  const total=Number(reg.qtd)||0, emb=((reg.embalagem||{}).parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
+  if(emb<=0){ alert('Lance primeiro quantos pacotes foram embalados neste lote.'); if(inp) inp.focus(); return; }
+  const dif=total-emb;
+  if(!confirm('Finalizar o lote de '+String(reg.data||'').slice(0,5)+'?\n\n'+(reg.produto||'')+'\nProduzido: '+total+' pacotes\nEmbalado: '+emb+' pacotes'+
+    (dif>0?('\n\nFicam '+dif+' pacote(s) a menos do que foi produzido. Eles deixam de aparecer como pendentes.'):(dif<0?('\n\nSão '+(-dif)+' pacote(s) a mais do que foi produzido.'):''))+
+    '\n\nO produto fica disponível para a Expedição.')) return;
+  try{
+    await updateDoc(doc(db,'registros',fid),{'embalagem.feito':true,'embalagem.qtdEmbalada':emb,'embalagem.qtdProduzida':total,'embalagem.horaFeito':agora(),'embalagem.finalizadoPor':_demAutor(),'embalagem.finalizadoSetor':'embop'});
+    Object.assign(reg.embalagem,{feito:true, qtdEmbalada:emb, qtdProduzida:total, horaFeito:agora()});
+  }catch(e){ alert('Não consegui finalizar: '+((e&&e.message)||e)); return; }
+  _eoUlt=null; document.getElementById('eo-aviso')?.remove(); renderEmbop();
+  _eoAviso('<span>✓ Lote finalizado com '+emb+' pacote(s) · '+(reg.produto||'')+'</span>', 4500);
+}
+window.eoFinalizar=eoFinalizar;
+/* Corrigir a quantidade de um lote já finalizado. A mudança fica
+   registrada (quem, de quanto para quanto), como na Embalagem. Se a
+   expedição já liberou parte, não dá para registrar menos do que saiu. */
+let _eoEdit='';
+function eoEditar(fid){ _eoEdit=(_eoEdit===fid?'':fid); renderEmbop(); const i=document.getElementById('eo-c-'+fid); if(i){ i.focus(); try{ i.select(); }catch(e){} } }
+window.eoEditar=eoEditar;
+async function eoCorrigir(fid){
+  const reg=(registros||[]).find(r=>r.firestoreId===fid); if(!reg || !reg.embalagem || !reg.embalagem.feito) return;
+  const inp=document.getElementById('eo-c-'+fid);
+  const val=parseInt((inp||{}).value);
+  if(!(val>0)){ alert('Informe a quantidade embalada.'); if(inp) inp.focus(); return; }
+  const antes=Number(reg.embalagem.qtdEmbalada)||0, total=Number(reg.qtd)||0;
+  if(val===antes){ _eoEdit=''; renderEmbop(); return; }
+  const liberado=Number((reg.expedicao||{}).totalLiberado)||0;
+  if(val<liberado){ alert('A expedição já liberou '+liberado+' pacote(s) deste lote.\n\nNão dá para registrar menos do que já saiu. Se o número da expedição estiver errado, fale com a Embalagem ou com o admin.'); return; }
+  if(!confirm('Corrigir a quantidade embalada?\n\n'+(reg.produto||'')+' · produção de '+String(reg.data||'').slice(0,5)+'\nDe '+antes+' para '+val+' pacotes'+(val>total?(' (acima dos '+total+' produzidos)'):'')+'.')) return;
+  try{
+    await updateDoc(doc(db,'registros',fid),{'embalagem.feito':true,'embalagem.qtdEmbalada':val,'embalagem.qtdProduzida':total});
+    reg.embalagem.qtdEmbalada=val;
+    if(typeof embRegistrarAlteracao==='function') await embRegistrarAlteracao(fid, antes, val, 'corrigido pelo operador');
+  }catch(e){ alert('Não consegui corrigir: '+((e&&e.message)||e)); return; }
+  _eoEdit=''; renderEmbop();
+  _eoAviso('<span>✓ Quantidade corrigida: '+antes+' → '+val+' pacote(s)</span>', 4000);
+}
+window.eoCorrigir=eoCorrigir;
 /* desfaz o último lançamento feito nesta tela: entra um lançamento negativo, como o "− Remover" da Embalagem */
 async function eoDesfazer(){
   const u=_eoUlt; if(!u) return;
@@ -9342,8 +9401,8 @@ window.eoDesfazer=eoDesfazer;
 function renderEmbop(){
   const el=document.getElementById('eo-lista'); if(!el) return;
   // quem está digitando não pode perder o que digitou quando a tela se atualiza sozinha
-  const digitado={}; el.querySelectorAll('input[id^="eo-q-"]').forEach(i=>{ if(i.value) digitado[i.id]=i.value; });
-  const foco=(document.activeElement&&document.activeElement.id&&document.activeElement.id.indexOf('eo-q-')===0)?document.activeElement.id:'';
+  const digitado={}; el.querySelectorAll('input[id^="eo-q-"],input[id^="eo-c-"]').forEach(i=>{ if(i.value) digitado[i.id]=i.value; });
+  const foco=(document.activeElement&&document.activeElement.id&&/^eo-[qc]-/.test(document.activeElement.id))?document.activeElement.id:'';
   const fmt=n=>Math.round(n).toLocaleString('pt-BR');
   const grupos=_eoGrupos();
   const hojeN=_erNum(fmtData(new Date()));
@@ -9351,35 +9410,69 @@ function renderEmbop(){
   let h='';
   const g=_eoProd?grupos.find(x=>x.k===_eoProd):null;
   if(_eoProd && !g){ _eoProd=''; }
+  if(!g) _eoEdit='';
   if(g){
     h+='<button onclick="eoProduto(\'\')" style="border:none;background:none;color:var(--mc-azul);font-family:inherit;font-size:14px;font-weight:700;padding:4px 0 10px;cursor:pointer;">‹ Trocar de produto</button>'+
       '<div style="font-size:21px;font-weight:800;line-height:1.2;">'+g.nome+'</div>'+
-      '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 14px;">'+g.lotes.length+' lote(s) para embalar · faltam '+fmt(g.falta)+' pacotes</div>';
-    g.lotes.forEach(p=>{ const r=p.r, total=Number(r.qtd)||0, feito=Math.max(0,total-p.falta), dias=Math.round((_erDate(fmtData(new Date()))-_erDate(r.data))/864e5);
+      '<div style="font-size:13px;color:var(--text-secondary);margin:4px 0 14px;">'+(g.lotes.length?(g.lotes.length+' lote(s) para embalar · faltam '+fmt(g.falta)+' pacotes'):'<b style="color:#15803d;">✓ Todos os lotes deste produto já foram embalados.</b> Veja abaixo os últimos 30 dias; dá para corrigir a quantidade.')+'</div>';
+    g.lotes.forEach(p=>{ const r=p.r, total=p.total, feito=p.lanc, dias=Math.round((_erDate(fmtData(new Date()))-_erDate(r.data))/864e5);
       h+='<div class="card" style="padding:14px;margin-bottom:10px;border-left:4px solid '+(dias>=2?'#d97706':'var(--mc-azul)')+';">'+
         '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-size:16px;font-weight:800;">Produção de '+String(r.data).slice(0,5)+'</span><span style="font-size:12px;color:var(--text-secondary);">'+sem(r.data)+(dias>=1?(' · há '+dias+' dia'+(dias>1?'s':'')):' · hoje')+'</span></div>'+
-        '<div style="font-size:13px;color:var(--text-secondary);margin-top:6px;">Faltam <b style="color:var(--text-primary);font-size:16px;">'+fmt(p.falta)+'</b> de '+fmt(total)+' pacotes'+(feito>0.5?(' · '+fmt(feito)+' já embalados'):'')+'</div>'+
+        '<div style="font-size:13px;color:var(--text-secondary);margin-top:6px;">'+(p.falta>0.001?('Faltam <b style="color:var(--text-primary);font-size:16px;">'+fmt(p.falta)+'</b> de '+fmt(total)+' pacotes'):('<b style="color:#15803d;font-size:15px;">Tudo lançado</b> · '+fmt(total)+' pacotes produzidos'))+(feito>0.5?(' · '+fmt(feito)+' já embalados'):'')+'</div>'+
         '<div style="height:7px;border-radius:99px;background:#e5e7eb;overflow:hidden;margin-top:8px;"><div style="height:100%;width:'+(total?Math.min(100,feito/total*100):0)+'%;background:#16a34a;border-radius:99px;"></div></div>'+
         '<div style="display:flex;gap:8px;margin-top:12px;">'+
           '<input type="number" id="eo-q-'+r.firestoreId+'" inputmode="numeric" min="1" placeholder="Quantos pacotes?" onkeydown="if(event.key===\'Enter\')eoLancar(\''+r.firestoreId+'\')" style="flex:1;min-width:0;font-size:18px;padding:12px;border-radius:10px;border:1.5px solid var(--mc-azul);">'+
           '<button onclick="eoLancar(\''+r.firestoreId+'\')" style="flex:0 0 auto;background:var(--mc-azul);color:#fff;border:none;border-radius:10px;padding:0 22px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;">Lançar</button></div>'+
-        '<button onclick="eoTudo(\''+r.firestoreId+'\','+Math.round(p.falta)+')" style="margin-top:8px;border:1px solid var(--border);background:#fff;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--text-secondary);cursor:pointer;font-family:inherit;">Preencher com o que falta ('+fmt(p.falta)+')</button>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'+
+          (p.falta>0.001?'<button onclick="eoTudo(\''+r.firestoreId+'\','+Math.round(p.falta)+')" style="flex:1 1 180px;border:1px solid var(--border);background:#fff;border-radius:9px;padding:9px 12px;font-size:12.5px;font-weight:600;color:var(--text-secondary);cursor:pointer;font-family:inherit;">Preencher com o que falta ('+fmt(p.falta)+')</button>':'')+
+          '<button onclick="eoFinalizar(\''+r.firestoreId+'\')" title="Fecha o lote com o que foi embalado, mesmo que seja menos do que o produzido" style="flex:1 1 180px;border:1.5px solid #16a34a;background:#f0fdf4;border-radius:9px;padding:9px 12px;font-size:13px;font-weight:800;color:#15803d;cursor:pointer;font-family:inherit;">✓ Finalizar este lote'+(feito>0.5?(' com '+fmt(feito)):'')+'</button>'+
+        '</div>'+
       '</div>'; });
+    // lotes já embalados nos últimos 30 dias: dá para corrigir a quantidade e confirmar de novo
+    if(g.fechados.length){
+      h+='<div style="font-size:12px;font-weight:800;color:var(--text-secondary);letter-spacing:.04em;margin:18px 0 8px;">JÁ EMBALADOS · últimos 30 dias</div>';
+      g.fechados.forEach(p=>{ const r=p.r, e=r.embalagem||{}, ed=_eoEdit===r.firestoreId, dif=p.emb-p.total;
+        const marca=e.emLote?(e.emLote.tipo==='semContar'?'sem contabilizar':'em lote'):'';
+        h+='<div class="card" style="padding:13px 14px;margin-bottom:8px;border-left:4px solid #16a34a;background:#f7fdf9;">'+
+          '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
+            '<div style="flex:1 1 200px;min-width:0;"><div style="font-size:15px;font-weight:800;">✓ Produção de '+String(r.data).slice(0,5)+' <span style="font-size:12px;font-weight:400;color:var(--text-secondary);">'+sem(r.data)+'</span></div>'+
+              '<div style="font-size:13px;color:var(--text-secondary);margin-top:3px;">Embalado <b style="color:var(--text-primary);font-size:15px;">'+fmt(p.emb)+'</b> de '+fmt(p.total)+' pacotes'+
+                (dif<0?(' <span style="color:#b45309;font-weight:700;">· '+fmt(-dif)+' a menos</span>'):(dif>0?(' <span style="color:#1d4ed8;font-weight:700;">· '+fmt(dif)+' a mais</span>'):''))+
+                (marca?(' <span style="font-size:10.5px;font-weight:700;color:#475569;background:#e2e8f0;border-radius:99px;padding:1px 7px;">'+marca+'</span>'):'')+'</div>'+
+              (e.horaFeito?'<div style="font-size:11.5px;color:var(--text-muted);margin-top:2px;">finalizado em '+String(e.horaFeito).slice(0,16)+((e.alteracoes||[]).length?(' · corrigido '+e.alteracoes.length+' vez'+(e.alteracoes.length>1?'es':'')):'')+'</div>':'')+'</div>'+
+            (ed?'':'<button onclick="eoEditar(\''+r.firestoreId+'\')" style="flex:0 0 auto;border:1px solid #16a34a;background:#fff;border-radius:9px;padding:9px 14px;font-size:13px;font-weight:700;color:#15803d;cursor:pointer;font-family:inherit;">Corrigir quantidade</button>')+
+          '</div>'+
+          (ed?'<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">'+
+              '<input type="number" id="eo-c-'+r.firestoreId+'" inputmode="numeric" min="1" value="'+Math.round(p.emb)+'" onkeydown="if(event.key===\'Enter\')eoCorrigir(\''+r.firestoreId+'\')" aria-label="Quantidade embalada" style="flex:1 1 140px;min-width:0;font-size:18px;padding:12px;border-radius:10px;border:1.5px solid #16a34a;">'+
+              '<button onclick="eoCorrigir(\''+r.firestoreId+'\')" style="flex:0 0 auto;background:#16a34a;color:#fff;border:none;border-radius:10px;padding:0 20px;min-height:48px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;">Confirmar</button>'+
+              '<button onclick="eoEditar(\''+r.firestoreId+'\')" style="flex:0 0 auto;border:1px solid var(--border);background:#fff;border-radius:10px;padding:0 16px;min-height:48px;font-size:14px;font-weight:600;color:var(--text-secondary);cursor:pointer;font-family:inherit;">Cancelar</button></div>':'')+
+        '</div>'; });
+    }
   } else {
     const q=_normNome(_eoBusca||'').trim(), pal=q.split(/\s+/).filter(Boolean);
-    const lista=grupos.filter(x=>!pal.length || pal.every(w=>x.k.includes(w))).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
-    if(!grupos.length) h+='<div class="empty" style="padding:40px 10px;text-align:center;color:var(--text-secondary);">Não há nada para embalar agora. 🎉</div>';
-    else if(!lista.length) h+='<div class="empty" style="padding:30px 10px;text-align:center;color:var(--text-secondary);">Nenhum produto com “'+String(_eoBusca).replace(/</g,'&lt;')+'”.</div>';
-    else {
-      h+='<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">'+(pal.length?(lista.length+' produto(s) encontrado(s)'):(lista.length+' produto(s) esperando embalagem'))+'</div>';
-      lista.forEach(x=>{ const antigo=x.lotes.some(p=>_erNum(p.r.data)<hojeN);
+    const casa=x=>!pal.length || pal.every(w=>x.k.includes(w));
+    const abertos=grupos.filter(x=>x.lotes.length && casa(x)).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+    // os que já foram todos embalados só aparecem quando a pessoa procura por eles
+    const prontos=pal.length?grupos.filter(x=>!x.lotes.length && x.fechados.length && casa(x)).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')):[];
+    if(!abertos.length && !prontos.length){
+      h+='<div class="empty" style="padding:34px 10px;text-align:center;color:var(--text-secondary);">'+(pal.length?('Nenhum produto com “'+String(_eoBusca).replace(/</g,'&lt;')+'” nos últimos 30 dias.'):'Não há nada para embalar agora. 🎉<div style="font-size:12.5px;margin-top:6px;">Para corrigir um lote já embalado, procure o produto pelo nome.</div>')+'</div>';
+    } else {
+      h+='<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">'+(pal.length?((abertos.length+prontos.length)+' produto(s) encontrado(s)'):(abertos.length+' produto(s) esperando embalagem'))+'</div>';
+      abertos.forEach(x=>{ const antigo=x.lotes.some(p=>_erNum(p.r.data)<hojeN);
         h+='<button onclick="eoProduto(\''+x.k.replace(/'/g,"\\'")+'\')" class="card" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px;margin-bottom:8px;cursor:pointer;font-family:inherit;">'+
           '<span style="flex:1;min-width:0;"><span style="display:block;font-size:16px;font-weight:700;">'+x.nome+'</span>'+
             '<span style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:3px;">'+x.lotes.length+' lote'+(x.lotes.length>1?'s':'')+' · '+x.lotes.map(p=>String(p.r.data).slice(0,5)).join(', ')+(antigo?' <b style="color:#b45309;">· tem lote de outro dia</b>':'')+'</span></span>'+
-          '<span style="flex:0 0 auto;text-align:right;"><span style="display:block;font-size:18px;font-weight:800;color:var(--mc-azul);">'+fmt(x.falta)+'</span><span style="display:block;font-size:11px;color:var(--text-secondary);">pacotes</span></span>'+
+          '<span style="flex:0 0 auto;text-align:right;"><span style="display:block;font-size:18px;font-weight:800;color:var(--mc-azul);">'+(x.falta>0.001?fmt(x.falta):'✓')+'</span><span style="display:block;font-size:11px;color:var(--text-secondary);">'+(x.falta>0.001?'pacotes':'falta finalizar')+'</span></span>'+
           '<span style="color:var(--text-secondary);font-size:20px;">›</span></button>'; });
+      prontos.forEach(x=>{
+        h+='<button onclick="eoProduto(\''+x.k.replace(/'/g,"\\'")+'\')" class="card" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px;margin-bottom:8px;cursor:pointer;font-family:inherit;background:#f0fdf4;border:1px solid #bbf7d0;">'+
+          '<span style="flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:#16a34a;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-weight:800;">✓</span>'+
+          '<span style="flex:1;min-width:0;"><span style="display:block;font-size:16px;font-weight:700;color:#14532d;">'+x.nome+'</span>'+
+            '<span style="display:block;font-size:12.5px;color:#166534;margin-top:3px;">Lotes já embalados · '+x.fechados.length+' nos últimos 30 dias · toque para ver ou corrigir</span></span>'+
+          '<span style="color:#166534;font-size:20px;">›</span></button>'; });
     }
   }
+
   /* Embalado hoje, produto por produto (todos, sem cortar), com o total do
      dia anterior ao lado para comparar. Conta o que foi lançado na
      embalagem pelos dois setores — é o mesmo controle. "Dia anterior" é
