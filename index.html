@@ -5694,7 +5694,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='24/11/2026 · 35';
+  var VERSAO='24/11/2026 · 36';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -25153,7 +25153,17 @@ window.laCopiarGrupo=laCopiarGrupo;
    dúvida deixa a linha amarela e entra na folha de contagem — código,
    produto e um espaço em branco para anotar a contagem física.
    As marcas ficam em configuracoes/laConferencia, por dia. */
-let _laCf={dia:'', ord:'maior', marcas:{}, ouvindo:false};
+let _laCf={dia:'', ord:'maior', tipo:'todos', marcas:{}, ouvindo:false};
+/* Em que dia o ajuste foi liberado. O que é trazido do refazimento é
+   gravado no app DEPOIS (na hora de importar), mas a liberação foi no
+   dia do ajuste no ERP — é essa a data que vale. Para o que foi
+   liberado pelo próprio app, é a data em que ele foi criado. */
+function _laCfDiaDe(a){
+  const le=t=>{ t=String(t||''); let m=t.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(m) return m[1]+'/'+m[2]+'/'+m[3];
+    m=t.match(/(\d{4})-(\d{2})-(\d{2})/); return m?(m[3]+'/'+m[2]+'/'+m[1]):''; };
+  return le(a.dataAjusteErp) || le(a.eligoEntradaEm) || le(a.criadoEm) || (a.timestamp?fmtData(new Date(Number(a.timestamp))):'');
+}
+function _laCfTipoDe(a){ const t=(typeof _ajRefTipoProduto==='function' && a.cod)?_ajRefTipoProduto(a.cod):'outro'; return t!=='outro'?t:(a.tipo==='pao'?'pao':'salgado'); }
 function _laCfEscutar(){
   if(_laCf.ouvindo) return; _laCf.ouvindo=true;
   onSnapshot(doc(db,'configuracoes','laConferencia'), snap=>{
@@ -25163,10 +25173,12 @@ function _laCfEscutar(){
 function _laCfLinhas(){
   const P={};
   (laAjustes||[]).forEach(a=>{
-    if(String(a.criadoEm||'').slice(0,10)!==_laCf.dia) return;
+    if(_laCfDiaDe(a)!==_laCf.dia) return;
     const q=parseInt(a.qtd)||0; if(!q) return;
+    const tipo=_laCfTipoDe(a);
+    if(_laCf.tipo!=='todos' && tipo!==_laCf.tipo) return;
     const k=_laCodN(a.cod)||_normNome(a.produto||'');
-    const o=P[k]||(P[k]={k, cod:a.cod||'', nome:a.produto||'', qtd:0, n:0, prods:new Set(), semErp:0});
+    const o=P[k]||(P[k]={k, cod:a.cod||'', nome:a.produto||'', tipo, qtd:0, n:0, prods:new Set(), semErp:0});
     o.qtd+=q; o.n++; if(a.data) o.prods.add(String(a.data).slice(0,5)); if(!(a.eligoEntradaId && !a.eligoEntradaErro)) o.semErp+=q;
     if(!o.cod && a.cod) o.cod=a.cod;
   });
@@ -25188,6 +25200,9 @@ function laCfAbrir(){
 function laCfDia(iso){ const p=String(iso||'').split('-'); if(p.length===3){ _laCf.dia=p[2]+'/'+p[1]+'/'+p[0]; _laCfPintar(); } }
 function laCfMover(n){ const p=_laCf.dia.split('/'); const d=new Date(+p[2],+p[1]-1,+p[0]+n,12); _laCf.dia=fmtData(d); _laCfPintar(); }
 function laCfOrd(o){ _laCf.ord=o; _laCfPintar(); }
+function laCfTipo(t){ _laCf.tipo=t; _laCfPintar(); }
+function laCfIr(d){ _laCf.dia=d; _laCfPintar(); }
+Object.assign(window,{laCfTipo, laCfIr});
 async function laCfMarcar(k, tipo){
   const dia=_laCf.dia, m=_laCf.marcas[dia]||(_laCf.marcas[dia]={});
   if(m[k] && m[k].s===tipo) delete m[k]; else m[k]={s:tipo, por:_demAutor(), em:agora()};
@@ -25205,6 +25220,9 @@ function _laCfPintar(){
   const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
   const L=_laCfLinhas(), m=_laCf.marcas[_laCf.dia]||{};
   const tot=L.reduce((t,x)=>t+x.qtd,0), nOk=L.filter(x=>(m[x.k]||{}).s==='ok').length, nDuv=L.filter(x=>(m[x.k]||{}).s==='duv').length;
+  // os últimos dias que têm liberação (do filtro atual), para ir direto
+  const porDia={}; (laAjustes||[]).forEach(a=>{ const d=_laCfDiaDe(a); if(!d || !(parseInt(a.qtd)||0)) return; if(_laCf.tipo!=='todos' && _laCfTipoDe(a)!==_laCf.tipo) return; (porDia[d]||(porDia[d]=new Set())).add(_laCodN(a.cod)||_normNome(a.produto||'')); });
+  const diasCom=Object.keys(porDia).sort((a,b)=>_erNum(b)-_erNum(a)).slice(0,10).map(d=>[d, porDia[d].size]);
   const p=_laCf.dia.split('/'), sem=nomeDiaSemana(new Date(+p[2],+p[1]-1,+p[0]));
   const chip=(on,txt,fn)=>'<button onclick="'+fn+'" style="border:1px solid '+(on?'#0f172a':'#d1d5db')+';background:'+(on?'#0f172a':'#fff')+';color:'+(on?'#fff':'#475569')+';border-radius:99px;padding:7px 12px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">'+txt+'</button>';
   const caixa=(on,cor,bg,simb,rot,fn)=>'<button onclick="'+fn+'" role="checkbox" aria-checked="'+on+'" aria-label="'+rot+'" title="'+rot+'" style="width:40px;height:40px;border-radius:10px;border:2px solid '+(on?cor:'#cbd5e1')+';background:'+(on?bg:'#fff')+';color:'+(on?cor:'#cbd5e1')+';font-size:19px;font-weight:800;cursor:pointer;font-family:inherit;line-height:1;">'+simb+'</button>';
@@ -25216,9 +25234,13 @@ function _laCfPintar(){
         '<button onclick="laCfMover(-1)" aria-label="Dia anterior" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;width:38px;height:38px;font-size:17px;cursor:pointer;">‹</button>'+
         '<input type="date" value="'+p[2]+'-'+p[1]+'-'+p[0]+'" onchange="laCfDia(this.value)" aria-label="Dia" style="width:160px;font-size:15px;padding:8px 10px;border-radius:10px;border:1px solid #d1d5db;">'+
         '<button onclick="laCfMover(1)" aria-label="Próximo dia" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;width:38px;height:38px;font-size:17px;cursor:pointer;">›</button>'+
+        chip(_laCf.tipo==='todos','Todos',"laCfTipo('todos')")+chip(_laCf.tipo==='pao','🍞 Pães',"laCfTipo('pao')")+chip(_laCf.tipo==='salgado','🥐 Salgados',"laCfTipo('salgado')")+
         '<span style="flex:1;"></span><span style="font-size:12px;color:#64748b;">Ordenar:</span>'+
         chip(_laCf.ord==='maior','Maior quantidade',"laCfOrd('maior')")+chip(_laCf.ord==='menor','Menor quantidade',"laCfOrd('menor')")+chip(_laCf.ord==='nome','Nome',"laCfOrd('nome')")+
-      '</div></div>'+
+      '</div>'+
+      (diasCom.length?'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px;"><span style="font-size:11.5px;color:#64748b;">Dias com liberação:</span>'+
+        diasCom.map(([d,n])=>'<button onclick="laCfIr(\''+d+'\')" style="border:1px solid '+(d===_laCf.dia?'#0f172a':'#e2e8f0')+';background:'+(d===_laCf.dia?'#0f172a':'#f8fafc')+';color:'+(d===_laCf.dia?'#fff':'#334155')+';border-radius:8px;padding:5px 9px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">'+d.slice(0,5)+' <span style="font-weight:500;opacity:.75;">'+n+'</span></button>').join('')+'</div>':'')+
+      '</div>'+
     '<div id="la-cf-lista" style="flex:1;overflow:auto;">'+
       (L.length?'<table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr style="position:sticky;top:0;background:#f8fafc;z-index:1;">'+
           '<th style="text-align:left;padding:9px 8px 9px 20px;font-size:11px;color:#64748b;">Cód</th><th style="text-align:left;padding:9px 8px;font-size:11px;color:#64748b;">Produto</th>'+
@@ -25230,7 +25252,7 @@ function _laCfPintar(){
             '<td style="padding:8px;text-align:right;white-space:nowrap;"><b style="font-size:18px;font-variant-numeric:tabular-nums;">'+x.qtd.toLocaleString('pt-BR')+'</b> <span style="font-size:11px;color:#64748b;">pct</span></td>'+
             '<td style="padding:6px;text-align:center;">'+caixa(s==='ok','#16a34a','#dcfce7','✓','Está certo',"laCfMarcar('"+kk+"','ok')")+'</td>'+
             '<td style="padding:6px 20px 6px 6px;text-align:center;">'+caixa(s==='duv','#b45309','#fde68a','?','Tenho dúvida',"laCfMarcar('"+kk+"','duv')")+'</td></tr>'; }).join('')+'</tbody></table>'
-        :'<div style="padding:44px 20px;text-align:center;color:#64748b;"><div style="font-size:34px;">📭</div><div style="font-size:15px;font-weight:700;color:#0f172a;margin-top:8px;">Nada liberado em '+_laCf.dia+'</div><div style="font-size:13px;margin-top:4px;">Use as setas para ver outro dia.</div></div>')+
+        :'<div style="padding:44px 20px;text-align:center;color:#64748b;"><div style="font-size:34px;">📭</div><div style="font-size:15px;font-weight:700;color:#0f172a;margin-top:8px;">Nada liberado em '+_laCf.dia+(_laCf.tipo==='todos'?'':(_laCf.tipo==='pao'?' · pães':' · salgados'))+'</div><div style="font-size:13px;margin-top:4px;">'+(diasCom.length?'Toque num dos dias com liberação, logo acima.':'Não há nenhuma liberação registrada.')+'</div></div>')+
     '</div>'+
     '<div style="padding:12px 20px 16px;border-top:1px solid #eef2f7;display:flex;gap:8px;flex-wrap:wrap;">'+
       '<button class="btn btn-secondary" style="flex:1 1 140px;margin:0;" onclick="document.getElementById(\'la-cf\').remove()">Fechar</button>'+
@@ -25257,7 +25279,7 @@ function laCfImprimir(){
     '</style></head><body>'+
     '<div class="noprint"><button onclick="window.print()">🖨 Imprimir ou salvar em PDF</button></div>'+
     '<div class="topo"><div><div class="emp">Panificadora Monte Castelo</div><div class="tit">Contagem física</div></div>'+
-      '<div class="inf">Liberações de <b>'+esc(_laCf.dia)+'</b> ('+esc(sem)+')<br>'+L.length+' produto(s) marcados com dúvida</div></div>'+
+      '<div class="inf">Liberações de <b>'+esc(_laCf.dia)+'</b> ('+esc(sem)+')'+(_laCf.tipo==='todos'?'':(' · <b>'+(_laCf.tipo==='pao'?'Pães':'Salgados')+'</b>'))+'<br>'+L.length+' produto(s) marcados com dúvida</div></div>'+
     '<div class="sub">Conte o que há no estoque de cada produto e anote na coluna da direita.</div>'+
     '<table><thead><tr><th style="width:80px;">Código</th><th>Produto</th><th class="q">Contagem física</th></tr></thead><tbody>'+
     L.map(x=>'<tr><td class="c">'+esc(x.cod||'')+'</td><td>'+esc(x.nome)+'</td><td class="q"></td></tr>').join('')+'</tbody></table>'+
