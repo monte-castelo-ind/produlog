@@ -1969,11 +1969,6 @@
         <div style="flex:1;"><div class="hb-title">Plano de Produção</div><div class="hb-desc">Cronograma da semana</div></div>
         <span style="color:var(--text-secondary);font-size:20px;">›</span>
       </button>
-      <button class="home-btn" onclick="goTo('s-exp-manual')" style="border-left-color:var(--mc-laranja);margin-bottom:4px;">
-        <div class="hb-icon" style="background:#fef3c7;">📥</div>
-        <div style="flex:1;"><div class="hb-title">Expedição já pegou</div><div class="hb-desc">Lançar produto pego antes da embalagem</div></div>
-        <span style="color:var(--text-secondary);font-size:20px;">›</span>
-      </button>
       <button class="home-btn" onclick="embCfAbrir()" style="border-left-color:#7c3aed;margin-bottom:4px;">
         <div class="hb-icon" style="background:#ede9fe;">🤝</div>
         <div style="flex:1;"><div class="hb-title">Pedidos C&amp;F</div><div class="hb-desc">Tabela por loja · marque conforme for fazendo</div></div>
@@ -2095,7 +2090,6 @@
         <button class="mc-act-btn-secondary" onclick="abrirPresenca('emb')" title="Presença">👥</button>
         <button class="mc-act-btn-secondary" onclick="abrirExpView('emb')" title="Ver expedição">🚚</button>
         <button class="mc-act-btn-secondary" onclick="goTo('s-est-hub')" title="Estoque &amp; Contêiner">🏬</button>
-        <button class="mc-act-btn-secondary" onclick="goTo('s-exp-manual')" title="Produto pego antes da embalagem">📥</button>
         <button class="mc-act-btn-secondary" onclick="cdcAbrir('setor')" title="Controle diário">📊</button>
         <button class="mc-act-btn-secondary" onclick="embRendAbrir()" title="Rendimento: o que foi embalado por dia e o que falta">📈</button>
         <button class="mc-act-btn-primary" onclick="goTo('s-emb-manual')">+ Produto</button>
@@ -3403,7 +3397,6 @@
       <div class="mc-header-actions">
         <button class="mc-act-btn-secondary" id="btn-exp-quebras" style="display:none;" onclick="expQuebrasAbrir()" title="Produtos finalizados com falta: data, produto e quantidade (admin)">📉 Quebras</button>
         <button class="mc-act-btn-secondary" id="btn-exp-dia" style="display:none;" onclick="expDiaAbrir()" title="Tudo o que foi liberado num dia (admin)">📋 Liberado no dia</button>
-        <button class="mc-act-btn-secondary" onclick="goTo('s-exp-manual')" title="Lançar produto já pego antes da embalagem">📥 Já peguei</button>
       </div>
     </div>
     <div class="content" id="exp-sel-content"></div>
@@ -3537,6 +3530,14 @@
         <div class="mc-sector-info">
           <div class="mc-sector-title">Painel da Produção <span id="ppr-hub-badge"></span></div>
           <div class="mc-sector-desc">Cozinha, Confeitaria, Quadra e Embalagem · produtividade, horas e vendas fora do padrão</div>
+        </div>
+        <span class="mc-sector-arrow">›</span>
+      </button>
+      <button class="mc-sector-card" style="border-left:4px solid #16a34a;margin-bottom:10px;" onclick="prodEligoAbrir()">
+        <div class="mc-sector-icon" style="background:#dcfce7;">🏭</div>
+        <div class="mc-sector-info">
+          <div class="mc-sector-title">Produção → ELIGO</div>
+          <div class="mc-sector-desc">O que foi produzido, embalado, liberado e lançado · lotes para o ELIGO e kits</div>
         </div>
         <span class="mc-sector-arrow">›</span>
       </button>
@@ -4923,6 +4924,26 @@
   </div>
 
   <!-- RH: entrada do setor -->
+  <!-- PRODUÇÃO → ELIGO (admin) -->
+  <div class="screen" id="s-prod-eligo">
+    <div class="mc-header">
+      <button class="mc-header-back" onclick="voltar()">‹</button>
+      <div class="mc-brand">
+        <div class="mc-brand-logo" onclick="irParaInicio()" title="Voltar ao início"></div>
+        <div class="mc-brand-text">
+          <div class="mc-brand-name">Monte Castelo</div>
+          <div class="mc-brand-sub">Administrativo</div>
+        </div>
+      </div>
+      <div class="mc-divider-v"></div>
+      <div class="mc-page-info">
+        <div class="mc-page-title">🏭 Produção → ELIGO</div>
+        <div class="mc-page-sub">Produzido, embalado, liberado e lançado · produto acabado e kits</div>
+      </div>
+    </div>
+    <div style="flex:1;padding:0;background:#f5f7fb;overflow-y:auto;" id="pe-content"></div>
+  </div>
+
   <!-- MINHA EQUIPE (ponto do setor, resumido) -->
   <div class="screen" id="s-eqp">
     <div class="mc-header">
@@ -5673,7 +5694,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='23/11/2026 · 28';
+  var VERSAO='24/11/2026 · 35';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -6535,6 +6556,9 @@ function atualizarTela(){
   if(tela==='s-emb-rend') renderEmbRend();
   if(tela==='s-embop-home') renderEmbop();
   if(tela==='s-eqp') renderEqp();
+  if(tela==='s-prod-eligo') renderProdEligo();
+  // a busca da lupa também acompanha o que chega: antes só atualizava quando a pessoa digitava de novo
+  if(tela==='s-adm-buscar' && (document.getElementById('adm-buscar-input')||{}).value){ const c=document.getElementById('adm-buscar-content'), pai=c&&c.parentElement, rol=pai?pai.scrollTop:0; renderBuscarProduto(); if(pai) pai.scrollTop=rol; }
   if(tela==='s-exp-dia') renderExpDia();
   if(tela==='s-ppr'){ const a=document.activeElement; if(!(a && a.closest && a.closest('#ppr-content') && /INPUT|SELECT/.test(a.tagName))) renderPpr(); }
   if(tela==='s-adm-hub' && typeof _pprBadge==='function') _pprBadge();
@@ -6761,6 +6785,7 @@ function goTo(id, semHistorico){
   /* Os MENUS do admin são só do admin. Com as abas liberadas por setor,
      um setor pode estar numa tela do admin; se um botão de voltar antigo
      apontar para o menu, ele volta para a tela inicial do próprio setor. */
+  if(id==='s-exp-manual'){ id=(window.setorAtual && DESTINOS[window.setorAtual]) || 's-inicio'; }      // o "já peguei" foi desativado
   if(window.adminMode!==true && /^s-adm-(hub|g-[\w-]+|cadastros|acessos)$/.test(id)){
     id=(window.setorAtual && window.setorAtual!=='admin' && DESTINOS[window.setorAtual]) || 's-inicio';
   }
@@ -9261,6 +9286,605 @@ function renderEqp(){
 }
 window.renderEqp=renderEqp;
 
+
+
+/* ══ VISUAL DOS PAINÉIS DE PRODUÇÃO (sk) ════════════════════════════
+   Menu lateral preto, área de trabalho clara com cartões brancos e
+   laranja como cor de destaque (o cartão em destaque é preto). Para:
+   Produção → ELIGO e os Controles Diários da Quadra e da Confeitaria.
+   Fica por cima das classes .pt (menu lateral, cartões, tabelas), e
+   acrescenta: o cabeçalho com título grande, a faixa de dias (um
+   cartão por dia, como uma previsão da semana), o gráfico de área e a
+   lista de detalhes. */
+function _skCss(){
+  if(typeof _ptCss==='function') _ptCss();
+  if(document.getElementById('sk-css')) return;
+  const st=document.createElement('style'); st.id='sk-css';
+  st.textContent=`
+.pt.sk{--sk-bg:#f5f5f3;--sk-card:#ffffff;--sk-card2:#fafaf8;--sk-bd:#e9e9e6;--sk-linha:#f0f0ed;--sk-fundo2:#f7f7f5;--sk-tx:#141414;--sk-sub:#6b6b6b;--sk-mut:#a3a3a3;
+  --sk-ouro:#f59e0b;--sk-ouro2:#d97706;--sk-ouro-bg:#fff4e0;--sk-esc:#141414;--sk-esc-tx:#ffffff;--sk-ok:#16a34a;--sk-al:#d97706;--sk-pe:#dc2626;--sk-az:#2563eb;
+  --pt-brand:#f59e0b;--pt-brand2:#fbbf24;--pt-soft:#fff4e0;--pt-txt:#141414;--pt-sub:#6b6b6b;--pt-mut:#a3a3a3;--pt-line:#f0f0ed;--pt-bd:#e9e9e6;
+  background:var(--sk-bg);color:var(--sk-tx);}
+.pt.sk .pt-side{background:#0f0f10;border-right:none;flex-basis:236px;}
+.pt.sk .pt-side-tit{color:#6f6f6f;}
+.pt.sk .pt-nav{color:#b9b9b9;border-radius:11px;}
+.pt.sk .pt-nav:hover{background:rgba(255,255,255,.07);color:#fff;}
+.pt.sk .pt-nav.on{background:rgba(245,158,11,.14);color:#fbbf24;box-shadow:inset 0 0 0 1px rgba(245,158,11,.5);}
+.pt.sk .pt-nav .ct{background:rgba(255,255,255,.12);color:#fff;}
+.pt.sk .pt-nav.on .ct{background:#f59e0b;color:#1a1203;}
+.sk-marca{display:flex;align-items:center;gap:10px;padding:6px 10px 18px;}
+.sk-marca i{flex:0 0 34px;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#fbbf24,#f97316);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:17px;}
+.sk-marca b{display:block;font-size:16px;font-weight:700;color:#fff;letter-spacing:-.01em;} .sk-marca span{display:block;font-size:10.5px;color:#8a8a8a;margin-top:1px;}
+.pt.sk .pt-main{padding:22px 26px 44px;}
+.pt.sk .pt-card{background:var(--sk-card);border:1px solid var(--sk-bd);box-shadow:0 1px 2px rgba(20,20,20,.03);border-radius:16px;color:var(--sk-tx);}
+.pt.sk .pt-card-h h3{color:var(--sk-tx);font-weight:700;} .pt.sk .pt-card-h .sub{color:var(--sk-mut);}
+.pt.sk .pt-ctl{background:#fff!important;border:1px solid var(--sk-bd)!important;color:var(--sk-tx)!important;border-radius:11px;color-scheme:light;}
+.pt.sk .pt-btn{background:#fff;border:1px solid var(--sk-bd);color:var(--sk-tx);border-radius:11px;font-weight:600;}
+.pt.sk .pt-btn:hover{background:var(--sk-fundo2);border-color:#d9d9d5;}
+.pt.sk .pt-btn.pri{background:var(--sk-esc);border-color:var(--sk-esc);color:#fff;}
+.pt.sk .pt-btn.pri:hover{background:#2a2a2a;}
+.pt.sk .pt-btn:disabled{opacity:.4;}
+.pt.sk .pt-seg{background:var(--sk-fundo2);border:1px solid var(--sk-bd);}
+.pt.sk .pt-seg button{color:var(--sk-sub);} .pt.sk .pt-seg button.on{background:var(--sk-esc);color:#fff;box-shadow:none;}
+.pt.sk .pt-tab th{color:var(--sk-mut);border-bottom:1px solid var(--sk-bd);background:transparent;font-weight:600;}
+.pt.sk .pt-tab td{border-bottom:1px solid var(--sk-linha);color:var(--sk-tx);}
+.pt.sk .pt-tab tr.cl:hover td{background:var(--sk-fundo2);}
+.pt.sk .pt-tab tr.sk-on td{background:var(--sk-ouro-bg);}
+.pt.sk .pt-tab tr.sk-ok td{background:#f0fdf4;}
+.pt.sk .pt-tab tr.sk-al td{background:#fef2f2;}
+.pt.sk .pt-tab tr.sk-tot td{background:var(--sk-fundo2);font-weight:700;}
+.pt.sk .pt-pill.t-green{background:#dcfce7;color:#166534;} .pt.sk .pt-pill.t-red{background:#fee2e2;color:#b91c1c;}
+.pt.sk .pt-pill.t-amber{background:#fff4e0;color:#b45309;} .pt.sk .pt-pill.t-blue{background:#e0ecff;color:#1d4ed8;}
+.pt.sk .pt-vazio{color:var(--sk-sub);} .pt.sk .pt-nota{color:var(--sk-mut);}
+.pt.sk input[type=checkbox]{accent-color:#f59e0b;}
+.sk-hero{display:flex;gap:20px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px;}
+.sk-hero .k{font-size:12px;font-weight:600;color:var(--sk-mut);}
+.sk-hero h1{margin:2px 0 0;font-weight:700;font-size:27px;line-height:1.15;letter-spacing:-.02em;color:var(--sk-tx);}
+.sk-hero h1 br{display:none;}
+.sk-hero p{margin:5px 0 0;font-size:13px;color:var(--sk-sub);max-width:640px;line-height:1.5;}
+.sk-hero .dir{margin-left:auto;text-align:right;}
+.sk-hero .g{font-size:34px;font-weight:700;line-height:1;letter-spacing:-.03em;color:var(--sk-tx);font-variant-numeric:tabular-nums;}
+.sk-hero .g small{font-size:13px;font-weight:500;color:var(--sk-sub);margin-left:8px;letter-spacing:0;}
+.sk-hero .m{font-size:12.5px;color:var(--sk-sub);margin-top:5px;}
+.sk-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px;}
+.sk-kpi{border:1px solid var(--sk-bd);background:#fff;border-radius:16px;padding:14px 16px;min-width:0;position:relative;overflow:hidden;}
+.sk-kpi.esc{background:#141414;border-color:#141414;color:#fff;}
+.sk-kpi .t{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--sk-sub);font-weight:600;} .sk-kpi.esc .t{color:#c9c9c9;}
+.sk-kpi .t i{flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:var(--sk-ouro-bg);display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:14px;} .sk-kpi.esc .t i{background:rgba(245,158,11,.22);}
+.sk-kpi .v{font-size:27px;font-weight:700;letter-spacing:-.025em;margin-top:10px;font-variant-numeric:tabular-nums;line-height:1.05;}
+.sk-kpi .s{font-size:11.5px;color:var(--sk-sub);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62%;} .sk-kpi.esc .s{color:#a8a8a8;}
+.sk-kpi .s b{color:var(--sk-ok);font-weight:700;} .sk-kpi .s b.r{color:var(--sk-pe);} .sk-kpi.esc .s b{color:#4ade80;} .sk-kpi.esc .s b.r{color:#fca5a5;}
+.sk-kpi svg{position:absolute;right:12px;bottom:12px;width:36%;height:44px;}
+.sk-dias{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;margin-bottom:14px;align-items:stretch;}
+.sk-dia{flex:1 0 124px;min-width:124px;text-align:left;border:1px solid var(--sk-bd);background:#fff;border-radius:14px;padding:11px 13px;cursor:pointer;font-family:inherit;color:var(--sk-tx);}
+.sk-dia:hover{border-color:#d2d2ce;}
+.sk-dia.on{background:#141414;border-color:#141414;color:#fff;box-shadow:0 8px 22px rgba(20,20,20,.18);}
+.sk-dia .d{font-size:12px;font-weight:600;color:var(--sk-sub);display:flex;justify-content:space-between;gap:6px;} .sk-dia.on .d{color:#fbbf24;}
+.sk-dia .v{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:7px;font-variant-numeric:tabular-nums;line-height:1;}
+.sk-dia .v small{font-size:11px;font-weight:500;color:var(--sk-mut);margin-left:4px;} .sk-dia.on .v small{color:#a8a8a8;}
+.sk-dia .s{font-size:11.5px;color:var(--sk-sub);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;} .sk-dia.on .s{color:#d4d4d4;}
+.sk-dia .b{height:4px;border-radius:99px;background:#eeeeeb;overflow:hidden;margin-top:8px;} .sk-dia.on .b{background:rgba(255,255,255,.16);} .sk-dia .b i{display:block;height:100%;border-radius:99px;background:#f59e0b;}
+.sk-seta{flex:0 0 36px;border:1px solid var(--sk-bd);background:#fff;color:var(--sk-tx);border-radius:12px;cursor:pointer;font-size:18px;font-family:inherit;}
+.sk-seta:disabled{opacity:.3;cursor:default;}
+.sk-det{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--sk-linha);font-size:13.5px;} .sk-det:first-child{border-top:none;}
+.sk-det .i{flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:var(--sk-fundo2);display:inline-flex;align-items:center;justify-content:center;font-size:14px;} .sk-det .r{flex:1;color:var(--sk-sub);} .sk-det b{font-variant-numeric:tabular-nums;font-weight:700;}
+.sk-in{width:100%!important;height:38px!important;border:1px solid var(--sk-bd)!important;background:#fff!important;color:var(--sk-tx)!important;border-radius:10px!important;padding:0 10px!important;font-family:inherit;font-size:15px!important;font-weight:700;text-align:right;box-shadow:none!important;color-scheme:light;}
+.sk-in:focus{outline:2px solid #f59e0b;outline-offset:1px;border-color:#f59e0b!important;} .sk-in::placeholder{color:var(--sk-mut);font-weight:500;}
+.sk-link{border:none;background:none;padding:0;cursor:pointer;font-family:inherit;font-size:12px;color:var(--sk-ouro2);text-decoration:underline;text-underline-offset:2px;font-weight:600;}
+.sk-faixa{border:1px solid #fcd9a0;background:var(--sk-ouro-bg);border-radius:14px;padding:12px 16px;font-size:13px;line-height:1.6;margin-bottom:14px;color:var(--sk-tx);}
+.sk-faixa.pe{border-color:#fecaca;background:#fef2f2;}
+.sk-sub-card{border:1px solid var(--sk-bd);border-radius:12px;padding:6px 12px;background:var(--sk-fundo2);}
+.sk-barra{position:sticky;bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#141414!important;border-color:#141414!important;color:#fff!important;box-shadow:0 14px 34px rgba(20,20,20,.28)!important;}
+.sk-barra .sb{color:#b9b9b9;} .sk-barra .pt-btn.pri{background:#f59e0b;border-color:#f59e0b;color:#1a1203;} .sk-barra .pt-ctl{background:#262626!important;border-color:#3a3a3a!important;color:#fff!important;color-scheme:dark;}
+@media (max-width:1100px){ .sk-kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media (max-width:860px){ .sk-hero h1{font-size:23px;} .sk-hero .dir{margin-left:0;text-align:left;} .sk-in{font-size:16px!important;} .pt.sk .pt-main{padding:16px 12px 36px;} }
+@media (max-width:520px){ .sk-kpis{grid-template-columns:1fr 1fr;gap:8px;} .sk-kpi .v{font-size:22px;} .sk-kpi svg{display:none;} .sk-kpi .s{max-width:100%;} }
+`;
+  document.head.appendChild(st);
+}
+/* liga o tema numa tela (fundo e cabeçalho do app) */
+function _skLigar(el, telaId){ _skCss(); el.style.padding='0'; el.style.background='#f5f5f3'; const t=document.getElementById(telaId); if(t) t.classList.remove('sk-on'); }
+/* cartão de indicador, com a linha dos últimos dias; "esc" = o cartão preto em destaque */
+function _skKpi(ic, rot, val, sub, serie, esc){
+  const v=(serie||[]).filter(x=>x!==null&&x!==undefined), n=v.length, mx=Math.max(1,...v), mn=Math.min(...(n?v:[0])), fx=(mx-mn)||1;
+  let sp='';
+  if(n>1){ const pts=v.map((x,i)=>[(i/(n-1))*100, 40-((x-mn)/fx)*32]); const d='M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L');
+    const id='sk-sp-'+Math.random().toString(36).slice(2,8);
+    sp='<svg viewBox="0 0 100 44" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f59e0b" stop-opacity="'+(esc?'.55':'.32')+'"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/></linearGradient></defs>'+
+      '<path d="'+d+' L100,44 L0,44 Z" fill="url(#'+id+')"/><path d="'+d+'" fill="none" stroke="#f59e0b" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>'; }
+  return '<div class="sk-kpi'+(esc?' esc':'')+'"><div class="t"><i>'+ic+'</i>'+rot+'</div><div class="v">'+val+'</div><div class="s">'+(sub||'&nbsp;')+'</div>'+sp+'</div>';
+}
+/* a faixa de dias: um cartão por dia, o escolhido em dourado. itens: [{d:'dd/mm/aaaa', v, un, s, pct}] do mais antigo ao mais novo */
+function _skDias(itens, sel, fn, maisAntigos, maisNovos){
+  const sem=d=>nomeDiaSemana(_erDate(d)).slice(0,3);
+  const hj=hoje();
+  return '<div class="sk-dias">'+(maisAntigos?'<button class="sk-seta" onclick="'+maisAntigos+'" aria-label="Dias anteriores">‹</button>':'')+
+    itens.map(x=>'<button class="sk-dia'+(x.d===sel?' on':'')+'" onclick="'+fn+'(\''+x.d+'\')" aria-pressed="'+(x.d===sel)+'">'+
+      '<div class="d"><span>'+(x.d===hj?'Hoje':sem(x.d))+'</span><span>'+x.d.slice(0,5)+'</span></div>'+
+      '<div class="v">'+x.v+(x.un?'<small>'+x.un+'</small>':'')+'</div>'+
+      '<div class="s">'+(x.s||'&nbsp;')+'</div>'+
+      (x.pct!==undefined&&x.pct!==null?'<div class="b"><i style="width:'+Math.max(0,Math.min(100,x.pct))+'%;'+(x.cor?('background:'+x.cor+';'):'')+'"></i></div>':'')+'</button>').join('')+
+    (maisNovos?'<button class="sk-seta" onclick="'+maisNovos+'" aria-label="Dias seguintes">›</button>':'')+'</div>';
+}
+/* gráfico de área dourado, com o valor em cada ponto */
+function _skArea(vals, rots, fmt, id){
+  const W=900, H=240, L=14, R=14, T=34, B=30, iw=W-L-R, ih=H-T-B, mx=Math.max(1,...vals), n=vals.length;
+  if(!n) return '<div class="pt-vazio">Sem dados.</div>';
+  const X=i=>L+(n>1?i/(n-1):.5)*iw, Y=v=>T+ih-(v/mx)*ih;
+  const pts=vals.map((v,i)=>[X(i),Y(v)]);
+  let d='M'+pts[0][0].toFixed(1)+','+pts[0][1].toFixed(1);
+  for(let i=1;i<pts.length;i++){ const a=pts[i-1], b=pts[i], cx=(a[0]+b[0])/2; d+=' C'+cx.toFixed(1)+','+a[1].toFixed(1)+' '+cx.toFixed(1)+','+b[1].toFixed(1)+' '+b[0].toFixed(1)+','+b[1].toFixed(1); }
+  const passo=n>16?Math.ceil(n/12):1;
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block;" role="img" aria-label="'+rots.map((r,i)=>r+': '+fmt(vals[i])).join(', ')+'">'+
+    '<defs><linearGradient id="'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f59e0b" stop-opacity=".38"/><stop offset="1" stop-color="#f59e0b" stop-opacity="0"/></linearGradient></defs>'+
+    [0,.5,1].map(f=>'<line x1="'+L+'" x2="'+(W-R)+'" y1="'+(T+ih*f)+'" y2="'+(T+ih*f)+'" stroke="#eeeeeb" stroke-dasharray="4 5"/>').join('')+
+    '<path d="'+d+' L'+pts[pts.length-1][0].toFixed(1)+','+(T+ih)+' L'+pts[0][0].toFixed(1)+','+(T+ih)+' Z" fill="url(#'+id+')"/>'+
+    '<path d="'+d+'" fill="none" stroke="#f59e0b" stroke-width="2.6" stroke-linecap="round"/>'+
+    pts.map((p,i)=>'<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="4" fill="#fff" stroke="#f59e0b" stroke-width="2.4"/>'+
+      (i%passo===0||i===n-1?'<text x="'+p[0].toFixed(1)+'" y="'+(p[1]-11).toFixed(1)+'" text-anchor="'+(i===0?'start':(i===n-1?'end':'middle'))+'" font-size="12" font-weight="700" fill="#141414">'+fmt(vals[i])+'</text>'+
+        '<text x="'+p[0].toFixed(1)+'" y="'+(H-8)+'" text-anchor="'+(i===0?'start':(i===n-1?'end':'middle'))+'" font-size="11" fill="#a3a3a3">'+rots[i]+'</text>':'')).join('')+'</svg>';
+}
+
+/* ══ PRODUÇÃO → ELIGO (admin) ═══════════════════════════════════════
+   Painel para lançar a produção no ELIGO sem esperar o dia inteiro
+   ser embalado.
+
+   PRODUTO ACABADO — o que a EXPEDIÇÃO liberou já entrou no estoque
+   físico. Tudo o que foi liberado e ainda não foi para o ELIGO fica em
+   "Liberar para o ELIGO". O admin escolhe e libera um LOTE: entrada
+   por produção (pela API, quando o código estiver configurado; até lá,
+   marca como lançado à mão). O painel mostra, por dia de produção:
+   produzido → embalado → liberado → no ELIGO.
+   Em cada registro fica: eligoProd = { qtd, lotes:[{lote,qtd,em,...}] }.
+
+   KITS — "Kits produzidos" lista, por dia, as massas da confeitaria, os
+   recheios da cozinha e os kits da quadra, com um visto de "lançado no
+   ELIGO" (esses o admin lança à mão, como produção). "Kits consumidos"
+   mostra quanto de cada um foi gasto e EM QUAIS PRODUTOS, e prepara a
+   saída por produção, com a observação dizendo onde foi consumido.
+   Os vistos e os códigos dos kits ficam em configuracoes/eligoProducao.
+   Os números de consumo e quebra são os mesmos dos Controles Diários. */
+let _peAba='resumo', _peDia='', _peTipo='todos', _peSel={}, _peCfg={codigos:{}, marcas:{}, prods:{}}, _peOuvindo=false, _peBuscaP='';
+function _peEscutar(){
+  if(_peOuvindo) return; _peOuvindo=true;
+  onSnapshot(doc(db,'configuracoes','eligoProducao'), snap=>{
+    try{ const d=snap.exists()?snap.data():{}; _peCfg={codigos:d.codigos||{}, marcas:d.marcas||{}, prods:d.prods||{}};
+      if(document.querySelector('.screen.active')?.id==='s-prod-eligo') renderProdEligo(); }catch(e){ console.error('eligoProducao', e); }
+  }, e=>console.error('eligoProducao err', e));
+}
+async function _peSalvarCfg(){
+  // limpa vistos com mais de 120 dias
+  const lim=new Date(); lim.setDate(lim.getDate()-120); const limN=_erNum(fmtData(lim));
+  Object.keys(_peCfg.marcas).forEach(k=>{ const d=k.split('|')[1]; if(d && _erNum(d)<limN) delete _peCfg.marcas[k]; });
+  Object.keys(_peCfg.prods||{}).forEach(k=>{ const d=k.split('|')[0]; if(d && _erNum(d)<limN) delete _peCfg.prods[k]; });
+  try{ await setDoc(doc(db,'configuracoes','eligoProducao'),{codigos:_peCfg.codigos, marcas:_peCfg.marcas, prods:_peCfg.prods||{}, atualizadoEm:agora(), por:_demAutor()}); }
+  catch(e){ alert('Não consegui salvar: '+((e&&e.message)||e)); }
+}
+function prodEligoAbrir(){
+  if(window.adminMode!==true){ alert('Só o admin acessa este painel.'); return; }
+  _peEscutar(); goTo('s-prod-eligo'); renderProdEligo();
+}
+function peIr(aba){ _peAba=aba; renderProdEligo(); const c=document.getElementById('pe-content'); if(c) c.scrollTop=0; }
+function peDia(d){ if(d){ _peDia=d; const x=d.split('/'); if(x.length===3) _peCalMes=x[2]+'-'+x[1]; } renderProdEligo(); }
+function peDiaIso(iso){ const p=String(iso||'').split('-'); if(p.length===3) peDia(p[2]+'/'+p[1]+'/'+p[0]); }
+function peDiaMover(n){ const ds=_peDias(); const i=ds.indexOf(_peDia); const j=Math.max(0,Math.min(ds.length-1,(i<0?0:i)-n)); if(ds[j]) peDia(ds[j]); }
+function peTipo(t){ _peTipo=t; renderProdEligo(); }
+Object.assign(window,{prodEligoAbrir, peIr, peDia, peDiaIso, peDiaMover, peTipo});
+
+/* números de um registro de produção */
+function _peNum(r){
+  const e=r.embalagem||{}, x=r.expedicao||{};
+  const prod=Number(r.qtd)||0, lanc=(e.parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0);
+  const emb=e.feito?(Number(e.qtdEmbalada)||lanc):Math.max(0,lanc);
+  const lib=Number(x.totalLiberado)||0, eli=Number((r.eligoProd||{}).qtd)||0;
+  const quebraExp=(typeof expQuebra==='function')?expQuebra(r):0;
+  return {prod, emb, lib, eli, embFechado:!!e.feito,
+    faltaEmb:e.feito?0:Math.max(0,prod-emb), faltaLib:Math.max(0,emb-lib-quebraExp), pendEligo:Math.max(0,lib-eli), quebraExp};
+}
+/* dias com produção, do mais novo para o mais antigo (últimos 45) */
+function _peDias(){
+  const lim=new Date(); lim.setDate(lim.getDate()-45); const limN=_erNum(fmtData(lim));
+  return [...new Set((registros||[]).filter(r=>(Number(r.qtd)||0)>0 && _erNum(r.data)>=limN).map(r=>r.data))].sort((a,b)=>_erNum(b)-_erNum(a));
+}
+function _peDoDia(dia){ return (registros||[]).filter(r=>r.data===dia && (Number(r.qtd)||0)>0); }
+function _peSoma(regs){ const t={prod:0,emb:0,lib:0,eli:0,faltaEmb:0,faltaLib:0,pendEligo:0}; regs.forEach(r=>{ const n=_peNum(r); Object.keys(t).forEach(k=>t[k]+=n[k]); }); return t; }
+const _peEhTipo=(r,t)=>t==='todos' || (_erGrupo(r).tipo==='pao')===(t==='pao');
+
+/* ── LOTES para o ELIGO ── */
+function _pePendentes(){
+  return (registros||[]).map(r=>({r, n:_peNum(r), g:_erGrupo(r)})).filter(x=>x.n.pendEligo>0.001)
+    .sort((a,b)=>_erNum(a.r.data)-_erNum(b.r.data) || String(a.r.produto).localeCompare(String(b.r.produto),'pt-BR'));
+}
+let _peDataMov='';
+function peDataMov(v){ _peDataMov=v||''; }
+window.peDataMov=peDataMov;
+function peSel(fid, v){ if(v) _peSel[fid]=true; else delete _peSel[fid]; renderProdEligo(); }
+function peSelTodos(v, tipo){ _pePendentes().forEach(x=>{ if(tipo && (x.g.tipo==='pao')!==(tipo==='pao')) return; if(v) _peSel[x.r.firestoreId]=true; else delete _peSel[x.r.firestoreId]; }); renderProdEligo(); }
+function peBuscaP(v){ _peBuscaP=v; renderProdEligo(); const i=document.getElementById('pe-busca'); if(i){ i.focus(); try{ i.setSelectionRange(i.value.length,i.value.length); }catch(e){} } }
+Object.assign(window,{peSel, peSelTodos, peBuscaP});
+async function peLiberarLote(){
+  if(window.adminMode!==true) return;
+  const itens=_pePendentes().filter(x=>_peSel[x.r.firestoreId]);
+  if(!itens.length){ alert('Marque os produtos que vão neste lote.'); return; }
+  const totalPct=itens.reduce((t,x)=>t+x.n.pendEligo,0);
+  const d=new Date(), lote='L'+String(d.getFullYear()).slice(2)+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'-'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0');
+  const dataMov=((document.getElementById('pe-data-mov')||{}).value||'');
+  const dataBR=dataMov?dataMov.split('-').reverse().join('/'):hoje();
+  const cod=eligoCfg.movProdEnt||'';
+  const viaApi=eligoPronto() && !!cod;
+  if(!confirm('Liberar o lote '+lote+' para o ELIGO?\n\n'+itens.length+' produção(ões) · '+Math.round(totalPct).toLocaleString('pt-BR')+' pacotes\nData do movimento: '+dataBR+'\n\n'+
+    (viaApi?'Vou lançar a ENTRADA POR PRODUÇÃO no ELIGO (movimento '+cod+').'
+           :'A API de entrada por produção ainda não está configurada.\nOs itens serão MARCADOS como lançados — lance a produção no ELIGO à mão com esses números.'))) return;
+  // junta por produto (um lançamento por código no ELIGO), guardando de quais produções veio
+  const porProd={};
+  itens.forEach(x=>{ const c=eligoCodOficial(x.r.cod)||String(x.r.cod||''); const o=porProd[c]||(porProd[c]={cod:c, nome:x.r.produto, qtd:0, partes:[], regs:[]});
+    o.qtd+=x.n.pendEligo; o.partes.push(String(x.r.data).slice(0,5)+' ('+Math.round(x.n.pendEligo)+')'); o.regs.push(x); });
+  const grupos=Object.values(porProd), falhas=[]; let okRegs=[];
+  if(viaApi){
+    const senha=eligoSenha(); if(senha===null) return;
+    const envio=grupos.map((o,i)=>({ref:String(i+1), produto:o.cod, quantidade:Math.round(o.qtd*1000)/1000, tipo:'entrada', data_movimento:eligoData(dataBR),
+      observacoes:('PRODUCAO lote '+lote+' · produzido em '+o.partes.join(', ')).slice(0,250), tipo_movimento_id:cod}));
+    const resp=await eligoEnviar(envio, senha, false);
+    if(!resp.ok){ if(/senha/i.test(resp.erro||'')) eligoEsquecerSenha(); alert('O ELIGO não aceitou o lote:\n\n'+(resp.erro||'erro desconhecido')+'\n\nNada foi marcado.'); return; }
+    grupos.forEach((o,i)=>{ const it=(resp.resultados||[]).find(x=>String(x.ref)===String(i+1))||(resp.resultados||[])[i]||{};
+      if(it.ok) okRegs=okRegs.concat(o.regs); else falhas.push(o.nome+': '+(it.erro||'recusado')); });
+  } else okRegs=itens;
+  // marca nos registros o que foi lançado
+  let gravados=0;
+  for(const x of okRegs){
+    const q=x.n.pendEligo;
+    try{
+      await updateDoc(doc(db,'registros',x.r.firestoreId),{'eligoProd.qtd':Math.round((x.n.eli+q)*1000)/1000,
+        'eligoProd.lotes':arrayUnion({lote, qtd:q, em:agora(), por:_demAutor(), data:dataBR, via:viaApi?'api':'manual'})});
+      x.r.eligoProd={qtd:x.n.eli+q, lotes:[...((x.r.eligoProd||{}).lotes||[]), {lote, qtd:q, em:agora(), por:_demAutor(), data:dataBR, via:viaApi?'api':'manual'}]};
+      delete _peSel[x.r.firestoreId]; gravados++;
+    }catch(e){ falhas.push(x.r.produto+' ('+String(x.r.data).slice(0,5)+'): não gravou a marca — '+((e&&e.message)||e)); }
+  }
+  renderProdEligo();
+  alert((gravados?('✓ Lote '+lote+': '+gravados+' produção(ões) '+(viaApi?'lançada(s) no ELIGO':'marcada(s) como lançada(s)')+'.'):'Nada foi lançado.')+
+    (falhas.length?('\n\n⚠ Ficaram pendentes:\n'+falhas.join('\n')):''));
+}
+/* desfaz um lote marcado à mão (o que foi pela API precisa de estorno no ELIGO) */
+async function peDesfazerLote(lote){
+  if(window.adminMode!==true) return;
+  const regs=(registros||[]).filter(r=>((r.eligoProd||{}).lotes||[]).some(l=>l.lote===lote));
+  const api=regs.some(r=>r.eligoProd.lotes.some(l=>l.lote===lote && l.via==='api'));
+  if(!confirm('Desfazer o lote '+lote+'?\n\nOs '+regs.length+' item(ns) voltam para “Liberar para o ELIGO”.'+(api?'\n\n⚠ Este lote foi lançado pela API. Desfazer aqui NÃO estorna no ELIGO: faça o estorno lá.':''))) return;
+  for(const r of regs){
+    const tira=r.eligoProd.lotes.filter(l=>l.lote===lote).reduce((t,l)=>t+(Number(l.qtd)||0),0);
+    const lotes=r.eligoProd.lotes.filter(l=>l.lote!==lote), qtd=Math.max(0,Math.round(((Number(r.eligoProd.qtd)||0)-tira)*1000)/1000);
+    try{ await updateDoc(doc(db,'registros',r.firestoreId),{'eligoProd.qtd':qtd,'eligoProd.lotes':lotes}); r.eligoProd={qtd, lotes}; }
+    catch(e){ alert('Erro em '+r.produto+': '+((e&&e.message)||e)); return; }
+  }
+  renderProdEligo();
+}
+Object.assign(window,{peLiberarLote, peDesfazerLote});
+
+/* ── KITS: produzidos e consumidos num dia ── */
+const _peK=(lado,dia,tipo,nome)=>lado+'|'+dia+'|'+tipo+'|'+_normNome(nome||'');
+const _peCodK=(tipo,nome)=>tipo+'|'+_normNome(nome||'');
+function _peKitsProduzidos(dia){
+  const out=[];
+  const soma=(lista,campo,tipo,rot)=>{ const m={}; (lista||[]).forEach(x=>{ if(x.data===dia && x[campo]) m[x[campo]]=(m[x[campo]]||0)+(parseFloat(x.qtdKg)||0); });
+    Object.keys(m).sort().forEach(n=>{ if(m[n]>0.0001) out.push({tipo, grupo:rot, nome:n, qtd:m[n], un:'kg'}); }); };
+  soma(typeof regMassas!=='undefined'?regMassas:[], 'massa', 'massa', 'Massas · confeitaria');
+  soma(typeof regRecheios!=='undefined'?regRecheios:[], 'recheio', 'recheio', 'Recheios · cozinha');
+  (typeof _cdqLinhas==='function'?_cdqLinhas(dia):[]).forEach(l=>{ if(l.consumidos>0) out.push({tipo:'kit', grupo:'Kits · quadra', nome:l.kit, qtd:l.consumidos, un:'kit', kg:l.kgKits}); });
+  return out;
+}
+function _peKitsConsumidos(dia){
+  const M={};
+  const add=(tipo,grupo,nome,un,prod,q,esp)=>{ if(!nome || !(q>0.0001)) return; const k=tipo+'|'+_normNome(nome);
+    const o=M[k]||(M[k]={tipo, grupo, nome, un, qtd:0, esp:0, prods:{}}); o.qtd+=q; o.esp+=(esp||0); o.prods[prod]=(o.prods[prod]||0)+q; };
+  (typeof _cdcLinhas==='function'?_cdcLinhas(dia):[]).forEach(l=>{
+    add('massa','Massas · confeitaria',l.tipoMassa,'kg',l.nome,l.massaReal,l.massaEsp);
+    add('recheio','Recheios · cozinha',l.tipoRecheio,'kg',l.nome,l.r1Real,l.r1Esp);
+    add('recheio','Recheios · cozinha',l.tipoRecheio2,'kg',l.nome,l.r2Real,l.r2Esp);
+  });
+  // quadra: os kits consumidos, repartidos pelos produtos na proporção dos quilos produzidos
+  (typeof _cdqLinhas==='function'?_cdqLinhas(dia):[]).forEach(l=>{
+    if(!(l.consumidos>0)) return;
+    const ps=Object.values(l.produtos||{}), totKg=ps.reduce((t,p)=>t+(p.prod||0)*(p.kgPacote||0),0);
+    const k='kit|'+_normNome(l.kit);
+    const o=M[k]={tipo:'kit', grupo:'Kits · quadra', nome:l.kit, un:'kit', qtd:l.consumidos, kg:l.kgKits, esp:0, prods:{}, quebraPct:l.quebraPct, quebraKg:l.quebraKg, massaVelha:l.massaVelha};
+    ps.forEach(p=>{ const parte=totKg>0?((p.prod||0)*(p.kgPacote||0)/totKg*l.consumidos):0; if(parte>0.0001) o.prods[p.nome]=parte; });
+  });
+  return Object.values(M).sort((a,b)=>a.grupo.localeCompare(b.grupo)||a.nome.localeCompare(b.nome,'pt-BR'));
+}
+const _peFmtQ=(v,un)=>(un==='kit'?(Math.round(v*100)/100).toLocaleString('pt-BR'):(Math.round(v*10)/10).toLocaleString('pt-BR'));
+/* a observação que vai no ELIGO: onde o kit foi gasto */
+function _peObsConsumo(dia, k){
+  const partes=Object.entries(k.prods).sort((a,b)=>b[1]-a[1]).map(([n,q])=>n+' - '+_peFmtQ(q,k.un)+(k.un==='kit'?' kit':' kg'));
+  let t='Consumo ref. ao dia '+dia+' - '+partes.join(' e ');
+  if(t.length>250) t=t.slice(0,247)+'...';
+  return t;
+}
+async function peMarcar(chave, v){
+  if(window.adminMode!==true) return;
+  if(v) _peCfg.marcas[chave]={em:agora(), por:_demAutor(), via:'manual'}; else delete _peCfg.marcas[chave];
+  renderProdEligo(); await _peSalvarCfg();
+}
+async function peMarcarTodos(lado, v){
+  const lista=lado==='P'?_peKitsProduzidos(_peDia):_peKitsConsumidos(_peDia);
+  lista.forEach(k=>{ const ch=_peK(lado,_peDia,k.tipo,k.nome); if(v){ if(!_peCfg.marcas[ch]) _peCfg.marcas[ch]={em:agora(), por:_demAutor(), via:'manual'}; } else delete _peCfg.marcas[ch]; });
+  renderProdEligo(); await _peSalvarCfg();
+}
+async function peCodKit(tipo, nome){
+  const k=_peCodK(tipo,nome), v=prompt('Código de “'+nome+'” no ELIGO:\n\n(É o código do produto/kit no cadastro do ELIGO. Só é usado para dar a saída por produção.)', _peCfg.codigos[k]||'');
+  if(v===null) return; const c=String(v).trim();
+  if(c) _peCfg.codigos[k]=c; else delete _peCfg.codigos[k];
+  renderProdEligo(); await _peSalvarCfg();
+}
+/* saída por produção do consumo de UM kit/insumo num dia (pela API) */
+async function peSaidaKit(tipo, nome){
+  if(window.adminMode!==true) return;
+  const k=_peKitsConsumidos(_peDia).find(x=>x.tipo===tipo && _normNome(x.nome)===_normNome(nome)); if(!k) return;
+  const ch=_peK('C',_peDia,tipo,nome);
+  if(_peCfg.marcas[ch]){ alert('Esta saída já está marcada como lançada.'); return; }
+  const codMov=eligoCfg.movProdSai||'', codProd=_peCodDe(tipo,nome);
+  if(!eligoPronto() || !codMov){ alert('A API de saída por produção ainda não está configurada (falta o código do movimento em Integração com o ELIGO).\n\nEnquanto isso, lance a saída no ELIGO à mão e marque o visto.'); return; }
+  if(!codProd){ alert('“'+nome+'” está sem código no cadastro. Preencha em Cadastros › Kits, Massas e Recheios (ou toque em “sem código” na linha dele).'); return; }
+  const obs=_peObsConsumo(_peDia, k);
+  if(!confirm('Dar SAÍDA POR PRODUÇÃO no ELIGO?\n\n'+nome+' (cód. '+codProd+')\n'+_peFmtQ(k.qtd,k.un)+' '+k.un+' · data do movimento: '+_peDia+'\n\nObservação:\n'+obs)) return;
+  const senha=eligoSenha(); if(senha===null) return;
+  const resp=await eligoEnviar([{ref:'1', produto:codProd, quantidade:Math.round(k.qtd*1000)/1000, tipo:'saida', data_movimento:eligoData(_peDia), observacoes:obs, tipo_movimento_id:codMov}], senha, false);
+  const it=(resp.resultados||[])[0]||{};
+  if(!resp.ok || !it.ok){ if(/senha/i.test(resp.erro||'')) eligoEsquecerSenha(); alert('O ELIGO não aceitou a saída:\n\n'+(resp.erro||it.erro||'recusado')); return; }
+  _peCfg.marcas[ch]={em:agora(), por:_demAutor(), via:'api', qtd:k.qtd};
+  renderProdEligo(); await _peSalvarCfg();
+}
+Object.assign(window,{peMarcar, peMarcarTodos, peCodKit, peSaidaKit});
+
+/* ── A TELA ── */
+/* código do kit / massa / recheio no ELIGO: vem do cadastro (Cadastros › Kits, Massas e Recheios) */
+function _peCodDe(tipo, nome){
+  const alvo=_normNome(nome||''), kn=(typeof _kitNormNome==='function')?_kitNormNome(nome||''):alvo;
+  const lista=tipo==='kit'?(typeof kitsCustom!=='undefined'?kitsCustom:[]):(tipo==='massa'?(typeof massasFirebase!=='undefined'?massasFirebase:[]):(typeof recheiosFirebase!=='undefined'?recheiosFirebase:[]));
+  const a=(lista||[]).find(x=>_normNome(x.nome||'')===alvo || (tipo==='kit' && typeof _kitNormNome==='function' && _kitNormNome(x.nome||'')===kn));
+  const c=a&&a.codigo!=null?String(a.codigo).trim():'';
+  return c || (_peCfg.codigos[_peCodK(tipo,nome)]||'');
+}
+/* número da produção no ELIGO (o ELIGO gera ao lançar à mão): fica guardado por dia e por grupo */
+const _pePK=(dia,grupo)=>dia+'|'+_normNome(grupo);
+async function peNumProd(dia, grupo, v){
+  if(window.adminMode!==true || peNumProd._ocupado) return;
+  const k=_pePK(dia,grupo), n=String(v||'').trim();
+  if(!_peCfg.prods) _peCfg.prods={};
+  if(((_peCfg.prods[k]||{}).n||'')===n) return;          // nada mudou
+  peNumProd._ocupado=true;
+  try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
+  if(n) _peCfg.prods[k]={n, em:agora(), por:_demAutor()}; else delete _peCfg.prods[k];
+  // com o número informado, os kits daquele grupo ficam marcados como lançados
+  if(n) _peKitsProduzidos(dia).filter(x=>x.grupo===grupo).forEach(x=>{ const ch=_peK('P',dia,x.tipo,x.nome); if(!_peCfg.marcas[ch]) _peCfg.marcas[ch]={em:agora(), por:_demAutor(), via:'manual'}; });
+  renderProdEligo._forcar=true; try{ renderProdEligo(); } finally{ renderProdEligo._forcar=false; peNumProd._ocupado=false; }
+  await _peSalvarCfg();
+}
+let _peSerie='prod', _peDeslocDias=0;
+/* Calendário do mês: em cada dia de produção, quantos PRODUTOS ainda
+   faltam embalar e quantos faltam a expedição liberar. Substitui a
+   lista de "dias com pendência": no calendário dá para ver o mês
+   inteiro e onde está o acúmulo. Tocar no dia abre o resumo dele. */
+let _peCalMes='';
+function peCalMes(n){ const [a,m]=(_peCalMes||'').split('-').map(Number); const d=new Date(a||new Date().getFullYear(), ((m||1)-1)+n, 1);
+  _peCalMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); renderProdEligo(); }
+window.peCalMes=peCalMes;
+function _peCalendario(){
+  const p=_peDia.split('/');
+  if(!_peCalMes) _peCalMes=p[2]+'-'+p[1];
+  const [A,M]=_peCalMes.split('-').map(Number), ult=new Date(A,M,0).getDate(), hj=hoje();
+  // contagem por dia de produção
+  const D={};
+  (registros||[]).forEach(r=>{ const x=String(r.data||'').split('/'); if(x.length!==3 || +x[2]!==A || +x[1]!==M || !((Number(r.qtd)||0)>0)) return;
+    const n=_peNum(r), o=D[r.data]||(D[r.data]={n:0, emb:0, lib:0, eli:0}); o.n++; if(n.faltaEmb>0.5) o.emb++; if(n.faltaLib>0.5) o.lib++; if(n.pendEligo>0.5) o.eli++; });
+  const primeiro=(new Date(A,M-1,1).getDay()+6)%7;                 // semana começa na segunda
+  const nomeMes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][M-1];
+  let cel='';
+  for(let i=0;i<primeiro;i++) cel+='<div></div>';
+  for(let d=1;d<=ult;d++){
+    const br=String(d).padStart(2,'0')+'/'+String(M).padStart(2,'0')+'/'+A, o=D[br], sel=br===_peDia, eHoje=br===hj;
+    const fundo=sel?'#141414':(o?(o.emb||o.lib?'#fff':'#f0fdf4'):'var(--sk-fundo2)');
+    const base='border-radius:12px;min-height:84px;padding:7px 8px;display:flex;flex-direction:column;font-family:inherit;text-align:left;min-width:0;'+
+      'border:'+(eHoje&&!sel?'2px solid #f59e0b':'1px solid '+(sel?'#141414':'var(--sk-bd)'))+';background:'+fundo+';color:'+(sel?'#fff':'var(--sk-tx)')+';';
+    const num='<span style="font-size:12px;font-weight:700;color:'+(sel?'#fbbf24':(o?'var(--sk-tx)':'var(--sk-mut)'))+';">'+d+(eHoje?' <span style="font-weight:500;font-size:10px;">hoje</span>':'')+'</span>';
+    if(!o){ cel+='<div style="'+base+'opacity:.75;">'+num+'</div>'; continue; }
+    const pil=(n,rot,bg,cor)=>'<span style="display:block;border-radius:8px;padding:3px 6px;font-size:11.5px;font-weight:700;background:'+bg+';color:'+cor+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><b style="font-size:14px;">'+n+'</b> '+rot+'</span>';
+    cel+='<button onclick="peDia(\''+br+'\')" aria-label="'+br+': '+o.emb+' produto(s) para embalar, '+o.lib+' para liberar" style="'+base+'cursor:pointer;">'+num+
+      '<span style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:3px;margin-top:4px;">'+
+        ((o.emb||o.lib)?((o.emb?pil(o.emb,'embalar',sel?'rgba(245,158,11,.25)':'#fff4e0',sel?'#fbbf24':'#b45309'):'')+(o.lib?pil(o.lib,'liberar',sel?'rgba(96,165,250,.25)':'#e0ecff',sel?'#93c5fd':'#1d4ed8'):''))
+          :'<span style="text-align:center;font-size:18px;color:'+(sel?'#4ade80':'#16a34a')+';">✓</span>')+
+      '</span>'+
+      (o.eli?'<span style="font-size:10px;font-weight:700;color:'+(sel?'#fca5a5':'#dc2626')+';margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">● '+o.eli+' p/ ELIGO</span>':'')+'</button>';
+  }
+  const tot=Object.values(D).reduce((t,o)=>({emb:t.emb+o.emb, lib:t.lib+o.lib}),{emb:0,lib:0});
+  return _ptCard('Pendências no mês', nomeMes+' de '+A+' · '+tot.emb+' produto(s) para embalar · '+tot.lib+' para liberar',
+    '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;font-size:11px;font-weight:700;color:var(--sk-mut);margin-bottom:6px;text-align:center;">'+['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map(x=>'<span>'+x+'</span>').join('')+'</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;">'+cel+'</div>'+
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--sk-sub);margin-top:12px;">'+
+      '<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#fff4e0;border:1px solid #fcd9a0;margin-right:5px;"></i>produtos para embalar</span>'+
+      '<span><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e0ecff;border:1px solid #bfd3ff;margin-right:5px;"></i>produtos para a expedição liberar</span>'+
+      '<span><b style="color:#16a34a;">✓</b> dia sem pendência</span><span><b style="color:#dc2626;">●</b> liberado e não lançado no ELIGO</span></div>',
+    '<button class="pt-btn" onclick="peCalMes(-1)" aria-label="Mês anterior">‹</button><button class="pt-btn" onclick="peCalMes(1)" aria-label="Próximo mês">›</button>');
+}
+function peSerie(k){ _peSerie=k; renderProdEligo(); }
+function peFaixa(n){ _peDeslocDias=Math.max(0,_peDeslocDias+n); renderProdEligo(); }
+Object.assign(window,{peNumProd, peSerie, peFaixa});
+
+function renderProdEligo(){
+  const el=document.getElementById('pe-content'); if(!el) return;
+  if(window.adminMode!==true){ el.innerHTML='<div style="padding:30px;text-align:center;color:#64748b;">Só o admin acessa este painel.</div>'; return; }
+  // quem está digitando numa caixa não perde o que digitou quando a tela se atualiza sozinha
+  const ae=document.activeElement; if(ae && el.contains(ae) && /^(pe-data-mov|pe-np-)/.test(ae.id||'') && !renderProdEligo._forcar) return;
+  _skLigar(el,'s-prod-eligo');
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const esc=_pontoEsc, sem=d=>nomeDiaSemana(_erDate(d)).slice(0,3).toLowerCase(), semL=d=>nomeDiaSemana(_erDate(d));
+  const pc=(a,b)=>b>0?Math.round(a/b*100):0;
+  const dias=_peDias();
+  if(!_peDia || !dias.includes(_peDia)) _peDia=dias[0]||hoje();
+  const pend=_pePendentes(), pendPct=pend.reduce((t,x)=>t+x.n.pendEligo,0);
+  const kp=_peKitsProduzidos(_peDia), kc=_peKitsConsumidos(_peDia);
+  const kpFalta=kp.filter(k=>!_peCfg.marcas[_peK('P',_peDia,k.tipo,k.nome)]).length, kcFalta=kc.filter(k=>!_peCfg.marcas[_peK('C',_peDia,k.tipo,k.nome)]).length;
+  const nav=[['resumo','🏠','Resumo do dia',''],['lote','🚚','Liberar para o ELIGO',pend.length||''],['kprod','🧺','Kits produzidos',kpFalta||''],['kcons','⚖️','Kits consumidos',kcFalta||''],['lotes','🗂️','Lotes lançados','']];
+  const menu='<aside class="pt-side"><div class="pt-side-in">'+
+    '<div class="sk-marca"><i>🏭</i><div><b>Produção</b><span>Monte Castelo · ELIGO</span></div></div>'+
+    nav.map(([k,i,t,c])=>'<button class="pt-nav'+(_peAba===k?' on':'')+'" onclick="peIr(\''+k+'\')"><span class="ic">'+i+'</span>'+t+(c!==''?'<span class="ct">'+c+'</span>':'')+'</button>').join('')+
+    '<div class="pt-side-tit">CONTROLES DIÁRIOS</div>'+
+    '<button class="pt-nav" onclick="cdcAbrir(\'admin\')"><span class="ic">🥐</span>Confeitaria</button>'+
+    '<button class="pt-nav" onclick="cdqAbrir()"><span class="ic">🍞</span>Quadra</button>'+
+    '<div class="pt-side-tit">CONFIGURAR</div>'+
+    '<button class="pt-nav" onclick="eligoAbrirConfig()"><span class="ic">🔗</span>Integração ELIGO</button>'+
+    '</div></aside>';
+  // a faixa de dias (7 por vez), do mais antigo para o mais novo, com o dia escolhido sempre visível
+  const iSel=Math.max(0,dias.indexOf(_peDia));
+  let ini=Math.min(Math.max(0,_peDeslocDias), Math.max(0,dias.length-7));
+  if(iSel<ini) ini=iSel; if(iSel>ini+6) ini=iSel-6; _peDeslocDias=ini;
+  const janela=dias.slice(ini,ini+7).reverse();
+  const faixa=(valor)=>_skDias(janela.map(d=>valor(d)), _peDia, 'peDia', (ini+7<dias.length)?'peFaixa(1)':'', ini>0?'peFaixa(-1)':'');
+  const faixaProd=()=>faixa(d=>{ const t=_peSoma(_peDoDia(d)); const p=pc(t.eli,t.prod);
+    return {d, v:fmt(t.prod), un:'pct', s:(t.pendEligo>0.5?(fmt(t.pendEligo)+' para lançar'):(t.faltaLib>0.5||t.faltaEmb>0.5?'em andamento':(t.prod?'✓ tudo no ELIGO':'sem produção'))), pct:p, cor:p>=100?'var(--sk-ok)':''}; });
+  let h='';
+
+  if(_peAba==='resumo'){
+    const regs=_peDoDia(_peDia), T=_peSoma(regs);
+    const pao=_peSoma(regs.filter(r=>_erGrupo(r).tipo==='pao')), sal=_peSoma(regs.filter(r=>_erGrupo(r).tipo!=='pao'));
+    const ult7=dias.slice(0,10).reverse().map(d=>_peSoma(_peDoDia(d)));
+    h+='<div class="sk-hero"><div><h1>Produção de '+_peDia.slice(0,5)+' <span style="font-weight:500;color:var(--sk-mut);font-size:18px;">'+semL(_peDia)+'</span></h1>'+
+        '<p>Do que foi produzido neste dia: quanto já foi embalado, liberado pela expedição e lançado no ELIGO. Em pacotes.</p></div>'+
+      '<div class="dir"><input class="pt-ctl" type="date" value="'+_peDia.split('/').reverse().join('-')+'" onchange="peDiaIso(this.value)" aria-label="Dia da produção" style="width:165px;"></div></div>';
+    h+='<div class="sk-kpis">'+
+      _skKpi('🏭','Produzido',fmt(T.prod),'🍞 '+fmt(pao.prod)+' · 🥐 '+fmt(sal.prod), ult7.map(x=>x.prod), true)+
+      _skKpi('📦','Embalado',fmt(T.emb),(T.faltaEmb>0.5?('<b class="r">faltam '+fmt(T.faltaEmb)+'</b>'):'<b>tudo embalado</b>'), ult7.map(x=>x.emb))+
+      _skKpi('🚚','Liberado',fmt(T.lib),(T.faltaLib>0.5?('<b class="r">faltam '+fmt(T.faltaLib)+'</b>'):'<b>tudo liberado</b>'), ult7.map(x=>x.lib))+
+      _skKpi('✅','No ELIGO',fmt(T.eli),(T.pendEligo>0.5?('<b class="r">'+fmt(T.pendEligo)+' para lançar</b>'):(T.lib>0.5?'<b>em dia</b>':'nada liberado')), ult7.map(x=>x.eli))+
+    '</div>';
+    h+=faixaProd();
+    if(!regs.length) h+='<div class="pt-card pt-vazio">Nenhuma produção lançada em '+_peDia+'.</div>';
+    else {
+      // tendência dos últimos dias + detalhes do dia
+      const serie=dias.slice(0,14).reverse(), SER={prod:'Produzido', emb:'Embalado', lib:'Liberado', eli:'No ELIGO'};
+      if(!SER[_peSerie]) _peSerie='prod';
+      const det=(ic,rot,v,cor,extra)=>'<div class="sk-det"><span class="i">'+ic+'</span><span class="r">'+rot+'</span>'+(extra||'')+'<b'+(cor?' style="color:'+cor+';"':'')+'>'+v+'</b></div>';
+      const Rr=54, Cc=2*Math.PI*Rr, frP=T.prod?pao.prod/T.prod:0;
+      const rosca='<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;justify-content:center;"><svg viewBox="0 0 140 140" style="width:150px;height:150px;flex:0 0 150px;" role="img" aria-label="Pães '+pc(pao.prod,T.prod)+'%, salgados '+pc(sal.prod,T.prod)+'%">'+
+        '<circle cx="70" cy="70" r="'+Rr+'" fill="none" stroke="#141414" stroke-width="18"/><circle cx="70" cy="70" r="'+Rr+'" fill="none" stroke="#f59e0b" stroke-width="18" stroke-dasharray="'+(Cc*frP)+' '+Cc+'" transform="rotate(-90 70 70)"/>'+
+        '<text x="70" y="68" text-anchor="middle" font-size="21" font-weight="700" fill="#141414">'+fmt(T.prod)+'</text><text x="70" y="85" text-anchor="middle" font-size="10.5" fill="#a3a3a3">pacotes</text></svg>'+
+        '<div style="flex:1;min-width:150px;font-size:13px;">'+[['#f59e0b','Pães',pao],['#141414','Salgados',sal]].map(([c,t,o])=>'<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--sk-linha);"><i style="width:10px;height:10px;border-radius:50%;background:'+c+';display:inline-block;"></i><span style="flex:1;color:var(--sk-sub);">'+t+'</span><b>'+fmt(o.prod)+'</b><span style="color:var(--sk-mut);width:38px;text-align:right;">'+pc(o.prod,T.prod)+'%</span></div>'+
+          '<div style="font-size:11.5px;color:var(--sk-mut);padding:0 0 4px 18px;">'+pc(o.eli,o.prod)+'% no ELIGO</div>').join('')+'</div></div>';
+      h+='<div class="pt-grid" style="grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr);">'+
+        _ptCard('Últimos dias', SER[_peSerie].toLowerCase()+' por dia de produção', _skArea(serie.map(d=>_peSoma(_peDoDia(d))[_peSerie]), serie.map(d=>d.slice(0,5)), fmt, 'pe-ar'),
+          '<div class="pt-seg">'+Object.keys(SER).map(k=>'<button class="'+(_peSerie===k?'on':'')+'" onclick="peSerie(\''+k+'\')">'+SER[k]+'</button>').join('')+'</div>')+
+        _ptCard('Detalhes do dia', _peDia.slice(0,5),
+          det('🏭','Produzido',fmt(T.prod))+
+          det('📦','Embalado',fmt(T.emb),'',' <span style="font-size:11.5px;color:var(--sk-mut);">'+pc(T.emb,T.prod)+'%</span>')+
+          det('🚚','Liberado pela expedição',fmt(T.lib),'',' <span style="font-size:11.5px;color:var(--sk-mut);">'+pc(T.lib,T.prod)+'%</span>')+
+          det('✅','Lançado no ELIGO',fmt(T.eli),'var(--sk-ok)',' <span style="font-size:11.5px;color:var(--sk-mut);">'+pc(T.eli,T.prod)+'%</span>')+
+          det('⏳','Falta embalar',fmt(T.faltaEmb),T.faltaEmb>0.5?'var(--sk-al)':'')+
+          det('📤','Falta a expedição liberar',fmt(T.faltaLib),T.faltaLib>0.5?'var(--sk-al)':'')+
+          det('🔴','Liberado e não lançado',fmt(T.pendEligo),T.pendEligo>0.5?'var(--sk-pe)':''))+
+      '</div>';
+      h+='<div class="pt-grid">'+_ptCard('Pães × salgados','produzido no dia', rosca)+'</div>';
+      // o mês em calendário: quantos produtos faltam embalar e liberar em cada dia
+      h+='<div class="pt-grid">'+_peCalendario()+'</div>';
+      // produtos do dia
+      const linhas=regs.filter(r=>_peEhTipo(r,_peTipo)).map(r=>({r, n:_peNum(r), g:_erGrupo(r)})).sort((a,b)=>(b.n.pendEligo-a.n.pendEligo)||(b.n.faltaLib-a.n.faltaLib)||String(a.r.produto).localeCompare(String(b.r.produto),'pt-BR'));
+      const z='<span style="color:var(--sk-mut);">—</span>';
+      const st=n=>n.prod>0 && n.eli>=n.prod-0.001?_ptPill('✓ No ELIGO','green',true):(n.pendEligo>0.5?_ptPill('Lançar '+fmt(n.pendEligo),'red',true):(n.faltaLib>0.5?_ptPill('Liberar '+fmt(n.faltaLib),'amber',true):(n.faltaEmb>0.5?_ptPill('Embalar '+fmt(n.faltaEmb),'amber',true):(n.embFechado&&n.eli>=n.lib-0.001&&n.lib>0?_ptPill('✓ Fechado','green',true):_ptPill('Em andamento','blue',true)))));
+      const Tf=_peSoma(linhas.map(x=>x.r));
+      h+='<div class="pt-grid">'+_ptCard('Produtos do dia', linhas.length+' produção(ões)',
+        '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Produto</th><th>Classe</th><th class="c">Produzido</th><th class="c">Embalado</th><th class="c">Liberado</th><th class="c">No ELIGO</th><th class="c">Situação</th></tr></thead><tbody>'+
+        linhas.map(x=>'<tr><td><b style="font-weight:650;">'+esc(x.r.produto)+'</b> <span style="color:var(--sk-mut);font-size:11px;">'+esc(x.r.cod||'')+'</span></td><td style="color:var(--sk-sub);">'+(x.g.tipo==='pao'?'🍞 ':'🥐 ')+esc(x.g.tipo==='outro'?'Outro':x.g.classe)+'</td>'+
+          '<td class="c">'+fmt(x.n.prod)+'</td><td class="c" style="color:'+(x.n.faltaEmb>0.5?'var(--sk-al)':'inherit')+';">'+(x.n.emb>0.5?fmt(x.n.emb):z)+'</td><td class="c" style="color:'+(x.n.faltaLib>0.5?'var(--sk-al)':'inherit')+';">'+(x.n.lib>0.5?fmt(x.n.lib):z)+'</td>'+
+          '<td class="c" style="font-weight:700;color:'+(x.n.pendEligo>0.5?'var(--sk-pe)':'var(--sk-ok)')+';">'+(x.n.eli>0.5?fmt(x.n.eli):z)+'</td><td class="c">'+st(x.n)+'</td></tr>').join('')+
+        '<tr class="sk-tot"><td colspan="2">Total</td><td class="c">'+fmt(Tf.prod)+'</td><td class="c">'+fmt(Tf.emb)+'</td><td class="c">'+fmt(Tf.lib)+'</td><td class="c">'+fmt(Tf.eli)+'</td><td></td></tr>'+
+        '</tbody></table></div>',
+        '<div class="pt-seg">'+[['todos','Todos'],['pao','Pães'],['salg','Salgados']].map(([k,t])=>'<button class="'+(_peTipo===k?'on':'')+'" onclick="peTipo(\''+k+'\')">'+t+'</button>').join('')+'</div>')+'</div>';
+    }
+  }
+
+  else if(_peAba==='lote'){
+    const q=_normNome(_peBuscaP||'').trim();
+    const vis=pend.filter(x=>_peEhTipo(x.r,_peTipo) && (!q || _normNome(x.r.produto+' '+(x.r.cod||'')).includes(q)));
+    const selN=pend.filter(x=>_peSel[x.r.firestoreId]), selPct=selN.reduce((t,x)=>t+x.n.pendEligo,0);
+    const viaApi=eligoPronto() && !!eligoCfg.movProdEnt;
+    h+='<div class="sk-hero"><div><div class="k">Entrada por produção</div><h1>Liberar para o ELIGO</h1><p>O que a expedição já liberou — entrou no estoque — e ainda não foi lançado como produção.</p></div>'+
+      '<div class="dir"><div class="g">'+fmt(pendPct)+'<small>pacotes aguardando</small></div><div class="m">'+pend.length+' produção(ões)</div></div></div>';
+    h+='<div class="sk-faixa">'+(viaApi?('🔗 <b>API ligada:</b> o lote será lançado no ELIGO como entrada por produção (movimento '+esc(eligoCfg.movProdEnt)+').')
+      :'✍️ <b>A API de entrada por produção ainda não está configurada.</b> Por enquanto, “Liberar o lote” <b>marca</b> os itens como lançados: use a lista para lançar a produção no ELIGO à mão. Quando o código do movimento chegar, cadastre em <button class="sk-link" style="font-size:13px;" onclick="eligoAbrirConfig()">Integração ELIGO</button> e o mesmo botão passa a lançar sozinho.')+'</div>';
+    if(!pend.length) h+='<div class="pt-card pt-vazio">Nada aguardando lançamento. Tudo o que a expedição liberou já está no ELIGO. 👍</div>';
+    else {
+      const todosSel=vis.length && vis.every(x=>_peSel[x.r.firestoreId]);
+      h+='<div class="pt-grid">'+_ptCard('Aguardando lançamento', vis.length+' na lista · mais antigo primeiro',
+        '<div class="pt-tw"><table class="pt-tab"><thead><tr><th style="width:38px;"><input type="checkbox" '+(todosSel?'checked':'')+' onchange="peSelTodos(this.checked,\''+(_peTipo==='todos'?'':_peTipo)+'\')" aria-label="Marcar todos" style="width:18px;height:18px;"></th><th>Produto</th><th>Produção</th><th class="c">Liberado</th><th class="c">Já no ELIGO</th><th class="c">Lançar agora</th></tr></thead><tbody>'+
+        vis.map(x=>{ const dAtr=Math.round((_erDate(hoje())-_erDate(x.r.data))/864e5);
+          return '<tr class="cl'+(_peSel[x.r.firestoreId]?' sk-on':'')+'" onclick="peSel(\''+x.r.firestoreId+'\','+(!_peSel[x.r.firestoreId])+')"><td><input type="checkbox" '+(_peSel[x.r.firestoreId]?'checked':'')+' onclick="event.stopPropagation()" onchange="peSel(\''+x.r.firestoreId+'\',this.checked)" aria-label="Incluir '+esc(x.r.produto)+'" style="width:18px;height:18px;"></td>'+
+            '<td><b style="font-weight:650;">'+esc(x.r.produto)+'</b> <span style="color:var(--sk-mut);font-size:11px;">'+esc(eligoCodOficial(x.r.cod)||'')+'</span><div style="font-size:11.5px;color:var(--sk-sub);">'+(x.g.tipo==='pao'?'🍞 ':'🥐 ')+esc(x.g.tipo==='outro'?'Outro':x.g.classe)+'</div></td>'+
+            '<td>'+x.r.data.slice(0,5)+' <span style="color:var(--sk-sub);font-size:11.5px;">'+sem(x.r.data)+'</span>'+(dAtr>=2?' '+_ptPill('há '+dAtr+' d','red',true):'')+'</td>'+
+            '<td class="c">'+fmt(x.n.lib)+'</td><td class="c" style="color:var(--sk-sub);">'+(x.n.eli>0.5?fmt(x.n.eli):'—')+'</td><td class="c"><b style="font-size:15px;color:var(--sk-ouro2);">'+fmt(x.n.pendEligo)+'</b></td></tr>'; }).join('')+
+        '</tbody></table></div>',
+        '<div class="pt-seg">'+[['todos','Todos'],['pao','Pães'],['salg','Salgados']].map(([k,t])=>'<button class="'+(_peTipo===k?'on':'')+'" onclick="peTipo(\''+k+'\')">'+t+'</button>').join('')+'</div>'+
+        '<input class="pt-ctl" id="pe-busca" type="text" placeholder="Buscar produto…" value="'+esc(_peBuscaP||'')+'" oninput="peBuscaP(this.value)" style="width:200px;">')+'</div>';
+      h+='<div class="pt-card sk-barra">'+
+        '<div style="flex:1;min-width:200px;"><div style="font-size:15px;font-weight:700;">'+(selN.length?(selN.length+' selecionado(s) · '+fmt(selPct)+' pacotes'):'Marque o que vai neste lote')+'</div><div class="sb" style="font-size:12px;">Vários lançamentos do mesmo produto viram uma linha só no ELIGO.</div></div>'+
+        '<label class="sb" style="font-size:12px;display:flex;flex-direction:column;gap:4px;">Data do movimento<input class="pt-ctl" id="pe-data-mov" style="width:165px;" type="date" value="'+(_peDataMov||hoje().split('/').reverse().join('-'))+'" onchange="peDataMov(this.value)"></label>'+
+        '<button class="pt-btn pri" style="height:44px;padding:0 20px;font-size:14px;" onclick="peLiberarLote()"'+(selN.length?'':' disabled')+'>🚚 Liberar o lote</button></div>';
+    }
+  }
+
+  else if(_peAba==='kprod' || _peAba==='kcons'){
+    const prod=_peAba==='kprod', lado=prod?'P':'C', lista=prod?kp:kc;
+    const feitos=lista.filter(k=>_peCfg.marcas[_peK(lado,_peDia,k.tipo,k.nome)]).length;
+    const apiSai=eligoPronto() && !!eligoCfg.movProdSai;
+    h+='<div class="sk-hero"><div><div class="k">'+(prod?'Entrada de kits':'Saída por produção')+' · '+semL(_peDia)+'</div><h1>'+(prod?'Kits produzidos':'Kits consumidos')+' · '+_peDia.slice(0,5)+'</h1>'+
+      '<p>'+(prod?'Massas da confeitaria, recheios da cozinha e kits da quadra feitos no dia. Lance a produção no ELIGO, anote o número que ele gerar e os kits ficam marcados.'
+               :'Quanto de cada kit foi gasto e em quais produtos. É a saída por produção no ELIGO, com a observação pronta.')+'</p></div>'+
+      '<div class="dir"><div class="g">'+feitos+'<small>de '+lista.length+' lançados</small></div><div class="m">neste dia</div></div></div>';
+    h+=faixa(d=>{ const l=prod?_peKitsProduzidos(d):_peKitsConsumidos(d); const ok=l.filter(k=>_peCfg.marcas[_peK(lado,d,k.tipo,k.nome)]).length;
+      return {d, v:String(l.length), un:'kits', s:(!l.length?'sem lançamento':(ok>=l.length?'✓ tudo lançado':((l.length-ok)+' pendente(s)'))), pct:l.length?ok/l.length*100:0, cor:(l.length&&ok>=l.length)?'var(--sk-ok)':''}; });
+    if(!lista.length) h+='<div class="pt-card pt-vazio">'+(prod?'Nenhuma massa, recheio ou kit lançado em ':'Nenhum consumo de kit lançado em ')+_peDia+'.</div>';
+    else {
+      if(!prod && !apiSai) h+='<div class="sk-faixa">✍️ <b>A API de saída por produção ainda não está configurada.</b> Por enquanto a tela mostra o consumo e a observação pronta: lance a saída no ELIGO à mão e marque o visto. Com o código do movimento cadastrado, aparece o botão “Dar saída”.</div>';
+      [...new Set(lista.map(k=>k.grupo))].forEach(gn=>{
+        const its=lista.filter(k=>k.grupo===gn);
+        const np=(_peCfg.prods||{})[_pePK(_peDia,gn)];
+        const dirCab=prod?('<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sk-sub);">Nº da produção no ELIGO'+
+            '<input class="sk-in" id="pe-np-'+_acxSlug(gn)+'" type="text" inputmode="numeric" autocomplete="off" value="'+esc(np?np.n:'')+'" placeholder="—" onchange="peNumProd(\''+_peDia+'\',\''+escapeJsStr(gn)+'\',this.value)" onkeydown="if(event.key===\'Enter\')this.blur()" style="width:120px!important;text-align:center;'+(np?'border-color:var(--sk-ok)!important;color:var(--sk-ok)!important;':'')+'"></label>'):'';
+        h+='<div class="pt-grid">'+_ptCard(gn, its.length+' item(ns)'+(prod&&np?(' · lançado por '+esc(np.por||'')+' em '+esc(String(np.em||'').slice(0,16))):''),
+          '<div class="pt-tw"><table class="pt-tab"><thead><tr><th style="width:38px;"></th><th>'+(prod?'Produzido':'Consumido')+'</th><th class="c">Cód. ELIGO</th><th class="c">Quantidade</th>'+(prod?'':'<th>Onde foi usado</th><th class="c">Quebra</th>')+'<th class="c">Situação</th></tr></thead><tbody>'+
+          its.map(k=>{ const ch=_peK(lado,_peDia,k.tipo,k.nome), m=_peCfg.marcas[ch], cod=_peCodDe(k.tipo,k.nome);
+            const dev=(!prod && k.esp>0)?((k.qtd-k.esp)/k.esp*100):(k.quebraPct!==undefined?k.quebraPct:null);
+            return '<tr'+(m?' class="sk-ok"':'')+'><td><input type="checkbox" '+(m?'checked':'')+' onchange="peMarcar(\''+escapeJsStr(ch)+'\',this.checked)" aria-label="Marcar '+esc(k.nome)+' como lançado" style="width:20px;height:20px;"></td>'+
+              '<td><b style="font-weight:650;">'+esc(k.nome)+'</b></td>'+
+              '<td class="c">'+(cod?('<b style="font-variant-numeric:tabular-nums;">'+esc(cod)+'</b>'):'<button class="sk-link" style="color:var(--sk-al);" onclick="peCodKit(\''+k.tipo+'\',\''+escapeJsStr(k.nome)+'\')" title="Este item está sem código no cadastro (Cadastros › Kits, Massas e Recheios). Toque para informar aqui.">sem código</button>')+'</td>'+
+              '<td class="c"><b style="font-size:15px;">'+_peFmtQ(k.qtd,k.un)+'</b> '+k.un+(k.un==='kit'&&k.kg?('<div style="font-size:11px;color:var(--sk-sub);">'+_peFmtQ(k.kg,'kg')+' kg</div>'):'')+'</td>'+
+              (prod?'':('<td style="white-space:normal;min-width:240px;font-size:12.5px;line-height:1.6;">'+Object.entries(k.prods).sort((a,b)=>b[1]-a[1]).map(([n,q])=>esc(n)+' <b>'+_peFmtQ(q,k.un)+' '+k.un+'</b>').join(' · ')+
+                  '<div style="font-size:11px;color:var(--sk-mut);margin-top:3px;" title="'+esc(_peObsConsumo(_peDia,k))+'">obs.: '+esc(_peObsConsumo(_peDia,k).slice(0,90))+(_peObsConsumo(_peDia,k).length>90?'…':'')+'</div></td>'+
+                '<td class="c">'+(dev===null?'<span style="color:var(--sk-mut);">—</span>':_ptPill((dev>0?'+':'')+(Math.round(dev*10)/10).toLocaleString('pt-BR')+'%', Math.abs(dev)>25?'red':(Math.abs(dev)>6?'amber':'green'), true))+'</td>'))+
+              '<td class="c">'+(m?('<span style="font-size:12px;color:var(--sk-ok);font-weight:700;">✓ '+(m.via==='api'?'pela API':(prod&&np?('prod. '+esc(np.n)):'lançado'))+'</span><div style="font-size:10.5px;color:var(--sk-sub);">'+esc(String(m.em||'').slice(0,16))+'</div>')
+                    :((!prod && apiSai)?'<button class="pt-btn pri" onclick="peSaidaKit(\''+k.tipo+'\',\''+escapeJsStr(k.nome)+'\')">Dar saída</button>':'<span style="font-size:12px;color:var(--sk-al);font-weight:700;">pendente</span>'))+'</td></tr>'; }).join('')+
+          '</tbody></table></div>', dirCab)+'</div>';
+      });
+      h+='<div class="pt-card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;"><div style="flex:1;min-width:200px;font-size:14px;"><b>'+feitos+' de '+lista.length+'</b> marcado(s) como lançado(s) no ELIGO neste dia.</div>'+
+        '<button class="pt-btn" onclick="peMarcarTodos(\''+lado+'\',false)">Desmarcar todos</button><button class="pt-btn pri" onclick="peMarcarTodos(\''+lado+'\',true)">✓ Marcar todos do dia</button></div>';
+    }
+  }
+
+  else if(_peAba==='lotes'){
+    const L={};
+    (registros||[]).forEach(r=>((r.eligoProd||{}).lotes||[]).forEach(l=>{ const o=L[l.lote]||(L[l.lote]={lote:l.lote, em:l.em, por:l.por, data:l.data, via:l.via, itens:[], pct:0}); o.itens.push({r, qtd:Number(l.qtd)||0}); o.pct+=Number(l.qtd)||0; }));
+    const lista=Object.values(L).sort((a,b)=>String(b.lote).localeCompare(String(a.lote)));
+    h+='<div class="sk-hero"><div><div class="k">Histórico</div><h1>Lotes lançados</h1><p>Cada liberação para o ELIGO, com o que entrou nela.</p></div><div class="dir"><div class="g">'+lista.length+'<small>lote(s)</small></div></div></div>';
+    if(!lista.length) h+='<div class="pt-card pt-vazio">Nenhum lote liberado ainda.</div>';
+    lista.slice(0,40).forEach(o=>{
+      h+='<div class="pt-card" style="margin-bottom:12px;"><div class="pt-card-h"><h3>'+esc(o.lote)+'</h3><span class="sub">'+esc(String(o.em||'').slice(0,16))+(o.por?(' · '+esc(o.por)):'')+' · movimento em '+esc(o.data||'')+'</span>'+
+        '<div class="dir">'+_ptPill(o.via==='api'?'pela API':'marcado à mão', o.via==='api'?'green':'amber', true)+' <button class="pt-btn" onclick="peDesfazerLote(\''+escapeJsStr(o.lote)+'\')">Desfazer</button></div></div>'+
+        '<div style="font-size:13px;margin-bottom:8px;color:var(--sk-sub);"><b style="color:var(--sk-tx);">'+o.itens.length+'</b> produção(ões) · <b style="color:var(--sk-tx);">'+fmt(o.pct)+'</b> pacotes</div>'+
+        '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Produto</th><th>Produção</th><th class="c">Pacotes</th></tr></thead><tbody>'+
+        o.itens.sort((a,b)=>String(a.r.produto).localeCompare(String(b.r.produto),'pt-BR')).map(i=>'<tr><td><b style="font-weight:650;">'+esc(i.r.produto)+'</b> <span style="color:var(--sk-mut);font-size:11px;">'+esc(eligoCodOficial(i.r.cod)||'')+'</span></td><td>'+String(i.r.data).slice(0,5)+'</td><td class="c"><b>'+fmt(i.qtd)+'</b></td></tr>').join('')+'</tbody></table></div></div>'; });
+  }
+  h+='<div class="pt-nota">Tudo em pacotes. <b>Liberado</b> é o que a expedição lançou como saído da embalagem — é o que entra no estoque. <b>No ELIGO</b> é o que já foi liberado em lote neste painel. Os kits usam os mesmos números dos Controles Diários, e os códigos vêm do cadastro de kits, massas e recheios.</div>';
+  el.innerHTML='<div class="pt sk">'+menu+'<main class="pt-main">'+h+'</main></div>';
+}
+window.renderProdEligo=renderProdEligo;
+
 /* ══ OPERADOR DA EMBALAGEM (setor) ══════════════════════════════════
    Tela direta para quem está embalando: procura o produto, escolhe o
    lote (a produção de um dia) e informa quantos pacotes embalou.
@@ -9560,7 +10184,7 @@ function _acxCatalogo(){
       const m=oc.match(/goTo(?:Admin)?\('(s-[\w-]+)'\)/);
       if(m && ACX_FORA.includes(m[1])) return;
       if(m && ACX_MENUS.test(m[1])){ if(!vistos.has(m[1])){ vistos.add(m[1]); ler(m[1], nome); } return; }   // é um menu: entra nele
-      if(/senha/i.test(nome) || /acxAbrirGestao|sairAdmin/.test(oc)) return;
+      if(/senha/i.test(nome) || /acxAbrirGestao|sairAdmin|prodEligoAbrir/.test(oc)) return;
       const id='a:'+_acxSlug((grupo?grupo+'/':'')+nome);
       if(itens.some(x=>x.id===id)) return;
       itens.push({id, nome, grupo:grupo||'Painel do admin', ic:((b.querySelector('.mc-sector-icon, .hb-icon')||{}).textContent||'•').trim(),
@@ -11459,7 +12083,12 @@ async function expManualEntrarInterno(reg, qtd, setor){
 }
 window.expManualEntrarInterno=expManualEntrarInterno;
 
+/* O "JÁ PEGUEI" FOI DESATIVADO (nov/2026): a expedição só libera o que
+   já passou pela embalagem. Os lançamentos antigos continuam valendo e
+   aparecendo nos relatórios; só não se faz lançamento novo. */
+const JA_PEGUEI_DESATIVADO=true;
 async function lancarExpAntecipada(fid){
+  if(JA_PEGUEI_DESATIVADO){ alert('O “já peguei” foi desativado.\n\nA expedição só libera o que já foi embalado: peça à Embalagem para lançar o produto.'); return; }
   const inp=document.getElementById('expman-input-'+fid);
   const val=parseInt(inp?.value)||0;
   if(val<=0){alert('Informe quanto você pegou.');return;}
@@ -17157,7 +17786,11 @@ function renderBuscarProduto(){
     const totalMassa=regs.reduce((s,r)=>s+(r.massa||0),0);
     const totalR1=regs.reduce((s,r)=>s+(r.r1||0),0);
     const totalR2=regs.reduce((s,r)=>s+(r.r2||0),0);
-    const totalEmb=regs.reduce((s,r)=>s+((r.embalagem&&r.embalagem.qtdEmbalada)||0),0);
+    /* Antes só entrava o que estava FINALIZADO (qtdEmbalada). Um produto
+       com a embalagem em andamento aparecia como zero, mesmo com boa
+       parte já lançada. Agora conta os lançamentos também. */
+    const _embDe=r=>{ const e=r.embalagem||{}; const lanc=(e.parciais||[]).reduce((t,p)=>t+(Number(p.qtd)||0),0); return Math.max(0, e.feito?(Number(e.qtdEmbalada)||lanc):lanc); };
+    const totalEmb=regs.reduce((s,r)=>s+_embDe(r),0);
     const totalLib=regs.reduce((s,r)=>s+((r.expedicao&&r.expedicao.totalLiberado)||0),0);
     const embPend=regs.filter(r=>!r.embalagem||!r.embalagem.feito).length;
     const expPend=regs.filter(r=>{
@@ -17246,27 +17879,26 @@ function renderBuscarProduto(){
       const emb=r.embalagem||{feito:false,qtdEmbalada:0};
       const exp=r.expedicao||{totalLiberado:0,parciais:[]};
       const qtdProd=r.qtd||0;          // a embalagem e a expedição lançam em pacotes
-      const qtdEmb=emb.qtdEmbalada||0;
+      const qtdEmb=_embDe(r);
       const lib=exp.totalLiberado||0;
 
       // Status badges
       let embBadge='';
       if(!emb.feito){
-        embBadge='<span class="mc-badge amber">⏳ aguardando</span>';
+        embBadge=qtdEmb>0 ? '<span class="mc-badge amber">⏳ embalando '+qtdEmb+'/'+qtdProd+' pct</span>'
+                          : '<span class="mc-badge amber">⏳ aguardando</span>';
       } else if(qtdEmb<qtdProd){
-        embBadge='<span class="mc-badge red">⚠️ '+qtdEmb+'/'+qtdProd+' un</span>';
+        embBadge='<span class="mc-badge red">⚠️ embalado '+qtdEmb+'/'+qtdProd+' pct</span>';
       } else {
-        embBadge='<span class="mc-badge green">✓ embalado '+qtdEmb+' un</span>';
+        embBadge='<span class="mc-badge green">✓ embalado '+qtdEmb+' pct</span>';
       }
       let expBadge='';
-      if(!emb.feito){
-        expBadge='<span class="mc-badge gray">— aguarda emb</span>';
-      } else if(lib===0){
-        expBadge='<span class="mc-badge amber">⏳ não liberado</span>';
+      if(lib===0){
+        expBadge=emb.feito ? '<span class="mc-badge amber">⏳ não liberado</span>' : '<span class="mc-badge gray">— aguarda emb</span>';
       } else if(lib<qtdEmb){
-        expBadge='<span class="mc-badge red">parcial '+lib+'/'+qtdEmb+'</span>';
+        expBadge='<span class="mc-badge red">liberado '+lib+'/'+qtdEmb+' pct</span>';
       } else {
-        expBadge='<span class="mc-badge green">✓ liberado '+lib+' un</span>';
+        expBadge='<span class="mc-badge green">✓ liberado '+lib+' pct</span>';
       }
 
       html+='<div style="border-left:3px solid var(--mc-azul-medio);padding:10px 12px;margin-bottom:8px;background:var(--bg-secondary);border-radius:var(--r-md);">';
@@ -23192,12 +23824,12 @@ let laDiasLancados = {};   // chave "DATA|tipo" -> doc
    que guarda o token e exige uma senha digitada na hora.
    Config em: configuracoes/eligo
    ══════════════════════════════════════════════════════════════════ */
-let eligoCfg={url:'', ligado:false, movAutoEnt:'', movAutoSai:'', movManEnt:'', movManSai:''};
+let eligoCfg={url:'', ligado:false, movAutoEnt:'', movAutoSai:'', movManEnt:'', movManSai:'', movProdEnt:'', movProdSai:''};
 
 onSnapshot(doc(db,'configuracoes','eligo'), snap=>{
   try{
     const d=snap.data()||{};
-    eligoCfg={url:d.url||'', ligado:d.ligado===true, movAutoEnt:d.movAutoEnt||'', movAutoSai:d.movAutoSai||'', movManEnt:d.movManEnt||'', movManSai:d.movManSai||''};
+    eligoCfg={url:d.url||'', ligado:d.ligado===true, movAutoEnt:d.movAutoEnt||'', movAutoSai:d.movAutoSai||'', movManEnt:d.movManEnt||'', movManSai:d.movManSai||'', movProdEnt:d.movProdEnt||'', movProdSai:d.movProdSai||''};
     const t=document.querySelector('.screen.active')?.id;
     if(t==='s-la-ajustes'&&typeof renderLaAjustes==='function') renderLaAjustes();
   }catch(e){ console.error('config eligo',e); }
@@ -23327,6 +23959,11 @@ function eligoAbrirConfig(){
         '<input type="text" id="eligo-man-ent" value="'+String(eligoCfg.movManEnt||'').replace(/"/g,'&quot;')+'" placeholder="entrada" inputmode="numeric" autocomplete="off" style="flex:1;min-width:0;padding:10px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box;">'+
         '<input type="text" id="eligo-man-sai" value="'+String(eligoCfg.movManSai||'').replace(/"/g,'&quot;')+'" placeholder="saída" inputmode="numeric" autocomplete="off" style="flex:1;min-width:0;padding:10px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box;">'+
       '</div>'+
+      '<div style="font-size:11px;font-weight:700;color:#15803d;margin:9px 0 4px;">🏭 Produção · entrada de produto acabado e saída de kits</div>'+
+      '<div style="display:flex;gap:7px;">'+
+        '<input type="text" id="eligo-prod-ent" value="'+String(eligoCfg.movProdEnt||'').replace(/"/g,'&quot;')+'" placeholder="entrada" inputmode="numeric" autocomplete="off" style="flex:1;min-width:0;padding:10px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box;">'+
+        '<input type="text" id="eligo-prod-sai" value="'+String(eligoCfg.movProdSai||'').replace(/"/g,'&quot;')+'" placeholder="saída" inputmode="numeric" autocomplete="off" style="flex:1;min-width:0;padding:10px;border:1px solid var(--border-md,#d1d5db);border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box;">'+
+      '</div>'+
     '</div>'+
     '<label for="eligo-lig" style="display:flex;align-items:flex-start;gap:9px;padding:10px;background:var(--bg-page);border:1px solid var(--border);border-radius:9px;cursor:pointer;margin-bottom:12px;">'+
       '<input type="checkbox" id="eligo-lig"'+(eligoCfg.ligado?' checked':'')+' style="width:20px;height:20px;margin:0;flex:0 0 auto;cursor:pointer;">'+
@@ -23348,9 +23985,10 @@ async function eligoSalvarConfig(){
   const num=id=>String((document.getElementById(id)||{}).value||'').replace(/\D/g,'');
   const movAutoEnt=num('eligo-auto-ent'), movAutoSai=num('eligo-auto-sai');
   const movManEnt=num('eligo-man-ent'),  movManSai=num('eligo-man-sai');
+  const movProdEnt=num('eligo-prod-ent'), movProdSai=num('eligo-prod-sai');
   try{
     await setDoc(doc(db,'configuracoes','eligo'),
-      {url, ligado, movAutoEnt, movAutoSai, movManEnt, movManSai, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
+      {url, ligado, movAutoEnt, movAutoSai, movManEnt, movManSai, movProdEnt, movProdSai, atualizadoEm:agora(), autor:_demAutor()},{merge:true});
     document.getElementById('eligo-cfg-modal')?.remove();
     alert('Configuração salva.');
   }catch(e){ alert('Erro: '+e.message); }
@@ -23843,6 +24481,8 @@ function laNavbar(ativa){
   ((window.adminMode||window.setorAtual==='admin')
     ? '<button onclick="eligoAbrirConfig()" title="Integração com o ELIGO" style="flex:0 0 auto;background:'+(eligoPronto()?'#f0fdf4':'#fff')+';border:1px solid '+(eligoPronto()?'#a7f3d0':'var(--border)')+';color:'+(eligoPronto()?'#15803d':'var(--text-secondary)')+';border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">'+(eligoPronto()?'🔗 ELIGO ✓':'🔗 ELIGO')+'</button>'
     : '')+
+    // resumo de tudo o que foi liberado num dia, para conferir
+    '<button onclick="laCfAbrir()" title="Tudo o que foi liberado num dia, por produto, para conferir" style="flex:0 0 auto;background:#0f172a;border:1px solid #0f172a;color:#fff;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">📋 Liberado no dia</button>'+
   '</div>';
 }
 /* ══════════════════════════════════════════════════════════════════
@@ -24172,7 +24812,8 @@ let laAnaliseCfg={diaSemana:'auto', margem:25, semanas:8, atualizadoEm:''};
 onSnapshot(doc(db,'configuracoes','laAnalise'), snap=>{
   try{
     const d=snap.data()||{};
-    laEstoqueAtual=d.estoque||{};
+    laEstoqueAtual={};
+    Object.keys(d.estoque||{}).forEach(k=>{ const n=_laCodN(k); laEstoqueAtual[n]=(laEstoqueAtual[n]||0)+(Number(d.estoque[k])||0); });
     // estoques colados antes desta versão não têm o marcador novo;
     // nesse caso vale a data de atualização que já era gravada
     laEstoqueTs=Number(d.estoqueTs)||_laTsDeTexto(d.atualizadoEm)||0;
@@ -24198,7 +24839,7 @@ function laDiaAlvo(){
    Dias sem nenhuma venda daquele produto não entram na média — senão um
    feriado ou um dia sem rota puxaria o número para baixo. */
 function laMediaVenda(cod, diaSemana, semanas){
-  const c=String(cod);
+  const c=String(cod), cn=_laCodN(cod);
   const limite=Date.now()-(semanas||8)*7*86400000;
   const porDia={};
 
@@ -24210,7 +24851,7 @@ function laMediaVenda(cod, diaSemana, semanas){
     const ts=new Date(+String(cr.data).slice(6), +String(cr.data).slice(3,5)-1, +String(cr.data).slice(0,2)).getTime();
     if(ts<limite) return;
     let q=0;
-    (cr.itens||[]).forEach(it=>{ if(String(it.codigo)===c) q+=parseInt(it.qtdBipada)||0; });
+    (cr.itens||[]).forEach(it=>{ if(_laCodN(it.codigo)===cn) q+=parseInt(it.qtdBipada)||0; });
     if(q>0) porDia[cr.data]=(porDia[cr.data]||0)+q;
   });
 
@@ -24221,7 +24862,8 @@ function laMediaVenda(cod, diaSemana, semanas){
         if(d!==diaSemana) return;
         const ts=new Date(+String(entrega).slice(6), +String(entrega).slice(3,5)-1, +String(entrega).slice(0,2)).getTime();
         if(ts<limite) return;
-        const q=Number(itens[c])||0;
+        let q=Number(itens[c])||0;
+        if(!q) Object.keys(itens||{}).forEach(k=>{ if(k!==c && _laCodN(k)===cn) q+=Number(itens[k])||0; });
         if(q>0) porDia[entrega]=(porDia[entrega]||0)+q;
       });
     });
@@ -24286,7 +24928,7 @@ function laAnaliseProduto(cod, nome){
   /* O número colado é uma foto do ERP naquele instante. O que você
      libera por esta tela entra no ERP depois, então o saldo real já é
      maior — somamos aqui para a coluna refletir o estoque de agora. */
-  const estoqueErp=Number(laEstoqueAtual[String(cod)])||0;
+  const estoqueErp=_laEstoqueDe(cod);
   const liberadoDepois=laLiberadoAposColagem(cod);
   const liberadoDet=laLiberadoDetalhe(cod);
   const estoque=estoqueErp+liberadoDepois;
@@ -24360,9 +25002,16 @@ window.laAbrirEstoque=laAbrirEstoque;
 /* Lê uma quantidade no formato brasileiro. "1.945,96" é mil novecentos
    e quarenta e cinco; ",06" é zero vírgula zero seis. Arredonda para
    pacote inteiro, porque é isso que o resto do app usa. */
+/* "03" no cadastro e "3" na planilha do ELIGO são o mesmo produto.
+   Tudo o que compara código do estoque colado passa por aqui. */
+function _laCodN(c){ const d=String(c==null?'':c).replace(/\D/g,''); return d?String(parseInt(d,10)):String(c==null?'':c).trim(); }
+function _laEstoqueDe(cod){ return Number(laEstoqueAtual[_laCodN(cod)])||0; }
+function _laTemEstoque(cod){ return Object.prototype.hasOwnProperty.call(laEstoqueAtual, _laCodN(cod)); }
 function _laLerQtd(txt){
   let t=String(txt==null?'':txt).trim();
   if(!t) return null;
+  // o ELIGO exporta estoque zerado como uma vírgula sozinha (","): é zero, não é linha inválida
+  if(/^[-.,\s]*$/.test(t)) return 0;
   const neg=/^-/.test(t) || /-$/.test(t);
   t=t.replace(/[^\d.,]/g,'');
   if(!t) return null;
@@ -24395,17 +25044,22 @@ async function laSalvarEstoque(){
   linhas.forEach(l=>{
     const p=l.split(/\t|;|\s{2,}/).map(x=>x.trim()).filter(Boolean);
     if(p.length<2){ ruins.push(l); return; }
-    const cod=String(p[0]).replace(/\D/g,'');
+    const dig=String(p[0]).replace(/\D/g,'');
+    const cod=dig?_laCodN(dig):'';
     const qtd=_laLerQtd(p[p.length-1]);
-    if(!cod || qtd===null){ ruins.push(l); return; }
+    if(!cod || qtd===null){ if(!/produto|c[oó]d|estoque/i.test(l)) ruins.push(l); return; }     // a linha de cabeçalho não é erro
     estoque[cod]=(estoque[cod]||0)+qtd; ok++;
   });
   if(!ok){ document.getElementById('la-est-result').innerHTML='<span style="color:#dc2626;">Nada reconhecido. Use código, TAB, quantidade.</span>'; return; }
   try{
-    await setDoc(doc(db,'configuracoes','laAnalise'),
-      {estoque, atualizadoEm:agora(), estoqueTs:Date.now(), autor:_demAutor()},{merge:true});
+    /* updateDoc troca o campo "estoque" inteiro. Com setDoc+merge, um
+       produto que não vinha na colagem nova continuava com o número da
+       colagem anterior. */
+    const dados={estoque, atualizadoEm:agora(), estoqueTs:Date.now(), autor:_demAutor()};
+    try{ await updateDoc(doc(db,'configuracoes','laAnalise'), dados); }
+    catch(e1){ await setDoc(doc(db,'configuracoes','laAnalise'), dados, {merge:true}); }
     document.getElementById('la-est-modal')?.remove();
-    alert('✓ '+ok+' produto(s) importado(s).'+(ruins.length?('\n\n'+ruins.length+' linha(s) ignorada(s).'):''));
+    alert('✓ '+ok+' produto(s) importado(s).'+(ruins.length?('\n\n'+ruins.length+' linha(s) não reconhecida(s):\n'+ruins.slice(0,6).join('\n')+(ruins.length>6?'\n…':'')):''));
   }catch(e){ alert('Erro: '+e.message); }
 }
 window.laSalvarEstoque=laSalvarEstoque;
@@ -24493,10 +25147,247 @@ function laCopiarGrupo(grupo){
 }
 window.laCopiarGrupo=laCopiarGrupo;
 
+/* ── CONFERÊNCIA DO DIA (liberação antecipada) ───────────────────────
+   Tudo o que foi liberado (ajustado) num dia, somado por produto, para
+   conferir: cada linha tem um visto de "certo" e um de "dúvida". A
+   dúvida deixa a linha amarela e entra na folha de contagem — código,
+   produto e um espaço em branco para anotar a contagem física.
+   As marcas ficam em configuracoes/laConferencia, por dia. */
+let _laCf={dia:'', ord:'maior', marcas:{}, ouvindo:false};
+function _laCfEscutar(){
+  if(_laCf.ouvindo) return; _laCf.ouvindo=true;
+  onSnapshot(doc(db,'configuracoes','laConferencia'), snap=>{
+    try{ _laCf.marcas=(snap.exists()&&snap.data().dias)||{}; if(document.getElementById('la-cf')) _laCfPintar(); }catch(e){ console.error('laConferencia',e); }
+  }, e=>console.error('laConferencia err',e));
+}
+function _laCfLinhas(){
+  const P={};
+  (laAjustes||[]).forEach(a=>{
+    if(String(a.criadoEm||'').slice(0,10)!==_laCf.dia) return;
+    const q=parseInt(a.qtd)||0; if(!q) return;
+    const k=_laCodN(a.cod)||_normNome(a.produto||'');
+    const o=P[k]||(P[k]={k, cod:a.cod||'', nome:a.produto||'', qtd:0, n:0, prods:new Set(), semErp:0});
+    o.qtd+=q; o.n++; if(a.data) o.prods.add(String(a.data).slice(0,5)); if(!(a.eligoEntradaId && !a.eligoEntradaErro)) o.semErp+=q;
+    if(!o.cod && a.cod) o.cod=a.cod;
+  });
+  const l=Object.values(P);
+  const ord={maior:(a,b)=>b.qtd-a.qtd, menor:(a,b)=>a.qtd-b.qtd, nome:(a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')};
+  return l.sort((a,b)=>(ord[_laCf.ord]||ord.maior)(a,b) || String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+}
+function laCfAbrir(){
+  _laCfEscutar();
+  if(!_laCf.dia) _laCf.dia=hoje();
+  document.getElementById('la-cf')?.remove();
+  const ov=document.createElement('div'); ov.id='la-cf';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:12px;';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:860px;width:100%;height:min(94vh,900px);display:flex;flex-direction:column;overflow:hidden;" id="la-cf-corpo"></div>';
+  document.body.appendChild(ov);
+  _laCfPintar();
+}
+function laCfDia(iso){ const p=String(iso||'').split('-'); if(p.length===3){ _laCf.dia=p[2]+'/'+p[1]+'/'+p[0]; _laCfPintar(); } }
+function laCfMover(n){ const p=_laCf.dia.split('/'); const d=new Date(+p[2],+p[1]-1,+p[0]+n,12); _laCf.dia=fmtData(d); _laCfPintar(); }
+function laCfOrd(o){ _laCf.ord=o; _laCfPintar(); }
+async function laCfMarcar(k, tipo){
+  const dia=_laCf.dia, m=_laCf.marcas[dia]||(_laCf.marcas[dia]={});
+  if(m[k] && m[k].s===tipo) delete m[k]; else m[k]={s:tipo, por:_demAutor(), em:agora()};
+  _laCfPintar();
+  // guarda só os últimos 45 dias
+  const lim=new Date(); lim.setDate(lim.getDate()-45); const limN=_erNum(fmtData(lim));
+  Object.keys(_laCf.marcas).forEach(d=>{ if(_erNum(d)<limN || !Object.keys(_laCf.marcas[d]||{}).length) delete _laCf.marcas[d]; });
+  try{ await setDoc(doc(db,'configuracoes','laConferencia'),{dias:_laCf.marcas, atualizadoEm:agora()}); }
+  catch(e){ alert('Não consegui salvar a marca: '+((e&&e.message)||e)); }
+}
+Object.assign(window,{laCfAbrir, laCfDia, laCfMover, laCfOrd, laCfMarcar});
+function _laCfPintar(){
+  const corpo=document.getElementById('la-cf-corpo'); if(!corpo) return;
+  const rol=(document.getElementById('la-cf-lista')||{}).scrollTop||0;
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const L=_laCfLinhas(), m=_laCf.marcas[_laCf.dia]||{};
+  const tot=L.reduce((t,x)=>t+x.qtd,0), nOk=L.filter(x=>(m[x.k]||{}).s==='ok').length, nDuv=L.filter(x=>(m[x.k]||{}).s==='duv').length;
+  const p=_laCf.dia.split('/'), sem=nomeDiaSemana(new Date(+p[2],+p[1]-1,+p[0]));
+  const chip=(on,txt,fn)=>'<button onclick="'+fn+'" style="border:1px solid '+(on?'#0f172a':'#d1d5db')+';background:'+(on?'#0f172a':'#fff')+';color:'+(on?'#fff':'#475569')+';border-radius:99px;padding:7px 12px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">'+txt+'</button>';
+  const caixa=(on,cor,bg,simb,rot,fn)=>'<button onclick="'+fn+'" role="checkbox" aria-checked="'+on+'" aria-label="'+rot+'" title="'+rot+'" style="width:40px;height:40px;border-radius:10px;border:2px solid '+(on?cor:'#cbd5e1')+';background:'+(on?bg:'#fff')+';color:'+(on?cor:'#cbd5e1')+';font-size:19px;font-weight:800;cursor:pointer;font-family:inherit;line-height:1;">'+simb+'</button>';
+  corpo.innerHTML='<div style="padding:16px 20px 12px;border-bottom:1px solid #eef2f7;">'+
+      '<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;min-width:0;"><div style="font-size:18px;font-weight:800;">📋 Liberado em '+_laCf.dia.slice(0,5)+' <span style="font-weight:500;color:#64748b;font-size:14px;">'+sem+'</span></div>'+
+        '<div style="font-size:12.5px;color:#64748b;margin-top:2px;">'+L.length+' produto(s) · '+tot.toLocaleString('pt-BR')+' pacotes liberados · <b style="color:#15803d;">'+nOk+' certo(s)</b> · <b style="color:#b45309;">'+nDuv+' com dúvida</b> · '+(L.length-nOk-nDuv)+' sem conferir</div></div>'+
+        '<button onclick="document.getElementById(\'la-cf\').remove()" aria-label="Fechar" style="border:none;background:#f1f5f9;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;flex:0 0 34px;">✕</button></div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">'+
+        '<button onclick="laCfMover(-1)" aria-label="Dia anterior" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;width:38px;height:38px;font-size:17px;cursor:pointer;">‹</button>'+
+        '<input type="date" value="'+p[2]+'-'+p[1]+'-'+p[0]+'" onchange="laCfDia(this.value)" aria-label="Dia" style="width:160px;font-size:15px;padding:8px 10px;border-radius:10px;border:1px solid #d1d5db;">'+
+        '<button onclick="laCfMover(1)" aria-label="Próximo dia" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;width:38px;height:38px;font-size:17px;cursor:pointer;">›</button>'+
+        '<span style="flex:1;"></span><span style="font-size:12px;color:#64748b;">Ordenar:</span>'+
+        chip(_laCf.ord==='maior','Maior quantidade',"laCfOrd('maior')")+chip(_laCf.ord==='menor','Menor quantidade',"laCfOrd('menor')")+chip(_laCf.ord==='nome','Nome',"laCfOrd('nome')")+
+      '</div></div>'+
+    '<div id="la-cf-lista" style="flex:1;overflow:auto;">'+
+      (L.length?'<table style="width:100%;border-collapse:collapse;font-size:14px;"><thead><tr style="position:sticky;top:0;background:#f8fafc;z-index:1;">'+
+          '<th style="text-align:left;padding:9px 8px 9px 20px;font-size:11px;color:#64748b;">Cód</th><th style="text-align:left;padding:9px 8px;font-size:11px;color:#64748b;">Produto</th>'+
+          '<th style="text-align:right;padding:9px 8px;font-size:11px;color:#64748b;">Liberado</th><th style="text-align:center;padding:9px 6px;font-size:11px;color:#15803d;width:56px;">Certo</th><th style="text-align:center;padding:9px 20px 9px 6px;font-size:11px;color:#b45309;width:70px;">Dúvida</th></tr></thead><tbody>'+
+        L.map(x=>{ const s=(m[x.k]||{}).s, kk=escapeJsStr(x.k);
+          return '<tr style="background:'+(s==='duv'?'#fef9c3':(s==='ok'?'#f0fdf4':'#fff'))+';border-bottom:1px solid #eef2f7;'+(s==='duv'?'box-shadow:inset 5px 0 0 #eab308;':'')+'">'+
+            '<td style="padding:8px 8px 8px 20px;color:#64748b;font-variant-numeric:tabular-nums;white-space:nowrap;">'+esc(x.cod||'—')+'</td>'+
+            '<td style="padding:8px;"><b style="font-weight:650;">'+esc(x.nome)+'</b><div style="font-size:11.5px;color:#64748b;">'+x.n+' liberação(ões)'+(x.prods.size?(' · produção de '+[...x.prods].join(', ')):'')+(x.semErp?(' · <span style="color:#b45309;">'+x.semErp+' sem entrada no ERP</span>'):'')+'</div></td>'+
+            '<td style="padding:8px;text-align:right;white-space:nowrap;"><b style="font-size:18px;font-variant-numeric:tabular-nums;">'+x.qtd.toLocaleString('pt-BR')+'</b> <span style="font-size:11px;color:#64748b;">pct</span></td>'+
+            '<td style="padding:6px;text-align:center;">'+caixa(s==='ok','#16a34a','#dcfce7','✓','Está certo',"laCfMarcar('"+kk+"','ok')")+'</td>'+
+            '<td style="padding:6px 20px 6px 6px;text-align:center;">'+caixa(s==='duv','#b45309','#fde68a','?','Tenho dúvida',"laCfMarcar('"+kk+"','duv')")+'</td></tr>'; }).join('')+'</tbody></table>'
+        :'<div style="padding:44px 20px;text-align:center;color:#64748b;"><div style="font-size:34px;">📭</div><div style="font-size:15px;font-weight:700;color:#0f172a;margin-top:8px;">Nada liberado em '+_laCf.dia+'</div><div style="font-size:13px;margin-top:4px;">Use as setas para ver outro dia.</div></div>')+
+    '</div>'+
+    '<div style="padding:12px 20px 16px;border-top:1px solid #eef2f7;display:flex;gap:8px;flex-wrap:wrap;">'+
+      '<button class="btn btn-secondary" style="flex:1 1 140px;margin:0;" onclick="document.getElementById(\'la-cf\').remove()">Fechar</button>'+
+      '<button class="btn btn-primary" style="flex:2 1 240px;margin:0;'+(nDuv?'':'opacity:.5;')+'" onclick="laCfImprimir()">🖨 Imprimir a contagem dos '+nDuv+' com dúvida</button></div>';
+  const li=document.getElementById('la-cf-lista'); if(li) li.scrollTop=rol;
+}
+function laCfImprimir(){
+  const m=_laCf.marcas[_laCf.dia]||{};
+  const L=_laCfLinhas().filter(x=>(m[x.k]||{}).s==='duv').sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+  if(!L.length){ alert('Marque a caixa de dúvida (?) nos produtos que precisam de contagem.'); return; }
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const p=_laCf.dia.split('/'), sem=nomeDiaSemana(new Date(+p[2],+p[1]-1,+p[0]));
+  const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Contagem física — '+esc(_laCf.dia)+'</title><style>'+
+    '*{box-sizing:border-box;}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:26px;color:#0f172a;}'+
+    '.noprint{text-align:right;margin-bottom:16px;}.noprint button{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;}'+
+    '.topo{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:3px solid #0f172a;padding-bottom:10px;}'+
+    '.emp{font-size:12px;color:#475569;font-weight:600;margin-bottom:6px;}.tit{font-size:28px;font-weight:800;line-height:1.05;}.inf{text-align:right;font-size:12px;color:#334155;line-height:1.6;}'+
+    '.sub{font-size:11.5px;color:#64748b;margin:8px 0 16px;}'+
+    'table{border-collapse:collapse;width:100%;}th{background:#0f172a;color:#fff;font-size:10.5px;padding:8px 10px;text-align:left;text-transform:uppercase;letter-spacing:.04em;}'+
+    'td{border:1px solid #94a3b8;padding:0 10px;font-size:14px;height:40px;}td.c{width:80px;font-variant-numeric:tabular-nums;}td.q{width:190px;}th.q{width:190px;}'+
+    '.ass{margin-top:34px;display:flex;gap:40px;font-size:12px;color:#334155;}.ass div{flex:1;border-top:1px solid #0f172a;padding-top:6px;}'+
+    '.rod{margin-top:18px;font-size:10px;color:#64748b;}'+
+    '@page{margin:12mm;}@media print{body{padding:0;}thead{display:table-header-group;}tr{break-inside:avoid;}.noprint{display:none;}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'+
+    '</style></head><body>'+
+    '<div class="noprint"><button onclick="window.print()">🖨 Imprimir ou salvar em PDF</button></div>'+
+    '<div class="topo"><div><div class="emp">Panificadora Monte Castelo</div><div class="tit">Contagem física</div></div>'+
+      '<div class="inf">Liberações de <b>'+esc(_laCf.dia)+'</b> ('+esc(sem)+')<br>'+L.length+' produto(s) marcados com dúvida</div></div>'+
+    '<div class="sub">Conte o que há no estoque de cada produto e anote na coluna da direita.</div>'+
+    '<table><thead><tr><th style="width:80px;">Código</th><th>Produto</th><th class="q">Contagem física</th></tr></thead><tbody>'+
+    L.map(x=>'<tr><td class="c">'+esc(x.cod||'')+'</td><td>'+esc(x.nome)+'</td><td class="q"></td></tr>').join('')+'</tbody></table>'+
+    '<div class="ass"><div>Contado por</div><div>Data e hora</div></div>'+
+    '<div class="rod">Emitido em '+esc(agora())+' por '+esc(_demAutor())+' · ProduLog</div></body></html>';
+  const w=window.open('', '_blank');
+  if(!w){ alert('O navegador bloqueou a janela da folha. Permita pop-ups para este site e toque de novo.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+window.laCfImprimir=laCfImprimir;
+
+/* ── RELATÓRIO DE MÉDIA DE VENDA (para imprimir) ─────────────────────
+   Escolhe-se pães ou salgados, o dia da semana, o acréscimo e os
+   produtos; sai uma folha com código, produto e a média já com o
+   acréscimo, e o dia da semana no topo. A média é a mesma da análise
+   (carregamentos + pedidos por fora, nas últimas N semanas). */
+let _laRel={tipo:'pao', dia:0, acres:0, busca:'', fora:{}};
+const LA_REL_DIAS=[[1,'Segunda-feira'],[2,'Terça-feira'],[3,'Quarta-feira'],[4,'Quinta-feira'],[5,'Sexta-feira'],[6,'Sábado']];
+function _laRelLinhas(){
+  const sem=laAnaliseCfg.semanas||8;
+  return (typeof _laProdutosUnicos==='function'?_laProdutosUnicos():[]).map(p=>{ const cod=String(p.cod||''); if(!cod) return null;
+      const tipo=(typeof _ajRefTipoProduto==='function')?_ajRefTipoProduto(cod):'outro';
+      const m=laMediaVenda(cod, _laRel.dia, sem);
+      return {cod, nome:p.nome||('cód '+cod), tipo, media:m.media||0, dias:m.dias||0}; })
+    .filter(x=>x && (_laRel.tipo==='todos' || x.tipo===_laRel.tipo))
+    .sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+}
+function laRelAbrir(){
+  if(!_laRel.dia){ const h=new Date().getDay(); _laRel.dia=(h>=1&&h<=6)?h:1; }
+  document.getElementById('la-rel')?.remove();
+  const ov=document.createElement('div'); ov.id='la-rel';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:3300;display:flex;align-items:center;justify-content:center;padding:14px;';
+  ov.onclick=e=>{ if(e.target===ov) ov.remove(); };
+  ov.innerHTML='<div style="background:#fff;border-radius:18px;max-width:640px;width:100%;max-height:94vh;display:flex;flex-direction:column;overflow:hidden;" id="la-rel-corpo"></div>';
+  document.body.appendChild(ov);
+  _laRelPintar();
+}
+function laRelSet(campo, v){
+  if(campo==='acres'){ const n=parseFloat(String(v).replace(',','.')); _laRel.acres=isFinite(n)?Math.max(0,Math.min(500,n)):0; _laRelPintar(true); return; }
+  if(campo==='busca'){ _laRel.busca=v; _laRelPintar(true); return; }
+  if(campo==='dia') _laRel.dia=+v; else if(campo==='tipo'){ _laRel.tipo=v; }
+  _laRelPintar();
+}
+function laRelMarca(cod, v){ if(v) delete _laRel.fora[cod]; else _laRel.fora[cod]=true; _laRelPintar(true); }
+function laRelTodos(v){ const q=_normNome(_laRel.busca||'').trim(); _laRelLinhas().filter(x=>!q || _normNome(x.nome+' '+x.cod).includes(q)).forEach(x=>{ if(v) delete _laRel.fora[x.cod]; else _laRel.fora[x.cod]=true; }); _laRelPintar(true); }
+Object.assign(window,{laRelAbrir, laRelSet, laRelMarca, laRelTodos});
+const _laRelCom=m=>Math.ceil(m*(1+(_laRel.acres||0)/100));
+/* soLista=true redesenha só a lista (para não tirar o foco de quem está digitando) */
+function _laRelPintar(soLista){
+  const corpo=document.getElementById('la-rel-corpo'); if(!corpo) return;
+  const linhas=_laRelLinhas(), q=_normNome(_laRel.busca||'').trim();
+  const vis=linhas.filter(x=>!q || _normNome(x.nome+' '+x.cod).includes(q));
+  const sel=linhas.filter(x=>!_laRel.fora[x.cod]);
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const chip=(on,txt,fn)=>'<button onclick="'+fn+'" style="border:1px solid '+(on?'#1e40af':'#d1d5db')+';background:'+(on?'#1e40af':'#fff')+';color:'+(on?'#fff':'#475569')+';border-radius:99px;padding:8px 13px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">'+txt+'</button>';
+  const lista='<div style="font-size:12px;color:#64748b;margin:0 0 6px;">'+sel.length+' de '+linhas.length+' produto(s) no relatório'+(q?(' · '+vis.length+' na busca'):'')+'</div>'+
+    (vis.length?vis.map(x=>{ const on=!_laRel.fora[x.cod];
+      return '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-top:1px solid #f1f5f9;cursor:pointer;font-size:13.5px;">'+
+        '<input type="checkbox" '+(on?'checked':'')+' onchange="laRelMarca(\''+escapeJsStr(x.cod)+'\',this.checked)" style="width:19px;height:19px;flex:0 0 19px;">'+
+        '<span style="flex:0 0 52px;color:#64748b;font-variant-numeric:tabular-nums;">'+esc(x.cod)+'</span><span style="flex:1;min-width:0;'+(on?'':'color:#94a3b8;')+'">'+esc(x.nome)+'</span>'+
+        '<span style="flex:0 0 auto;text-align:right;white-space:nowrap;"><b style="font-size:15px;'+(x.media?'':'color:#94a3b8;')+'">'+_laRelCom(x.media)+'</b>'+(_laRel.acres&&x.media?(' <span style="font-size:11px;color:#94a3b8;">('+x.media+')</span>'):'')+'</span></label>'; }).join('')
+      :'<div style="padding:22px;text-align:center;color:#64748b;font-size:13px;">Nenhum produto com esse nome.</div>');
+  if(soLista && document.getElementById('la-rel-lista')){ document.getElementById('la-rel-lista').innerHTML=lista; const b=document.getElementById('la-rel-gerar'); if(b) b.textContent='🖨 Gerar relatório ('+sel.length+')'; return; }
+  corpo.innerHTML='<div style="padding:18px 20px 12px;border-bottom:1px solid #eef2f7;">'+
+      '<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;font-size:18px;font-weight:800;">📄 Relatório de média de venda</div><button onclick="document.getElementById(\'la-rel\').remove()" aria-label="Fechar" style="border:none;background:#f1f5f9;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;">✕</button></div>'+
+      '<div style="font-size:11px;font-weight:800;color:#64748b;letter-spacing:.04em;margin:14px 0 6px;">PRODUTOS</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+chip(_laRel.tipo==='pao','🍞 Pães',"laRelSet('tipo','pao')")+chip(_laRel.tipo==='salgado','🥐 Salgados',"laRelSet('tipo','salgado')")+chip(_laRel.tipo==='todos','Todos',"laRelSet('tipo','todos')")+'</div>'+
+      '<div style="font-size:11px;font-weight:800;color:#64748b;letter-spacing:.04em;margin:14px 0 6px;">DIA DA SEMANA</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+LA_REL_DIAS.map(([n,t])=>chip(_laRel.dia===n,t.replace('-feira',''),"laRelSet('dia',"+n+")")).join('')+'</div>'+
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:14px;">'+
+        '<label style="font-size:11px;font-weight:800;color:#64748b;letter-spacing:.04em;display:flex;flex-direction:column;gap:6px;">ACRÉSCIMO SOBRE A MÉDIA (%)'+
+          '<input type="number" id="la-rel-acres" min="0" max="500" step="1" inputmode="decimal" value="'+(_laRel.acres||0)+'" oninput="laRelSet(\'acres\',this.value)" style="width:130px;font-size:17px;font-weight:700;padding:9px 11px;border-radius:10px;border:1.5px solid #1e40af;"></label>'+
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+[0,10,15,20,25,30].map(v=>'<button onclick="document.getElementById(\'la-rel-acres\').value='+v+';laRelSet(\'acres\','+v+')" style="border:1px solid #d1d5db;background:#fff;border-radius:99px;padding:8px 11px;font-family:inherit;font-size:12.5px;font-weight:700;color:#475569;cursor:pointer;">'+(v?('+'+v+'%'):'sem')+'</button>').join('')+'</div>'+
+      '</div>'+
+      '<div style="font-size:11.5px;color:#94a3b8;margin-top:8px;">Média do mesmo dia da semana nas últimas '+(laAnaliseCfg.semanas||8)+' semanas (carregamentos + pedidos por fora). O número grande já tem o acréscimo, arredondado para cima; entre parênteses, a média pura.</div>'+
+    '</div>'+
+    '<div style="padding:12px 20px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'+
+      '<input type="search" id="la-rel-busca" placeholder="🔍 Buscar produto ou código" value="'+esc(_laRel.busca||'')+'" oninput="laRelSet(\'busca\',this.value)" style="flex:1;min-width:180px;font-size:15px;padding:10px 12px;border-radius:10px;border:1px solid #d1d5db;">'+
+      '<button onclick="laRelTodos(true)" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">Marcar todos</button>'+
+      '<button onclick="laRelTodos(false)" style="border:1px solid #d1d5db;background:#fff;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">Desmarcar</button></div>'+
+    '<div id="la-rel-lista" style="flex:1;overflow:auto;padding:10px 20px;min-height:160px;">'+lista+'</div>'+
+    '<div style="padding:12px 20px 16px;border-top:1px solid #eef2f7;display:flex;gap:8px;">'+
+      '<button class="btn btn-secondary" style="flex:1;margin:0;" onclick="document.getElementById(\'la-rel\').remove()">Cancelar</button>'+
+      '<button class="btn btn-primary" id="la-rel-gerar" style="flex:2;margin:0;" onclick="laRelGerar()">🖨 Gerar relatório ('+sel.length+')</button></div>';
+}
+function laRelGerar(){
+  const linhas=_laRelLinhas().filter(x=>!_laRel.fora[x.cod]);
+  if(!linhas.length){ alert('Marque pelo menos um produto.'); return; }
+  const esc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const dia=(LA_REL_DIAS.find(d=>d[0]===_laRel.dia)||[0,''])[1].toUpperCase();
+  const tipo=_laRel.tipo==='pao'?'Pães':(_laRel.tipo==='salgado'?'Salgados':'Pães e salgados');
+  const total=linhas.reduce((t,x)=>t+_laRelCom(x.media),0);
+  // em duas colunas quando a lista é longa, para caber numa folha
+  const duas=linhas.length>34, meio=Math.ceil(linhas.length/2);
+  const tabela=arr=>'<table><thead><tr><th style="width:62px;">Código</th><th>Produto</th><th class="q">Média</th></tr></thead><tbody>'+
+    arr.map(x=>'<tr><td class="c">'+esc(x.cod)+'</td><td>'+esc(x.nome)+'</td><td class="q">'+(x.media?_laRelCom(x.media):'—')+'</td></tr>').join('')+'</tbody></table>';
+  const html='<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Média de venda — '+esc(dia)+'</title><style>'+
+    '*{box-sizing:border-box;}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:26px;color:#0f172a;}'+
+    '.topo{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:3px solid #0f172a;padding-bottom:10px;margin-bottom:6px;}'+
+    '.dia{font-size:34px;font-weight:800;letter-spacing:.02em;line-height:1;}.emp{font-size:12px;color:#475569;margin-bottom:6px;font-weight:600;}'+
+    '.inf{text-align:right;font-size:12px;color:#334155;line-height:1.6;}.inf b{font-size:14px;color:#0f172a;}'+
+    '.sub{font-size:11px;color:#64748b;margin:6px 0 14px;}'+
+    '.cols{display:flex;gap:22px;align-items:flex-start;}.cols>div{flex:1;min-width:0;}'+
+    'table{border-collapse:collapse;width:100%;}th{background:#0f172a;color:#fff;font-size:10px;padding:7px 8px;text-align:left;text-transform:uppercase;letter-spacing:.04em;}'+
+    'td{border-bottom:1px solid #cbd5e1;padding:6px 8px;font-size:13px;}tr:nth-child(even) td{background:#f1f5f9;}'+
+    '.c{font-variant-numeric:tabular-nums;color:#334155;}.q{text-align:right;font-weight:800;font-size:15px;font-variant-numeric:tabular-nums;width:74px;}th.q{font-size:10px;}'+
+    '.rod{margin-top:14px;font-size:10px;color:#64748b;border-top:1px solid #cbd5e1;padding-top:7px;display:flex;justify-content:space-between;gap:12px;}'+
+    '@page{margin:12mm;}@media print{body{padding:0;}thead{display:table-header-group;}tr{break-inside:avoid;}.noprint{display:none;}*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'+
+    '.noprint{text-align:right;margin-bottom:16px;}.noprint button{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;}'+
+    '</style></head><body>'+
+    '<div class="noprint"><button onclick="window.print()">🖨 Imprimir ou salvar em PDF</button></div>'+
+    '<div class="topo"><div><div class="emp">Panificadora Monte Castelo · Média de venda</div><div class="dia">'+esc(dia)+'</div></div>'+
+      '<div class="inf"><b>'+esc(tipo)+'</b><br>'+(_laRel.acres?('Média + '+esc(String(_laRel.acres).replace('.',','))+'% de acréscimo'):'Média sem acréscimo')+'<br>'+linhas.length+' produto(s) · '+total.toLocaleString('pt-BR')+' pacotes</div></div>'+
+    '<div class="sub">Quantidades em pacotes. Média do mesmo dia da semana nas últimas '+(laAnaliseCfg.semanas||8)+' semanas'+(_laRel.acres?', com o acréscimo já aplicado e arredondada para cima':'')+'.</div>'+
+    (duas?('<div class="cols"><div>'+tabela(linhas.slice(0,meio))+'</div><div>'+tabela(linhas.slice(meio))+'</div></div>'):tabela(linhas))+
+    '<div class="rod"><span>Emitido em '+esc(agora())+' por '+esc(_demAutor())+'</span><span>ProduLog</span></div>'+
+    '</body></html>';
+  const w=window.open('', '_blank');
+  if(!w){ alert('O navegador bloqueou a janela do relatório. Permita pop-ups para este site e toque em Gerar de novo.'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+  document.getElementById('la-rel')?.remove();
+}
+window.laRelGerar=laRelGerar;
+
 function renderLaResumo(){
   const el=document.getElementById('la-resumo-content'); if(!el) return;
   const lista=laResumoPorProduto();
   let html=laNavbar('s-la-resumo');
+  // relatório de média de venda para imprimir
+  html+='<button onclick="laRelAbrir()" class="btn btn-primary" style="width:100%;margin-bottom:8px;">📄 Gerar relatório de média de venda</button>';
 
   // botão de expandir: fechado mostra só os ajustes; aberto vira a análise do dia
   html+='<button onclick="laToggleExpandir()" class="btn btn-secondary" style="width:100%;margin-bottom:12px;">'+
@@ -24679,26 +25570,28 @@ function renderLaAnalise(el, html, ajustes){
   }
 
   // produtos a analisar: os que têm estoque colado, ajuste em aberto ou produção pendente
+  // a chave é o código sem zeros à esquerda; o código mostrado é o do cadastro
   const mapa={};
-  Object.keys(laEstoqueAtual).forEach(cod=>{ mapa[cod]={cod, nome:''}; });
-  ajustes.forEach(a=>{ if(a.cod!=='—') mapa[a.cod]={cod:a.cod, nome:a.nome}; });
+  Object.keys(laEstoqueAtual).forEach(cod=>{ mapa[_laCodN(cod)]={cod, nome:''}; });
+  ajustes.forEach(a=>{ if(a.cod!=='—'){ const k=_laCodN(a.cod); mapa[k]={cod:a.cod, nome:a.nome}; } });
   (typeof _laProdutosUnicos==='function'?_laProdutosUnicos():[]).forEach(p=>{
     const c=String(p.cod||'');
     if(!c) return;
-    if(mapa[c]) mapa[c].nome=mapa[c].nome||p.nome;
+    const k=_laCodN(c);
+    if(mapa[k]){ mapa[k].nome=mapa[k].nome||p.nome; mapa[k].cod=c; }
     else{
       // sem estoque e sem ajuste: só entra se tiver produção esperando
-      try{ const cc=laCalcular(c,p.nome); if((cc.embAntecip||0)>0) mapa[c]={cod:c, nome:p.nome}; }catch(e){}
+      try{ const cc=laCalcular(c,p.nome); if((cc.embAntecip||0)>0) mapa[k]={cod:c, nome:p.nome}; }catch(e){}
     }
   });
 
   const linhas=Object.values(mapa).map(p=>{
-    const nome=p.nome||((typeof _laProdutosUnicos==='function'?_laProdutosUnicos():[]).find(x=>String(x.cod)===p.cod)||{}).nome||('cód '+p.cod);
+    const nome=p.nome||((typeof _laProdutosUnicos==='function'?_laProdutosUnicos():[]).find(x=>_laCodN(x.cod)===_laCodN(p.cod))||{}).nome||('cód '+p.cod);
     const a=laAnaliseProduto(p.cod, nome);
-    const aj=ajustes.find(x=>String(x.cod)===String(p.cod));
+    const aj=ajustes.find(x=>_laCodN(x.cod)===_laCodN(p.cod));
     a.nome=nome; a.estornar=aj?aj.saldo:0;
     // marca quem veio do estoque colado, mesmo que a quantidade seja zero
-    a.colado=Object.prototype.hasOwnProperty.call(laEstoqueAtual, String(p.cod));
+    a.colado=_laTemEstoque(p.cod);
     return a;
   })
   // estoque zerado é o caso mais crítico: antes ele sumia da tabela
@@ -26595,8 +27488,8 @@ function _ajRefRenderResumo(){
 let _cdcVisao='';   // '' = decide pelo login | 'setor' = enxuta | 'admin' = completa
 function cdcAbrir(visao){
   _cdcVisao=visao||'';
-  _cdcModo='lista';
-  goTo('s-cdc');
+  _cdcModo='dia'; _cdcDataSel=''; _cdcDesloc=0;
+  goTo('s-cdc'); renderCDC();
 }
 window.cdcAbrir=cdcAbrir;
 
@@ -26617,123 +27510,11 @@ function cdcVoltar(){
 }
 window.cdcVoltar=cdcVoltar;
 
-function renderCDC(){
-  const el=document.getElementById('cdc-content'); if(!el) return;
-  const datas=_cdcDatasDisponiveis();
-  if(!datas.length){ el.innerHTML='<div class="empty" style="padding:30px;">Nenhuma produção de confeitaria registrada.</div>'; return; }
-  if(_cdcModo==='lista'){ el.innerHTML=_cdcRenderLista(datas); return; }
-  if(!_cdcDataSel || !datas.includes(_cdcDataSel)) _cdcDataSel=datas[0];
-  el.innerHTML=_cdcRenderDia(datas);
-}
 window.renderCDC=renderCDC;
 
 /* ---------- LISTA DE DIAS (com semáforo + conferido clicável) ---------- */
-function _cdcRenderLista(datas){
-  let h='<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">Toque num dia para ver o relatório. O botão de conferido pode ser marcado aqui mesmo.</div>';
-  datas.forEach(data=>{
-    const st=_cdcStatusDia(data);
-    // situação em texto + selo
-    let selo, seloBg, seloCor;
-    if(st.faltaEmbalar){ selo='⏳ falta embalar'; seloBg='#f1f5f9'; seloCor='#475569'; }
-    else if(st.qtdQuebra){ selo='⚠ '+st.qtdQuebra+' com quebra >6%'; seloBg='#fef3c7'; seloCor='#b45309'; }
-    else { selo='✓ tudo embalado, sem quebra'; seloBg='rgba(22,163,74,.12)'; seloCor='#15803d'; }
-    // fundo do card: verde FORTE quando conferido
-    const cardBg = st.conferido ? '#16a34a' : '#fff';
-    const cardTxt = st.conferido ? '#fff' : 'var(--text-primary,#1e293b)';
-    const cardBorda = st.conferido ? '#15803d' : 'var(--border,#e2e8f0)';
-    h+='<div style="border:1px solid '+cardBorda+';border-left:5px solid '+(st.conferido?'#15803d':st.cor)+';border-radius:12px;margin-bottom:10px;background:'+cardBg+';overflow:hidden;">'+
-      // linha clicável (abre o dia)
-      '<div onclick="_cdcAbrirDia(\''+escapeJsStr(data)+'\')" style="display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer;">'+
-        '<div style="width:12px;height:12px;border-radius:50%;background:'+(st.conferido?'#fff':st.cor)+';flex-shrink:0;"></div>'+
-        '<div style="flex:1;min-width:0;">'+
-          '<div style="font-weight:800;font-size:15px;color:'+cardTxt+';">📅 '+data+(st.conferido?' <span style="font-size:12px;font-weight:700;">· CONFERIDO ✓</span>':'')+'</div>'+
-          '<div style="font-size:12px;margin-top:3px;"><span style="background:'+(st.conferido?'rgba(255,255,255,.2)':seloBg)+';color:'+(st.conferido?'#fff':seloCor)+';padding:2px 9px;border-radius:99px;font-weight:700;">'+selo+'</span> <span style="color:'+(st.conferido?'rgba(255,255,255,.85)':'var(--text-secondary)')+';font-size:11px;">'+st.nProdutos+' produto(s)</span></div>'+
-        '</div>'+
-        (st.qtdQuebra?'<span style="background:'+(st.conferido?'rgba(255,255,255,.22)':'#fef2f2')+';color:'+(st.conferido?'#fff':'#dc2626')+';border:1px solid '+(st.conferido?'rgba(255,255,255,.4)':'#fecaca')+';padding:4px 9px;border-radius:99px;font-weight:800;font-size:13px;white-space:nowrap;flex-shrink:0;">⚠ '+st.qtdQuebra+'</span>':'')+
-        '<span style="color:'+(st.conferido?'rgba(255,255,255,.7)':'#cbd5e1')+';font-size:18px;">›</span>'+
-      '</div>'+
-      // botão conferido direto na lista
-      '<div style="padding:0 14px 12px;">'+
-        '<button onclick="event.stopPropagation();_cdcMarcarConferido(\''+escapeJsStr(data)+'\')" style="width:100%;background:'+(st.conferido?'rgba(255,255,255,.2)':'#fff')+';color:'+(st.conferido?'#fff':'#16a34a')+';border:1px solid '+(st.conferido?'rgba(255,255,255,.5)':'#16a34a')+';padding:8px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">'+(st.conferido?'✓ Conferido (toque para desmarcar)':'Marcar como conferido')+'</button>'+
-      '</div>'+
-      '</div>';
-  });
-  return h;
-}
 
 /* ---------- DETALHE DO DIA ---------- */
-function _cdcRenderDia(datas){
-  const idx=datas.indexOf(_cdcDataSel);
-  const linhas=_cdcLinhas(_cdcDataSel);
-  const st=_cdcStatusDia(_cdcDataSel);
-  const tot=linhas.reduce((a,l)=>({kgMassa:a.kgMassa+l.kgMassa,kgR1:a.kgR1+l.kgR1,kgR2:a.kgR2+l.kgR2,prod:a.prod+l.prod,emb:a.emb+l.emb,quebra:a.quebra+(l.prod-l.emb)}),{kgMassa:0,kgR1:0,kgR2:0,prod:0,emb:0,quebra:0});
-  const kg=n=>n&&Math.abs(n)>0?n.toLocaleString('pt-BR',{maximumFractionDigits:2}):'—';
-
-  // topo: voltar + navegação
-  let h='<button onclick="_cdcVoltarLista()" style="background:transparent;border:none;color:var(--text-accent,#2563eb);font-weight:600;cursor:pointer;padding:0 0 10px;font-size:14px;">‹ Todos os dias</button>';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">'+
-    '<button onclick="_cdcNav(1)" '+(idx>=datas.length-1?'disabled':'')+' style="background:var(--surface-2,#f1f5f9);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:9px 12px;cursor:pointer;font-size:14px;'+(idx>=datas.length-1?'opacity:.4;':'')+'">‹ anterior</button>'+
-    '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;">📅 '+_cdcDataSel+'</div><div style="font-size:11px;color:var(--text-secondary);">'+linhas.length+' produto(s)</div></div>'+
-    '<button onclick="_cdcNav(-1)" '+(idx<=0?'disabled':'')+' style="background:var(--surface-2,#f1f5f9);border:1px solid var(--border,#e2e8f0);border-radius:8px;padding:9px 12px;cursor:pointer;font-size:14px;'+(idx<=0?'opacity:.4;':'')+'">próximo ›</button>'+
-    '</div>';
-  // botão conferido + excel
-  h+='<div style="display:flex;gap:8px;margin-bottom:12px;">'+
-    '<button onclick="_cdcMarcarConferido(\''+escapeJsStr(_cdcDataSel)+'\')" style="flex:1;background:'+(st.conferido?'#16a34a':'#fff')+';color:'+(st.conferido?'#fff':'#16a34a')+';border:1px solid #16a34a;padding:11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">'+(st.conferido?'✓ Dia conferido':'Marcar como conferido')+'</button>'+
-    (_cdcEhAdmin()?'<button onclick="_cdcExcel()" style="flex:1;background:#334155;color:#fff;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">⬇ Excel</button>':'')+
-    '</div>';
-
-  // tabela
-  h+='<div style="overflow-x:auto;border:1px solid var(--border,#e2e8f0);border-radius:10px;">';
-  h+='<table style="border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;'+(_cdcEhAdmin()?'min-width:680px;':'')+'">';
-  h+='<thead><tr style="background:#334155;color:#fff;">'+
-    (_cdcEhAdmin()
-      ? ['Produto','Massa','kg Massa','Recheio','kg Rec.','Recheio AD','kg Rec.AD','Prod.','Emb.','Quebra','Conf.']
-      : ['Produto','Total Prod.','Total Embalado','Quebra','Conf.'])
-    .map((c,i)=>'<th style="padding:8px 10px;text-align:'+(i===0?'left':'center')+';font-weight:700;position:'+(i===0?'sticky':'static')+';left:0;'+(i===0?'background:#334155;z-index:1;':'')+'">'+c+'</th>').join('')+'</tr></thead><tbody>';
-  linhas.forEach((l,i)=>{
-    const bg=i%2?'#f8fafc':'#fff';
-    const qAbs=Math.abs(l.quebra);
-    const qCor=qAbs===0?'#16a34a':(l.pctEmb>6?'#dc2626':'#d97706');
-    // botão de conferência de consumo (só aparece se fora da faixa de 6%; vermelho se grave >25%)
-    const btnConf = l.consumoForaFaixa ? '<button onclick="_cdcDetalheConsumo(\''+escapeJsStr(l.cod)+'\',\''+escapeJsStr(l.nome)+'\')" style="background:'+(l.consumoGrave?'#dc2626':'#fef3c7')+';border:1px solid '+(l.consumoGrave?'#b91c1c':'#d97706')+';color:'+(l.consumoGrave?'#fff':'#b45309')+';font-size:14px;padding:2px 8px;border-radius:6px;cursor:pointer;font-weight:800;" title="Ver conferência de consumo">⚠</button>' : '<span style="color:#cbd5e1;">—</span>';
-    const celProd='<td style="padding:8px 10px;font-weight:600;position:sticky;left:0;background:'+bg+';">'+l.nome+'</td>';
-    const celNums='<td style="padding:8px 10px;text-align:center;font-weight:700;">'+l.prod+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;font-weight:700;">'+l.emb+'</td>'+
-      // a quebra sai como -5 ou +3; antes saía "+-5" quando era negativa
-      '<td style="padding:8px 10px;text-align:center;font-weight:800;color:'+qCor+';">'+(l.quebra===0?'0':(l.quebra>0?'+':'')+l.quebra)+'</td>'+
-      '<td style="padding:8px 10px;text-align:center;">'+btnConf+'</td>';
-    h+='<tr style="background:'+bg+';border-top:1px solid var(--border,#f1f5f9);">'+celProd+
-      (_cdcEhAdmin()
-        ? '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoMassa||'—')+'</td>'+
-          '<td style="padding:8px 10px;text-align:center;font-weight:600;">'+kg(l.kgMassa)+'</td>'+
-          '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoRecheio||'—')+'</td>'+
-          '<td style="padding:8px 10px;text-align:center;">'+kg(l.kgR1)+'</td>'+
-          '<td style="padding:8px 10px;text-align:center;color:var(--text-secondary);">'+(l.tipoRecheio2||'—')+'</td>'+
-          '<td style="padding:8px 10px;text-align:center;">'+kg(l.kgR2)+'</td>'
-        : '')+
-      celNums+'</tr>';
-  });
-  h+='<tr style="background:#e2e8f0;font-weight:800;border-top:2px solid #94a3b8;">'+
-    '<td style="padding:9px 10px;position:sticky;left:0;background:#e2e8f0;">TOTAL</td>'+
-    (_cdcEhAdmin()
-      ? '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgMassa)+'</td>'+
-        '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgR1)+'</td>'+
-        '<td></td><td style="padding:9px 10px;text-align:center;">'+kg(tot.kgR2)+'</td>'
-      : '')+
-    '<td style="padding:9px 10px;text-align:center;">'+tot.prod+'</td>'+
-    '<td style="padding:9px 10px;text-align:center;">'+tot.emb+'</td>'+
-    '<td style="padding:9px 10px;text-align:center;">'+tot.quebra+'</td><td></td>'+
-    '</tr>';
-  h+='</tbody></table></div>';
-
-  // os blocos abaixo são de análise: só o admin precisa deles
-  if(!_cdcEhAdmin()) return h;
-  // ---------- RESUMO DE MASSAS E RECHEIOS PRODUZIDOS ----------
-  h+=_cdcResumoInsumos(_cdcDataSel);
-  // ---------- CONFERÊNCIA GERAL DE CONSUMO (esperado × real, agregado) ----------
-  h+=_cdcResumoConsumo(_cdcDataSel);
-  return h;
-}
 
 /* ---------- RESUMO GERAL de consumo do dia (agregado por insumo) ---------- */
 function _cdcResumoConsumo(data){
@@ -37097,47 +37878,161 @@ function _cdqLinhas(data){
   }).sort((a,b)=>b.disponivel-a.disponivel || a.kit.localeCompare(b.kit,'pt-BR'));
 }
 
+/* ── CONTROLE DIÁRIO DA QUADRA, no visual novo ───────────────────────
+   Uma tela só: a faixa de dias em cima (não há mais a lista separada),
+   o resumo do dia e a tabela, com os dois campos que se preenchem —
+   kits consumidos e massa velha. Enter desce para a linha de baixo.
+   A conta é a mesma de antes (_cdqLinhas). */
+let _cdqDesloc=0, _cdqAberto={};
+function cdqFaixa(n){ _cdqDesloc=Math.max(0,_cdqDesloc+n); renderCDQ(); }
+function cdqDetalhe(kit){ const k=_cdqChave(kit); _cdqAberto[k]=!_cdqAberto[k]; renderCDQ(); }
+Object.assign(window,{cdqFaixa, cdqDetalhe});
 function renderCDQ(){
   const el=document.getElementById('cdq-content'); if(!el) return;
   // tenta mandar o que ficou guardado no aparelho
   if(!_cdqJaTentou){ _cdqJaTentou=true; setTimeout(()=>cdqReenviarPendentes(), 400); }
+  // a tela se redesenha a cada campo salvo: guarda onde a pessoa está digitando para devolver o foco e o que ela digitou
+  if(renderCDQ._ocupado){ renderCDQ._denovo=true; return; }
+  const ae=document.activeElement, focoId=(ae && el.contains(ae) && ae.id && ae.id.indexOf('cdq-')===0)?ae.id:'', focoVal=focoId?ae.value:'';
+  const rol=el.scrollTop;
+  _skLigar(el,'s-cdq');
   const datas=_cdqDatas();
-  if(!datas.length){ el.innerHTML=_vazio('Nenhuma produção da quadra registrada.'); return; }
-  if(_cdqModo==='lista'){ el.innerHTML=_cdqRenderLista(datas); return; }
+  if(!datas.length){ el.innerHTML='<div class="pt sk"><main class="pt-main"><div class="pt-card pt-vazio">Nenhuma produção da quadra registrada.</div></main></div>'; return; }
   if(!_cdqDataSel || !datas.includes(_cdqDataSel)) _cdqDataSel=datas[0];
-  el.innerHTML=_cdqRenderDia(datas);
+  _cdqModo='dia';
+  const kg=v=>_fmtKg(v), pcf=v=>(Math.round(v*10)/10).toLocaleString('pt-BR'), D=_cdqDataSel, ls=_cdqLinhas(D);
+  const resumoDia=d=>{ const l=_cdqLinhas(d); const disp=l.reduce((t,x)=>t+(x.preenchido?x.disponivel:0),0), emb=l.reduce((t,x)=>t+(x.preenchido?x.embKg:0),0);
+    return {n:l.length, falta:l.filter(x=>!x.preenchido).length, bloq:l.filter(x=>x.bloqueado).length, embTodos:l.reduce((t,x)=>t+x.embKg,0), q:disp>0?((disp-emb)/disp*100):null}; };
+  const corQ=q=>q===null?'var(--sk-mut)':(Math.abs(q)>8?'var(--sk-pe)':(Math.abs(q)>4?'var(--sk-al)':'var(--sk-ok)'));
+  const iSel=Math.max(0,datas.indexOf(D));
+  let ini=Math.min(Math.max(0,_cdqDesloc), Math.max(0,datas.length-7)); if(iSel<ini) ini=iSel; if(iSel>ini+6) ini=iSel-6; _cdqDesloc=ini;
+  const faixa=_skDias(datas.slice(ini,ini+7).reverse().map(d=>{ const r=resumoDia(d);
+    return {d, v:(r.q===null?'—':((r.q>0?'':'+')+pcf(Math.abs(r.q))+'%')), un:r.q===null?'':'quebra', s:(r.bloq?('🚫 '+r.bloq+' pendente(s)'):(r.falta?(r.falta+' sem preencher'):(r.n+' kit(s) · ok'))), pct:r.n?((r.n-r.falta)/r.n*100):0, cor:r.falta?'':'var(--sk-ok)'}; }),
+    D, '_cdqVerDia', (ini+7<datas.length)?'cdqFaixa(1)':'', ini>0?'cdqFaixa(-1)':'');
+  const R=resumoDia(D);
+  const tot={kgKits:0, massaVelha:0, embKg:0, disponivel:0, n:0};
+  ls.forEach(l=>{ if(l.preenchido){ tot.kgKits+=l.kgKits; tot.massaVelha+=l.massaVelha; tot.embKg+=l.embKg; tot.disponivel+=l.disponivel; tot.n++; } });
+  const qTot=tot.disponivel-tot.embKg, qTotPct=tot.disponivel>0?(qTot/tot.disponivel*100):null;
+  let h='<div class="sk-hero"><div><div class="k">Controle diário · Quadra</div><h1>Quadra · kits e quebra de '+D.slice(0,5)+'</h1>'+
+      '<p>Preencha os kits consumidos e a massa velha. O embalado vem da Embalagem, e a quebra aparece na hora. Enter passa para a linha de baixo.</p></div>'+
+    '<div class="dir"><div class="g" style="color:'+corQ(qTotPct)+';">'+(qTotPct===null?'—':((qTotPct>0?'':'+')+pcf(Math.abs(qTotPct))+'%'))+'<small>de quebra no dia</small></div>'+
+      '<div class="m">'+ls.length+' kit(s) · '+kg(R.embTodos)+' kg embalados'+(R.falta?(' · <b style="color:var(--sk-al);">'+R.falta+' sem preencher</b>'):'')+'</div></div></div>'+faixa;
+  if(!ls.length){ el.innerHTML='<div class="pt sk"><main class="pt-main">'+h+'<div class="pt-card pt-vazio">Nenhum kit neste dia.</div></main></div>'; return; }
+  const bloq=ls.filter(l=>l.bloqueado);
+  if(bloq.length) h+='<div class="sk-faixa pe"><b>🚫 '+bloq.length+' kit(s) com pendência — não lançar ainda</b><br>'+bloq.map(l=>'<b>'+_pontoEsc(l.kit)+'</b>'+(l.obs?(' · '+_pontoEsc(l.obs)):'')).join('<br>')+'</div>';
+  const nSel=ls.filter(l=>_cdqSel[_cdqChave(l.kit)]).length;
+  const campo=(l,n,nome,valor,dica)=>'<input class="sk-in" type="number" step="any" min="0" inputmode="decimal" value="'+(valor||'')+'" placeholder="'+dica+'" '+
+    'id="cdq-'+nome+'-'+n+'" data-cdq-col="'+nome+'" data-cdq-linha="'+n+'" data-cdq-kit="'+escapeHtmlAttr(l.kit)+'" '+
+    'onchange="cdqSalvarCampo(\''+escapeJsStr(l.kit)+'\',\''+nome+'\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();cdqProximo(this);}" aria-label="'+(nome==='consumidos'?'Kits consumidos':'Massa velha em kg')+' de '+escapeHtmlAttr(l.kit)+'" style="max-width:110px;">';
+  let linhas='';
+  ls.forEach((l,n)=>{
+    const aberto=_cdqAberto[_cdqChave(l.kit)], nProd=Object.keys(l.produtos).length;
+    linhas+='<tr'+(l.bloqueado?' class="sk-al"':'')+'>'+
+      '<td style="width:34px;"><input type="checkbox"'+(_cdqSel[_cdqChave(l.kit)]?' checked':'')+' onchange="cdqToggleSel(\''+escapeJsStr(l.kit)+'\')" aria-label="Incluir '+escapeHtmlAttr(l.kit)+' na mensagem" style="width:18px;height:18px;"></td>'+
+      '<td style="white-space:normal;min-width:190px;"><b style="font-weight:650;">'+(l.bloqueado?'🚫 ':'')+_pontoEsc(l.kit)+'</b>'+
+        '<div style="font-size:11.5px;color:var(--sk-sub);margin-top:2px;">'+kg(l.kgPorKit)+' kg/kit'+
+          (l.pesoCongelado && l.kgPorKitAtual>0 && Math.abs(l.kgPorKitAtual-l.kgPorKit)>0.01?' <span title="A receita foi alterada depois. Aqui vale o peso do dia." style="color:#7c3aed;">⏱ hoje '+kg(l.kgPorKitAtual)+'</span>':'')+
+          ' · <button class="sk-link" onclick="cdqDetalhe(\''+escapeJsStr(l.kit)+'\')">'+nProd+' produto(s) '+(aberto?'▴':'▾')+'</button>'+
+          ' · <button class="sk-link" onclick="cdqAbrirObs(\''+escapeJsStr(l.kit)+'\')">'+(l.obs||l.bloqueado?'editar nota':'+ nota')+'</button></div>'+
+        (l.obs?'<div style="font-size:11.5px;color:var(--sk-al);margin-top:2px;">📝 '+_pontoEsc(l.obs)+'</div>':'')+'</td>'+
+      '<td class="c">'+campo(l,n,'consumidos',l.consumidos,'kits')+'</td>'+
+      '<td class="c">'+(l.kgKits?kg(l.kgKits):'<span style="color:var(--sk-mut);">—</span>')+'</td>'+
+      '<td class="c">'+campo(l,n,'massaVelha',l.massaVelha,'kg')+'</td>'+
+      '<td class="c"><b>'+(l.embKg?kg(l.embKg):'0')+'</b><div style="font-size:11px;color:var(--sk-sub);">'+l.embPct+' pct'+(l.prodPct && l.prodPct!==l.embPct?(' · <span style="color:var(--sk-al);">prod. '+l.prodPct+'</span>'):'')+'</div></td>'+
+      '<td class="c">'+(l.preenchido?_ptPill((l.quebraPct>0?'':'+')+pcf(Math.abs(l.quebraPct))+'%', Math.abs(l.quebraPct)>8?'red':(Math.abs(l.quebraPct)>4?'amber':'green'), true):'<span style="color:var(--sk-mut);">—</span>')+
+        (l.preenchido?'<div style="font-size:11px;color:var(--sk-sub);margin-top:3px;">'+(l.quebraKg>0?'':'+')+kg(Math.abs(l.quebraKg))+' kg</div>':'')+'</td>'+
+      '<td class="c" style="white-space:normal;">'+_cdqCelulaPeso(l)+'</td></tr>';
+    if(aberto) linhas+='<tr><td></td><td colspan="7" style="white-space:normal;padding-top:0;"><div class="sk-sub-card">'+
+      Object.values(l.produtos).sort((a,b)=>b.emb-a.emb).map(pp=>{ const real=pp.pesoUnReal||0, padrao=pp.pesoUnPadrao||0, dif=real&&padrao?((real-padrao)/padrao*100):0;
+        const cor=!real?'var(--sk-mut)':(Math.abs(dif)>8?'var(--sk-pe)':(Math.abs(dif)>4?'var(--sk-al)':'var(--sk-ok)'));
+        return '<div style="display:flex;gap:12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--sk-linha);font-size:12.5px;"><span style="flex:1;min-width:0;">'+_pontoEsc(pp.nome)+
+          ' <span style="color:var(--sk-sub);">· '+(pp.unPct?(pp.unPct+' un/pct'):'<span style="color:var(--sk-al);">sem un/pct</span>')+' · un padrão '+_cdqGramas(padrao)+(real?(' · <b style="color:'+cor+';">real '+_cdqGramas(real)+' ('+(dif>0?'+':'')+pcf(dif)+'%)</b>'):'')+'</span></span>'+
+          '<span style="white-space:nowrap;"><b>'+pp.emb+' pct</b>'+(pp.prod && pp.prod!==pp.emb?(' <span style="color:var(--sk-al);">de '+pp.prod+'</span>'):'')+' · <b>'+kg(pp.emb*pp.kgPacote)+' kg</b></span></div>'; }).join('')+'</div></td></tr>';
+  });
+  h+='<div class="pt-grid">'+_ptCard('Kits do dia', tot.n<ls.length?('o total conta só os '+tot.n+' preenchido(s)'):(ls.length+' kit(s)'),
+    '<div class="pt-tw"><table class="pt-tab"><thead><tr><th></th><th>Kit</th><th class="c">Kits consumidos</th><th class="c">Total (kg)</th><th class="c">Massa velha (kg)</th><th class="c">Embalado (kg)</th><th class="c">Quebra</th><th class="c">Peso médio un</th></tr></thead><tbody>'+linhas+
+    '<tr class="sk-tot"><td></td><td>Total</td><td></td><td class="c">'+kg(tot.kgKits)+'</td><td class="c">'+kg(tot.massaVelha)+'</td><td class="c">'+kg(tot.embKg)+'</td>'+
+      '<td class="c" style="color:'+corQ(qTotPct)+';">'+(qTotPct===null?'—':((qTotPct>0?'':'+')+pcf(Math.abs(qTotPct))+'% · '+(qTot>0?'':'+')+kg(Math.abs(qTot))+' kg'))+'</td><td></td></tr></tbody></table></div>',
+    '<button class="pt-btn" onclick="cdqSelTodos('+(nSel?'false':'true')+')">'+(nSel?'Desmarcar':'☑ Marcar todos')+'</button>'+(nSel?'<button class="pt-btn pri" onclick="cdqCopiarResumo()">📋 Copiar mensagem ('+nSel+')</button>':''))+'</div>';
+  h+='<div class="pt-nota"><b>Total (kg)</b> = kits consumidos × peso do kit. <b>Embalado</b> = pacotes de todos os produtos daquele kit × peso de cada pacote. <b>Quebra</b> = (total + massa velha) − embalado. Marque kits para copiar a mensagem do dia.</div>';
+  renderCDQ._ocupado=true;
+  try{ el.innerHTML='<div class="pt sk"><main class="pt-main">'+h+'</main></div>'; } finally{ renderCDQ._ocupado=false; }
+  if(renderCDQ._denovo){ renderCDQ._denovo=false; setTimeout(renderCDQ, 0); }
+  el.scrollTop=rol;
+  if(focoId){ const i=document.getElementById(focoId); if(i){ if(focoVal!=='' && i.value!==focoVal) i.value=focoVal; i.focus(); try{ i.select(); }catch(e){} } }
 }
 window.renderCDQ=renderCDQ;
 
-function cdqAbrir(){ _cdqModo='lista'; goTo('s-cdq'); }
+/* ── CONTROLE DIÁRIO DA CONFEITARIA, no visual novo ──────────────────
+   Também numa tela só: faixa de dias, o "conferido" num toque, a tabela
+   dos produtos e, para o admin, o que foi produzido de massa e recheio
+   e a conferência de consumo. As contas são as mesmas (_cdcLinhas). */
+let _cdcDesloc=0;
+function cdcFaixa(n){ _cdcDesloc=Math.max(0,_cdcDesloc+n); renderCDC(); }
+window.cdcFaixa=cdcFaixa;
+function renderCDC(){
+  const el=document.getElementById('cdc-content'); if(!el) return;
+  _skLigar(el,'s-cdc');
+  const datas=_cdcDatasDisponiveis();
+  if(!datas.length){ el.innerHTML='<div class="pt sk"><main class="pt-main"><div class="pt-card pt-vazio">Nenhuma produção de confeitaria registrada.</div></main></div>'; return; }
+  if(!_cdcDataSel || !datas.includes(_cdcDataSel)) _cdcDataSel=datas[0];
+  _cdcModo='dia';
+  const D=_cdcDataSel, linhas=_cdcLinhas(D), st=_cdcStatusDia(D), adm=_cdcEhAdmin();
+  const kg=n=>n&&Math.abs(n)>0?n.toLocaleString('pt-BR',{maximumFractionDigits:2}):'—';
+  const fmt=n=>Math.round(n).toLocaleString('pt-BR');
+  const iSel=Math.max(0,datas.indexOf(D));
+  let ini=Math.min(Math.max(0,_cdcDesloc), Math.max(0,datas.length-7)); if(iSel<ini) ini=iSel; if(iSel>ini+6) ini=iSel-6; _cdcDesloc=ini;
+  const faixa=_skDias(datas.slice(ini,ini+7).reverse().map(d=>{ const s=_cdcStatusDia(d);
+    return {d, v:String(s.nProdutos), un:'produtos', s:(s.conferido?'✓ conferido':(s.faltaEmbalar?'falta embalar':(s.qtdQuebra?('⚠ '+s.qtdQuebra+' com quebra'):'tudo ok · conferir'))), pct:s.conferido?100:(s.faltaEmbalar?30:70), cor:s.conferido?'var(--sk-ok)':(s.qtdQuebra&&!s.faltaEmbalar?'var(--sk-al)':'')}; }),
+    D, '_cdcAbrirDia', (ini+7<datas.length)?'cdcFaixa(1)':'', ini>0?'cdcFaixa(-1)':'');
+  const tot=linhas.reduce((a,l)=>({kgMassa:a.kgMassa+l.kgMassa,kgR1:a.kgR1+l.kgR1,kgR2:a.kgR2+l.kgR2,prod:a.prod+l.prod,emb:a.emb+l.emb}),{kgMassa:0,kgR1:0,kgR2:0,prod:0,emb:0});
+  const qd=tot.prod-tot.emb;
+  let h='<div class="sk-hero"><div><div class="k">Controle diário · Confeitaria</div><h1>Confeitaria · produzido e embalado em '+D.slice(0,5)+'</h1>'+
+      '<p>'+(st.conferido?'Este dia já foi conferido.':(st.faltaEmbalar?'Ainda falta embalar parte da produção deste dia.':(st.qtdQuebra?(st.qtdQuebra+' produto(s) com quebra acima de 6%. Confira antes de marcar o dia.'):'Tudo embalado e sem quebra fora da faixa. Pode conferir.')))+'</p></div>'+
+    '<div class="dir"><div class="g">'+fmt(tot.emb)+'<small>de '+fmt(tot.prod)+' embalados</small></div>'+
+      '<div class="m" style="color:'+(qd===0?'var(--sk-ok)':'var(--sk-al)')+';font-weight:700;">'+(qd===0?'sem diferença':((qd>0?fmt(qd)+' a menos':fmt(-qd)+' a mais')+' que o produzido'))+'</div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px;">'+
+        '<button class="pt-btn'+(st.conferido?'':' pri')+'" style="height:42px;padding:0 18px;'+(st.conferido?'border-color:var(--sk-ok);color:var(--sk-ok);':'')+'" onclick="_cdcMarcarConferido(\''+escapeJsStr(D)+'\')">'+(st.conferido?'✓ Dia conferido · desfazer':'Marcar como conferido')+'</button>'+
+        (adm?'<button class="pt-btn" style="height:42px;" onclick="_cdcExcel()">⬇ Excel</button>':'')+'</div></div></div>'+faixa;
+  const z='<span style="color:var(--sk-mut);">—</span>';
+  const corpo=linhas.map(l=>{ const fora=l.pctEmb>6, q=l.quebra;
+    const btn=l.consumoForaFaixa?'<button class="pt-btn" style="height:30px;padding:0 10px;border-color:'+(l.consumoGrave?'var(--sk-pe)':'var(--sk-al)')+';color:'+(l.consumoGrave?'var(--sk-pe)':'var(--sk-al)')+';" onclick="_cdcDetalheConsumo(\''+escapeJsStr(l.cod)+'\',\''+escapeJsStr(l.nome)+'\')" title="Consumo de massa ou recheio fora da faixa: ver a conferência">⚠ consumo</button>':z;
+    return '<tr><td style="white-space:normal;min-width:170px;"><b style="font-weight:650;">'+_pontoEsc(l.nome)+'</b></td>'+
+      (adm?'<td style="color:var(--sk-sub);white-space:normal;">'+_pontoEsc(l.tipoMassa||'—')+'</td><td class="c">'+kg(l.kgMassa)+'</td><td style="color:var(--sk-sub);white-space:normal;">'+_pontoEsc(l.tipoRecheio||'—')+'</td><td class="c">'+kg(l.kgR1)+'</td>'+
+           '<td style="color:var(--sk-sub);white-space:normal;">'+_pontoEsc(l.tipoRecheio2||'—')+'</td><td class="c">'+kg(l.kgR2)+'</td>':'')+
+      '<td class="c">'+l.prod+'</td><td class="c"'+(l.temEmbPendente?' style="color:var(--sk-al);" title="Embalagem ainda não finalizou"':'')+'>'+l.emb+'</td>'+
+      '<td class="c">'+(q===0?_ptPill('0','green',true):_ptPill((q>0?'−':'+')+Math.abs(q), fora?'red':'amber', true))+'</td><td class="c">'+btn+'</td></tr>'; }).join('');
+  h+='<div class="pt-grid">'+_ptCard('Produtos do dia', linhas.length+' produto(s) · quebra = produzido − embalado',
+    '<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Produto</th>'+(adm?'<th>Massa</th><th class="c">kg</th><th>Recheio</th><th class="c">kg</th><th>Recheio adicional</th><th class="c">kg</th>':'')+'<th class="c">Produzido</th><th class="c">Embalado</th><th class="c">Diferença</th><th class="c">Consumo</th></tr></thead><tbody>'+corpo+
+    '<tr class="sk-tot"><td>Total</td>'+(adm?'<td></td><td class="c">'+kg(tot.kgMassa)+'</td><td></td><td class="c">'+kg(tot.kgR1)+'</td><td></td><td class="c">'+kg(tot.kgR2)+'</td>':'')+'<td class="c">'+tot.prod+'</td><td class="c">'+tot.emb+'</td><td class="c">'+(qd===0?'0':((qd>0?'−':'+')+Math.abs(qd)))+'</td><td></td></tr></tbody></table></div>')+'</div>';
+  if(adm){
+    // o que foi produzido de massa e de recheio, e a conferência de consumo (deveria × usou)
+    const somaDia=(lista,campo)=>{ const m={}; (lista||[]).forEach(x=>{ if(x.data===D && x[campo]) m[x[campo]]=(m[x[campo]]||0)+(+x.qtdKg||0); }); return m; };
+    const mP=somaDia(typeof regMassas!=='undefined'?regMassas:[],'massa'), rP=somaDia(typeof regRecheios!=='undefined'?regRecheios:[],'recheio');
+    const cons={massa:{}, recheio:{}};
+    const add=(mapa,nome,esp,real)=>{ if(!nome||(esp<=0&&real<=0)) return; const o=mapa[nome]||(mapa[nome]={esp:0,real:0}); o.esp+=esp; o.real+=real; };
+    linhas.forEach(l=>{ add(cons.massa,l.tipoMassa,l.massaEsp,l.massaReal); add(cons.recheio,l.tipoRecheio,l.r1Esp,l.r1Real); add(cons.recheio,l.tipoRecheio2,l.r2Esp,l.r2Real); });
+    const bloco=(tit,prodMap,consMap)=>{ const nomes=[...new Set(Object.keys(prodMap).concat(Object.keys(consMap)))].sort();
+      return _ptCard(tit,'produzido no dia · deveria usar × usou',
+        nomes.length?'<div class="pt-tw"><table class="pt-tab"><thead><tr><th>Insumo</th><th class="c">Produzido</th><th class="c">Deveria</th><th class="c">Usou</th><th class="c">Quebra</th></tr></thead><tbody>'+
+          nomes.map(n=>{ const c=consMap[n]||{esp:0,real:0}, dev=c.esp>0?((c.real-c.esp)/c.esp*100):null;
+            return '<tr><td style="white-space:normal;"><b style="font-weight:650;">'+_pontoEsc(n)+'</b></td><td class="c">'+(prodMap[n]?kg(prodMap[n]):z)+'</td><td class="c" style="color:var(--sk-sub);">'+kg(c.esp)+'</td><td class="c"><b>'+kg(c.real)+'</b></td>'+
+              '<td class="c">'+(dev===null?z:_ptPill((dev>0?'+':'')+dev.toFixed(1).replace('.',',')+'%', Math.abs(dev)>25?'red':(Math.abs(dev)>6?'amber':'green'), true))+'</td></tr>'; }).join('')+'</tbody></table></div>'
+        :'<div class="pt-vazio" style="padding:18px 0;">Sem dados neste dia.</div>'); };
+    h+='<div class="pt-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));">'+bloco('🌾 Massas',mP,cons.massa)+bloco('🥄 Recheios',rP,cons.recheio)+'</div>';
+  }
+  h+='<div class="pt-nota">A diferença é o produzido menos o embalado: acima de 6% fica em vermelho. “⚠ consumo” aparece quando a massa ou o recheio usados ficaram fora da faixa do cadastro; toque para ver a conferência.</div>';
+  el.innerHTML='<div class="pt sk"><main class="pt-main">'+h+'</main></div>';
+}
+window.renderCDC=renderCDC;
+
+function cdqAbrir(){ _cdqModo='dia'; _cdqDataSel=''; _cdqDesloc=0; goTo('s-cdq'); renderCDQ(); }
 window.cdqAbrir=cdqAbrir;
 function _cdqVerDia(d){ _cdqDataSel=d; _cdqModo='dia'; renderCDQ(); }
 window._cdqVerDia=_cdqVerDia;
 function _cdqVoltarLista(){ _cdqModo='lista'; renderCDQ(); }
 window._cdqVoltarLista=_cdqVoltarLista;
 
-function _cdqRenderLista(datas){
-  return '<div class="mc-section-header">Escolha o dia</div>'+
-    datas.slice(0,60).map(d=>{
-      const ls=_cdqLinhas(d);
-      const falta=ls.filter(l=>!l.preenchido).length;
-      const bloqN=ls.filter(l=>l.bloqueado).length;
-      const totEmb=ls.reduce((t,l)=>t+l.embKg,0);
-      const totDisp=ls.reduce((t,l)=>t+l.disponivel,0);
-      const qpct=totDisp>0?((totDisp-totEmb)/totDisp*100):null;
-      const cor=qpct===null?'var(--text-muted)':(Math.abs(qpct)>8?'#dc2626':(Math.abs(qpct)>4?'#d97706':'#16a34a'));
-      return '<button onclick="_cdqVerDia(\''+escapeJsStr(d)+'\')" class="card" style="display:flex;align-items:center;gap:10px;width:100%;margin-bottom:7px;cursor:pointer;text-align:left;font-family:inherit;">'+
-        '<span style="flex:1;min-width:0;">'+
-          '<span style="display:block;font-size:15px;font-weight:800;">'+d+'</span>'+
-          '<span style="display:block;font-size:11px;color:var(--text-secondary);margin-top:2px;">'+
-            ls.length+' kit(s) · '+_fmtKg(totEmb)+' kg embalado'+(falta?(' · <strong style="color:#d97706;">'+falta+' sem preencher</strong>'):'')+
-            (bloqN?(' · <strong style="color:#dc2626;">🚫 '+bloqN+' pendente(s)</strong>'):'')+'</span></span>'+
-        '<span style="text-align:right;white-space:nowrap;">'+
-          '<span style="display:block;font-size:17px;font-weight:900;color:'+cor+';">'+(qpct===null?'—':(qpct>0?'':'+')+_fmtKg(Math.abs(qpct))+'%')+'</span>'+
-          '<span style="display:block;font-size:10px;color:var(--text-muted);">quebra</span></span>'+
-        '<span style="font-size:18px;color:var(--text-muted);">›</span></button>';
-    }).join('');
-}
 
 /* Mostra o peso em gramas quando é menos de 1 kg, senão em quilos */
 function _cdqGramas(kgv){
@@ -37170,145 +38065,6 @@ function _cdqCelulaPeso(l){
 }
 window._cdqCelulaPeso=_cdqCelulaPeso;
 
-function _cdqRenderDia(datas){
-  const i=datas.indexOf(_cdqDataSel);
-  const ls=_cdqLinhas(_cdqDataSel);
-  const kg=v=>_fmtKg(v);
-
-  let h='<button onclick="_cdqVoltarLista()" style="background:transparent;border:none;color:var(--mc-azul);font-size:13px;font-weight:600;cursor:pointer;padding:0 0 8px;font-family:inherit;">‹ Todos os dias</button>';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;">'+
-    '<button onclick="_cdqVerDia(\''+escapeJsStr(datas[i+1]||_cdqDataSel)+'\')"'+(i>=datas.length-1?' disabled':'')+' style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-family:inherit;color:'+(i>=datas.length-1?'#cbd5e1':'var(--text-secondary)')+';">‹ anterior</button>'+
-    '<div style="text-align:center;"><div style="font-size:16px;font-weight:800;">📅 '+_cdqDataSel+'</div>'+
-      '<div style="font-size:11px;color:var(--text-secondary);">'+ls.length+' kit(s)</div></div>'+
-    '<button onclick="_cdqVerDia(\''+escapeJsStr(datas[i-1]||_cdqDataSel)+'\')"'+(i<=0?' disabled':'')+' style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 12px;cursor:pointer;font-family:inherit;color:'+(i<=0?'#cbd5e1':'var(--text-secondary)')+';">próximo ›</button>'+
-  '</div>';
-
-  if(!ls.length) return h+_vazio('Nenhum kit neste dia.');
-
-  // pendências: o que você marcou para não lançar ainda
-  const bloq=ls.filter(l=>l.bloqueado);
-  if(bloq.length){
-    h+='<div class="card" style="margin-bottom:12px;border:2px solid #dc2626;background:#fef2f2;">'+
-      '<div style="font-size:14px;font-weight:800;color:#b91c1c;">🚫 '+bloq.length+' kit(s) com pendência — não lançar ainda</div>'+
-      bloq.map(l=>'<div style="font-size:12px;color:#7f1d1d;margin-top:4px;"><strong>'+l.kit+'</strong>'+(l.obs?(' · '+l.obs):'')+'</div>').join('')+
-    '</div>';
-  }
-
-  // barra de seleção: aparece quando há kit marcado
-  const nSel=ls.filter(l=>_cdqSel[_cdqChave(l.kit)]).length;
-  h+='<div class="card" style="margin-bottom:10px;'+(nSel?'border:2px solid var(--mc-azul,#2563eb);':'')+'">'+
-    '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">'+
-      '<button onclick="cdqSelTodos(true)" style="background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">☑ Marcar todos</button>'+
-      (nSel?'<button onclick="cdqSelTodos(false)" style="background:#fff;border:1px solid var(--border);color:var(--text-secondary);border-radius:8px;padding:8px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Desmarcar</button>':'')+
-      '<span style="flex:1;min-width:0;font-size:12px;color:var(--text-secondary);">'+(nSel?(nSel+' kit(s) marcado(s)'):'Marque os kits para gerar a mensagem.')+'</span>'+
-      (nSel?'<button onclick="cdqCopiarResumo()" class="btn btn-primary" style="flex:0 0 auto;padding:9px 15px;">📋 Copiar mensagem</button>':'')+
-    '</div></div>';
-
-  h+='<div style="overflow-x:auto;background:#fff;border:1px solid var(--border);border-radius:11px;">'+
-    '<table style="border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap;min-width:760px;">'+
-    '<thead><tr style="background:#334155;color:#fff;font-size:10px;">'+
-      '<th style="padding:9px 10px;text-align:left;position:sticky;left:0;background:#334155;">KIT</th>'+
-      '<th style="padding:9px 8px;text-align:center;">KITS CONSUMIDOS</th>'+
-      '<th style="padding:9px 8px;text-align:center;">TOTAL (KG)</th>'+
-      '<th style="padding:9px 8px;text-align:center;">MASSA VELHA</th>'+
-      '<th style="padding:9px 8px;text-align:center;">EMBALADO (KG)</th>'+
-      '<th style="padding:9px 8px;text-align:center;">QUEBRA %</th>'+
-      '<th style="padding:9px 8px;text-align:center;">QUEBRA KG</th>'+
-      '<th style="padding:9px 8px;text-align:center;">PESO MÉDIO UN</th>'+
-    '</tr></thead><tbody>';
-
-  // o total só conta os kits preenchidos: misturar quem tem consumo
-  // informado com quem não tem dava uma quebra sem sentido
-  const tot={kgKits:0, massaVelha:0, embKg:0, disponivel:0, embTodos:0, nPreenchidos:0};
-  ls.forEach((l,n)=>{
-    tot.embTodos+=l.embKg;
-    if(l.preenchido){
-      tot.kgKits+=l.kgKits; tot.massaVelha+=l.massaVelha; tot.embKg+=l.embKg; tot.disponivel+=l.disponivel;
-      tot.nPreenchidos++;
-    }
-    const bg=l.bloqueado?'#fef2f2':(n%2?'#fafbfc':'#fff');
-    const qc=!l.preenchido?'var(--text-muted)':(Math.abs(l.quebraPct)>8?'#dc2626':(Math.abs(l.quebraPct)>4?'#d97706':'#16a34a'));
-    const campo=(campoNome, valor, dica)=>'<input type="number" step="any" min="0" value="'+(valor||'')+'" placeholder="'+dica+'" '+
-      'id="cdq-'+campoNome+'-'+n+'" data-cdq-col="'+campoNome+'" data-cdq-linha="'+n+'" data-cdq-kit="'+escapeHtmlAttr(l.kit)+'" '+
-      'onchange="cdqSalvarCampo(\''+escapeJsStr(l.kit)+'\',\''+campoNome+'\',this.value)" '+
-      // Enter salva e desce para o mesmo campo da linha de baixo
-      'onkeydown="if(event.key===\'Enter\'){event.preventDefault();cdqProximo(this);}" '+
-      'style="width:90px;padding:7px;border:1px solid var(--border-md,#d1d5db);border-radius:7px;font-size:13px;text-align:center;font-family:inherit;">';
-    h+='<tr style="background:'+bg+';border-top:1px solid #f1f5f9;">'+
-      '<td style="padding:9px 10px;font-weight:700;position:sticky;left:0;background:'+bg+';">'+
-        '<label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;">'+
-          '<input type="checkbox"'+(_cdqSel[_cdqChave(l.kit)]?' checked':'')+' onchange="cdqToggleSel(\''+escapeJsStr(l.kit)+'\')" style="width:17px;height:17px;cursor:pointer;flex:0 0 auto;">'+
-          '<span>'+(l.bloqueado?'🚫 ':'')+l.kit+'</span></label>'+
-        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+kg(l.kgPorKit)+' kg/kit'+
-          // avisa quando a receita mudou depois do lançamento
-          (l.pesoCongelado && l.kgPorKitAtual>0 && Math.abs(l.kgPorKitAtual-l.kgPorKit)>0.01
-            ? ' <span title="A receita foi alterada depois. Aqui vale o peso do dia." style="color:#7c3aed;">⏱ hoje '+kg(l.kgPorKitAtual)+'</span>'
-            : '')+
-          ' · '+Object.keys(l.produtos).length+' produto(s)</div>'+
-        (l.obs?'<div style="font-size:11px;color:#b45309;font-weight:600;margin-top:3px;white-space:normal;max-width:260px;">📝 '+l.obs+'</div>':'')+
-        '<button onclick="cdqAbrirObs(\''+escapeJsStr(l.kit)+'\')" style="background:none;border:none;color:var(--mc-azul,#2563eb);font-size:11px;cursor:pointer;padding:3px 0 0;font-family:inherit;">'+
-          (l.obs||l.bloqueado?'✏️ editar nota':'+ nota')+'</button>'+
-      '</td>'+
-      '<td style="padding:9px 8px;text-align:center;">'+campo('consumidos', l.consumidos, 'kits')+'</td>'+
-      '<td style="padding:9px 8px;text-align:center;font-weight:700;">'+(l.kgKits?kg(l.kgKits):'—')+'</td>'+
-      '<td style="padding:9px 8px;text-align:center;">'+campo('massaVelha', l.massaVelha, 'kg')+'</td>'+
-      '<td style="padding:9px 8px;text-align:center;font-weight:700;">'+(l.embKg?kg(l.embKg):'0')+
-        '<div style="font-size:10px;color:var(--text-muted);font-weight:400;">'+l.embPct+' pct'+
-          (l.prodPct && l.prodPct!==l.embPct
-            ? '<br><span style="color:#b45309;">prod. '+l.prodPct+'</span>'
-            : '')+'</div></td>'+
-      '<td style="padding:9px 8px;text-align:center;font-weight:900;color:'+qc+';">'+(l.preenchido?((l.quebraPct>0?'':'+')+kg(Math.abs(l.quebraPct))+'%'):'—')+'</td>'+
-      '<td style="padding:9px 8px;text-align:center;font-weight:800;color:'+qc+';">'+(l.preenchido?((l.quebraKg>0?'':'+')+kg(Math.abs(l.quebraKg))):'—')+'</td>'+
-      // peso real por unidade: número direto com 1 produto, fator com vários
-      '<td style="padding:9px 8px;text-align:center;">'+_cdqCelulaPeso(l)+'</td>'+
-    '</tr>';
-  });
-
-  const qTot=tot.disponivel-tot.embKg;
-  const qTotPct=tot.disponivel>0?(qTot/tot.disponivel*100):0;
-  h+='<tr style="background:#e2e8f0;font-weight:800;border-top:2px solid #94a3b8;">'+
-    '<td style="padding:10px;position:sticky;left:0;background:#e2e8f0;">TOTAL'+
-      (tot.nPreenchidos<ls.length?'<div style="font-size:10px;font-weight:400;color:#64748b;">só os '+tot.nPreenchidos+' kit(s) preenchido(s)</div>':'')+
-    '</td><td></td>'+
-    '<td style="padding:10px 8px;text-align:center;">'+kg(tot.kgKits)+'</td>'+
-    '<td style="padding:10px 8px;text-align:center;">'+kg(tot.massaVelha)+'</td>'+
-    '<td style="padding:10px 8px;text-align:center;">'+kg(tot.embKg)+'</td>'+
-    '<td style="padding:10px 8px;text-align:center;">'+(tot.disponivel?((qTotPct>0?'':'+')+kg(Math.abs(qTotPct))+'%'):'—')+'</td>'+
-    '<td style="padding:10px 8px;text-align:center;">'+(tot.disponivel?((qTot>0?'':'+')+kg(Math.abs(qTot))):'—')+'</td>'+
-    '<td></td>'+
-  '</tr></tbody></table></div>';
-
-  h+='<div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">'+
-    '<strong>TOTAL (KG)</strong> = kits consumidos × peso do kit. '+
-    '<strong>EMBALADO</strong> = soma dos pacotes de todos os produtos daquele kit × peso de cada pacote. '+
-    '<strong>QUEBRA</strong> = (total + massa velha) − embalado.</div>';
-
-  // detalhe de quais produtos entraram em cada kit
-  h+=ls.filter(l=>Object.keys(l.produtos).length).map(l=>
-    '<div class="card" style="margin-top:10px;">'+
-      '<div style="font-size:13px;font-weight:800;margin-bottom:6px;">'+l.kit+'</div>'+
-      Object.values(l.produtos).sort((a,b)=>b.emb-a.emb).map(pp=>{
-        const real=pp.pesoUnReal||0, padrao=pp.pesoUnPadrao||0;
-        const dif=real&&padrao?((real-padrao)/padrao*100):0;
-        const cor=!real?'var(--text-muted)':(Math.abs(dif)>8?'#dc2626':(Math.abs(dif)>4?'#d97706':'#16a34a'));
-        return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border);">'+
-          '<span style="flex:1;min-width:0;">'+pp.nome+
-            '<span style="display:block;font-size:10px;color:var(--text-muted);">'+
-              (pp.unPct?(pp.unPct+' un/pct · '):'<span style="color:#b45309;">sem un/pct · </span>')+
-              'un padrão '+_cdqGramas(padrao)+
-              (real?(' · <strong style="color:'+cor+';">real '+_cdqGramas(real)+'</strong>'+
-                     ' <span style="color:'+cor+';">('+(dif>0?'+':'')+kg(dif)+'%)</span>'):'')+'</span></span>'+
-          '<span style="white-space:nowrap;text-align:right;">'+
-            '<strong>'+pp.emb+' pct</strong> embalado'+
-            (pp.prod && pp.prod!==pp.emb
-              ? '<br><span style="font-size:10px;color:#b45309;">'+pp.prod+' pct produzido · faltam '+(pp.prod-pp.emb)+'</span>'
-              : '')+
-            (pp.unPct?('<br><span style="font-size:10px;color:var(--text-muted);">'+pp.unTotal+' un</span>'):'')+
-            '<br><strong>'+kg(pp.emb*pp.kgPacote)+' kg</strong></span></div>';
-      }).join('')+
-    '</div>').join('');
-  return h;
-}
 
 /* Enter salva e desce para o mesmo campo da linha de baixo, para
    preencher a coluna inteira sem tirar a mão do teclado. */
