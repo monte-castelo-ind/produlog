@@ -1289,6 +1289,14 @@
 
       <div class="mc-section-header">O que deseja lançar?</div>
       <div class="mc-sector-grid">
+        <button class="mc-sector-card" onclick="eqpAbrir('confeitaria')">
+          <div class="mc-sector-icon" style="background:#dbeafe;">👥</div>
+          <div class="mc-sector-info">
+            <div class="mc-sector-title">Minha equipe</div>
+            <div class="mc-sector-desc">Faltas e atrasos da equipe da Confeitaria</div>
+          </div>
+          <span class="mc-sector-arrow">›</span>
+        </button>
         <button class="mc-sector-card" onclick="iniciarNovoReg()">
           <div class="mc-sector-icon blue">📋</div>
           <div class="mc-sector-info">
@@ -5694,7 +5702,7 @@
    resto do app não chegue a carregar. Não envia nada para lugar
    nenhum; só guarda no próprio aparelho. */
 (function(){
-  var VERSAO='24/11/2026 · 36';
+  var VERSAO='26/11/2026 · 39';
   var t0=Date.now(), log=[], cont={telas:0, atualizacoes:0, colecoes:0, docs:0, kb:0};
   var LS=null; try{ LS=window.localStorage; LS.getItem('x'); }catch(e){ LS=null; }
   function ler(k){ try{ return LS?LS.getItem(k):null; }catch(e){ return null; } }
@@ -5823,7 +5831,7 @@
 </script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, arrayUnion, runTransaction, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, arrayUnion, runTransaction, disableNetwork, enableNetwork, collection as _fbCollection, addDoc, deleteDoc, setDoc, getDoc, getDocs, onSnapshot as _fbOnSnapshot, doc as _fbDoc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // MODO TV VIA LINK (?tv=1): detectado logo no início, antes de qualquer snapshot do Firebase
@@ -5857,7 +5865,11 @@ function _plConexaoEscolha(){
   if(pref==='compat' || pref==='normal') return pref;
   const ua=navigator.userAgent||'';
   const ios=/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints>1);
-  return ios?'compat':'normal';
+  /* O link da TV (?tv=1) também usa a conexão compatível. No navegador de
+     TV a conexão "aberta" do Firestore costuma parar de entregar os dados
+     sem dar erro — a tela continua no ar, mas com números velhos. */
+  const tv=/[?&]tv=1\b/.test(location.search) || /SMART-TV|SmartTV|Tizen|Web0S|WebOS|BRAVIA|AFT[A-Z]|Android TV|GoogleTV|CrKey/i.test(ua);
+  return (ios||tv)?'compat':'normal';
 }
 /* ── ABERTURA RÁPIDA (dados guardados no aparelho) ───────────────────
    Medido em 13/11/2026: o app carrega 16 mil documentos (14 MB) toda
@@ -6104,6 +6116,7 @@ function _diagEscuta(ref, args){
     let visto=false, ultimoDoc=null;
     c[i]=function(snap){
       const primeira=!visto; visto=true;
+      if(!(snap && snap.metadata && snap.metadata.fromCache)) window._plUltimoDado=Date.now();      // o servidor respondeu agora
       if(_plCacheLigado){
         const doServidor=!(snap && snap.metadata && snap.metadata.fromCache);
         let mudou=primeira || queriaMeta;
@@ -6514,6 +6527,35 @@ onSnapshot(collection(db,'recheios'), snap=>{
 }, err=>{ console.error('recheios err:',err);     if(document.querySelector('.screen.active')?.id==='s-coz-recheios' && typeof renderCozRecheios==='function') renderCozRecheios();
   });
 
+/* ── VIGIA DA CONEXÃO NA TV ──────────────────────────────────────────
+   A TV fica ligada horas (ou dias) sem ninguém tocar. Se a conexão com
+   o banco "dormir", ninguém percebe. Então, no link da TV:
+   · a cada 4 minutos a conexão é desligada e religada — o banco manda só
+     o que mudou desde então, é leve;
+   · o mesmo acontece quando a rede volta ou a tela volta a aparecer;
+   · o rodapé mostra a hora do último dado recebido; se passar de 10
+     minutos, fica vermelho, para alguém ver de longe que parou. */
+let _tvReligando=false;
+async function _tvReligar(motivo){
+  if(_tvReligando) return; _tvReligando=true;
+  try{ await disableNetwork(db); await enableNetwork(db); try{ if(window.plDiag) window.plDiag('TV: conexão religada ('+motivo+')'); }catch(e){} }
+  catch(e){ console.warn('TV: religar a conexão', e); }
+  finally{ _tvReligando=false; }
+}
+function _tvVigiaIniciar(){
+  if(window._tvVigia) return;
+  window._tvVigia=setInterval(()=>_tvReligar('rotina'), 4*60*1000);
+  window.addEventListener('online', ()=>_tvReligar('rede voltou'));
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') _tvReligar('tela voltou'); });
+}
+/* texto do rodapé: "dados de 14:32" ou o aviso de que parou */
+function _tvFrescor(){
+  const t=window._plUltimoDado; if(!t) return '';
+  const d=new Date(t), hm=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  const velho=(Date.now()-t)>10*60*1000;
+  return '<span id="tv-fresco" style="font-size:13px;font-weight:700;white-space:nowrap;border-radius:99px;padding:5px 12px;'+(velho?'background:#fee2e2;color:#b91c1c;':'background:#f1f5f9;color:#64748b;')+'">'+(velho?'⚠ sem atualização desde ':'● dados de ')+hm+'</span>';
+}
+
 // ===== MODO TV VIA LINK (?tv=1) — para deixar rodando numa TV Android =====
 function _entrarModoTvLink(){
   if(!_plLogado) return;   // a TV também precisa da conta; o login chama de novo
@@ -6522,6 +6564,7 @@ function _entrarModoTvLink(){
   const loading=document.getElementById('loading'); if(loading) loading.style.display='none';
   estTvModo(true);          // painel ocupa 100% da janela por CSS
   goTo('s-tv');
+  _tvVigiaIniciar();        // mantém a conexão com o banco viva
   // tenta a tela cheia do navegador; se ele barrar (é o normal ao abrir um
   // link), mostra o aviso de iniciar, que resolve tudo num toque só
   setTimeout(()=>{
@@ -10155,6 +10198,7 @@ window.renderEmbop=renderEmbop;
 const ACX_EXTRAS=[
   {id:'x:emb-rend',  nome:'Rendimento da Embalagem', ic:'📈', grupo:'Embalagem', desc:'Embalado por dia e por turno, ritmo da equipe e o que falta', abrir:"embRendAbrir()"},
   {id:'x:eqp-emb',   nome:'Equipe da Embalagem',     ic:'👥', grupo:'Embalagem', desc:'Faltas e atrasos da equipe da Embalagem, pelo ponto', abrir:"eqpAbrir('embalagem')"},
+  {id:'x:eqp-conf',  nome:'Equipe da Confeitaria',   ic:'👥', grupo:'Confeitaria', desc:'Faltas e atrasos da equipe da Confeitaria, pelo ponto', abrir:"eqpAbrir('confeitaria')"},
   {id:'x:emb-plano', nome:'Plano da Embalagem',      ic:'🗓️', grupo:'Embalagem', desc:'O que embalar em cada dia da semana, com o andamento', abrir:"embPlanoAbrir()"},
   {id:'x:exp-dia',   nome:'Liberado no dia',         ic:'📋', grupo:'Expedição', desc:'Tudo o que a expedição lançou num dia, por horário', abrir:"expDiaAbrir()"}
 ];
@@ -17945,6 +17989,41 @@ let _kitIngredientes=[];
 let _produtoEditando=null;
 let _produtoKitContext=null;
 
+/* ── PRODUTOS QUE PODEM TER IDO PARA O KIT ERRADO ────────────────────
+   Até nov/2026, editar um produto da quadra podia jogá-lo sozinho para
+   o primeiro kit da lista (o "Kit Cuca Alemã"). Para achar os atingidos
+   sem depender da memória: os lançamentos de produção da quadra guardam
+   em qual kit o produto foi feito. Se, nos últimos 120 dias, o produto
+   foi produzido mais vezes em OUTRO kit do que no kit em que está hoje,
+   ele entra nesta lista — com um botão para voltar. */
+function kitsSuspeitos(){
+  const lim=new Date(); lim.setDate(lim.getDate()-120);
+  const limN=+(lim.getFullYear()+String(lim.getMonth()+1).padStart(2,'0')+String(lim.getDate()).padStart(2,'0'));
+  const nk=x=>_normNome(_kitNormNome(x)), dn=d=>{ const p=String(d||'').split('/'); return p.length===3?+(p[2]+p[1]+p[0]):0; };
+  const uso={};                                     // produto → kit → {n, ult}
+  (typeof quadraRegistros!=='undefined'?quadraRegistros:[]).forEach(q=>{
+    const d=dn(q.data); if(d<limN || !q.kit) return;
+    (q.produtos||[]).forEach(pp=>{ const k=_normNome(pp.nome||''); if(!k) return;
+      const o=(uso[k]||(uso[k]={})), x=o[nk(q.kit)]||(o[nk(q.kit)]={kit:q.kit, n:0, ult:0}); x.n++; if(d>x.ult){ x.ult=d; x.ultTxt=q.data; } });
+  });
+  const kitsOk=Object.keys(QUADRA_KITS_RECEITAS);
+  return (produtosCustom||[]).map(p=>{
+    const u=uso[_normNome(p.nome||'')]; if(!u) return null;
+    const atual=u[nk(p.kit)]||{n:0};
+    const outro=Object.values(u).filter(x=>nk(x.kit)!==nk(p.kit)).sort((a,b)=>b.n-a.n)[0];
+    if(!outro || outro.n<2 || outro.n<=atual.n) return null;
+    const destino=kitsOk.find(k=>nk(k)===nk(outro.kit)); if(!destino) return null;      // só sugere kit que ainda existe
+    return {p, destino, nOutro:outro.n, ult:outro.ultTxt, nAtual:atual.n};
+  }).filter(Boolean).sort((a,b)=>String(a.p.kit).localeCompare(String(b.p.kit))||String(a.p.nome).localeCompare(String(b.p.nome)));
+}
+async function kitVoltar(fid, kit){
+  const p=(produtosCustom||[]).find(x=>x.firestoreId===fid); if(!p) return;
+  if(!confirm('Voltar o produto para o kit de antes?\n\n'+p.nome+'\nDe: '+(p.kit||'—')+'\nPara: '+kit)) return;
+  try{ await updateDoc(doc(db,'quadraProdutosCustom',fid),{kit, atualizadoEm:new Date().toISOString(), kitCorrigidoEm:agora(), kitCorrigidoDe:p.kit||''}); p.kit=kit; renderAdmKits(); }
+  catch(e){ alert('Erro: '+((e&&e.message)||e)); }
+}
+window.kitVoltar=kitVoltar;
+
 function renderAdmKits(){
   const el=document.getElementById('adm-kits-content');
   if(!el)return;
@@ -17957,6 +18036,18 @@ function renderAdmKits(){
   const kitsHardcoded=Object.keys(QUADRA_KITS_RECEITAS).filter(k=>!kitsCustom.some(c=>c.nome===k)).length;
   const prodsHardcoded=QUADRA_PRODUTOS.filter(p=>!produtosCustom.some(c=>c.nome===p.nome)).length;
   let html='';
+  // produtos que a produção fazia em outro kit: podem ter sido movidos pelo defeito do cadastro
+  { let sus=[]; try{ sus=kitsSuspeitos(); }catch(e){ console.error('kitsSuspeitos', e); }
+    if(sus.length){
+      html+='<div class="card" style="padding:14px;margin-bottom:12px;border:1px solid #fde68a;background:#fffbeb;">'+
+        '<div style="font-size:14px;font-weight:800;color:#92400e;">⚠️ '+sus.length+' produto(s) podem estar no kit errado</div>'+
+        '<div style="font-size:12.5px;color:#78350f;margin:4px 0 10px;line-height:1.5;">Um defeito no cadastro podia mudar o kit de um produto sozinho ao salvar. Estes produtos foram produzidos, nos últimos 120 dias, mais vezes em outro kit do que no kit em que estão hoje. Confira e volte os que estiverem errados.</div>'+
+        sus.map(x=>'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0;border-top:1px solid #fde68a;">'+
+          '<div style="flex:1 1 240px;min-width:0;"><div style="font-size:14px;font-weight:700;">'+String(x.p.nome||'').replace(/</g,'&lt;')+'</div>'+
+            '<div style="font-size:12px;color:#78350f;">hoje em <b>'+String(x.p.kit||'—').replace(/</g,'&lt;')+'</b>'+(x.nAtual?(' ('+x.nAtual+' produção)'):' (nunca produzido nele)')+' · produzido '+x.nOutro+' vez(es) em <b>'+x.destino.replace(/</g,'&lt;')+'</b>, a última em '+(x.ult||'—')+'</div></div>'+
+          '<button onclick="kitVoltar(\''+x.p.firestoreId+'\',\''+escapeJsStr(x.destino)+'\')" style="flex:0 0 auto;background:#92400e;color:#fff;border:none;border-radius:9px;padding:9px 14px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Voltar para '+x.destino.replace(/</g,'&lt;')+'</button></div>').join('')+
+        '</div>';
+    } }
 
   // Card de importação/vínculo dos kits da Quadra (some quando todos vinculados)
   if(typeof KITS_QUADRA_SEED!=='undefined'){
@@ -18287,11 +18378,23 @@ function renderProdutoForm(){
 
   html+='<div class="card" style="padding:14px;margin-bottom:10px;">';
   html+='<div class="card-label">Kit (receita usada)</div>';
+  /* O kit do produto precisa estar SEMPRE selecionado ao abrir. Antes a
+     comparação era letra por letra: se o nome gravado no produto tivesse
+     um espaço, um acento ou uma maiúscula diferente do cadastro de kits,
+     nenhuma opção ficava marcada — e a lista caía sozinha na primeira
+     (em ordem alfabética, o "Kit Cuca Alemã"). Ao salvar qualquer outra
+     alteração, o produto ia junto para esse kit. */
+  const _nk=x=>_normNome(_kitNormNome(x));
+  const kitAtual=String(p.kit||'');
+  const kitCasa=todosKits.find(k=>k===kitAtual) || todosKits.find(k=>_nk(k)===_nk(kitAtual)) || '';
   html+='<select id="prod-kit" style="font-size:15px;width:100%;margin-top:6px;padding:8px;border-radius:6px;border:1px solid var(--border-md);">';
+  if(!kitAtual) html+='<option value="" selected>Selecione o kit…</option>';
+  else if(!kitCasa) html+='<option value="'+kitAtual.replace(/"/g,'&quot;')+'" selected>'+kitAtual.replace(/</g,'&lt;')+' (kit atual · não está no cadastro de kits)</option>';
   todosKits.forEach(k=>{
-    html+='<option value="'+k.replace(/"/g,'&quot;')+'"'+(p.kit===k?' selected':'')+'>'+k+'</option>';
+    html+='<option value="'+k.replace(/"/g,'&quot;')+'"'+(kitCasa===k?' selected':'')+'>'+k+'</option>';
   });
   html+='</select>';
+  if(kitAtual && !kitCasa) html+='<div style="font-size:11.5px;color:#b45309;margin-top:6px;">⚠️ O kit deste produto não foi encontrado no cadastro de kits. Ele continua como está, a menos que você escolha outro.</div>';
   html+='</div>';
 
   html+='<div class="card" style="padding:14px;margin-bottom:10px;">';
@@ -18336,6 +18439,11 @@ async function salvarProduto(){
 
   if(!nome){ alert('Digite o nome do produto'); return; }
   if(!kit){ alert('Selecione o kit'); return; }
+  // trocar o kit de um produto que já existe pede confirmação: nunca muda sem a pessoa ver
+  if(_produtoEditando && _produtoEditando.firestoreId){
+    const antes=String(_produtoEditando.kit||''), nk=x=>_normNome(_kitNormNome(x));
+    if(antes && nk(antes)!==nk(kit) && !confirm('Você está mudando o KIT deste produto:\n\nDe: '+antes+'\nPara: '+kit+'\n\nIsso muda a receita usada e o controle de quebra dele. Confirma a troca?')) return;
+  }
 
   const dados={cod,nome,kit,kgPacote,qtdPct,grMassa,grRecheio,grRecheio2,classe,atualizadoEm:new Date().toISOString()};
   try{
@@ -20459,6 +20567,16 @@ function _simPlanoConfAtual(){
   if(!rec && !_simSemana){ const confs=planos.filter(p=>!p.setor||p.setor==='conf'); rec=confs.sort((a,b)=>String(b.semana||'').localeCompare(String(a.semana||'')))[0]; }
   return rec;
 }
+/* Os planos que entram na simulação. Normalmente é um só (a semana
+   escolhida). Com "últimos 4 planos" entram os quatro planos mais
+   recentes da confeitaria, somados — é o consumo de um mês. */
+const SIM_ULT4='ult4';
+function _simPlanosAlvo(){
+  if(_simSemana===SIM_ULT4){
+    return planos.filter(p=>(!p.setor||p.setor==='conf') && p.semana).sort((a,b)=>String(b.semana).localeCompare(String(a.semana))).slice(0,4);
+  }
+  const r=_simPlanoConfAtual(); return r?[r]:[];
+}
 function setSimSemana(v){ _simSemana=v||null; _simResData=null; renderSim(); }
 window.setSimSemana=setSimSemana;
 
@@ -22420,7 +22538,7 @@ function _tvFooter(d, views, viewIdx, isAdmin){
   return '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:1.4vh;position:relative;z-index:1;gap:1vw;">'+
     '<div id="tv-msg" style="font-size:1.5vw;font-weight:800;color:#d97706;animation:tvFadeIn .6s ease both;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+TV_MSGS[_tvMsgIdx%TV_MSGS.length]+'</div>'+
     navCtrl+
-    '<div style="display:flex;gap:10px;">'+
+    '<div style="display:flex;gap:10px;align-items:center;">'+_tvFrescor()+
       (isAdmin?'<button onclick="configurarMuralTV()" style="'+btn+'padding:9px 16px;">💬 Recado</button>':'')+
       (isAdmin?'<button onclick="configurarPremioTV()" style="'+btn+'padding:9px 16px;">⚙️ Prêmio</button>':'')+
       '<button onclick="tvFullscreen()" style="background:#1e3a8a;border:none;color:#fff;font-size:14px;font-weight:600;padding:9px 16px;border-radius:12px;cursor:pointer;box-shadow:0 2px 8px rgba(30,58,138,.2);">⛶ Tela cheia</button>'+
@@ -44252,11 +44370,10 @@ window.compSalvarPedido=compSalvarPedido; window.compReabrir=compReabrir;
 
 
 function _simItensDoPlano(dia){
-  const rec=_simPlanoConfAtual();
-  const itensPlano=(rec&&rec.itens)||{};
   const DIAS=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
   const listaDias = dia==='todos'? DIAS : [dia];
   const agg={};
+  _simPlanosAlvo().forEach(rec=>{ const itensPlano=(rec&&rec.itens)||{};
   listaDias.forEach(d=>{
     (itensPlano[d]||[]).forEach(it=>{
       const pacotes=parseInt(it.qtdPacotes||it.qtd)||0; if(pacotes<=0) return;
@@ -44266,6 +44383,7 @@ function _simItensDoPlano(dia){
       if(!agg[key]) agg[key]={cod:prod?prod.cod:'',nome:nome||'(sem nome)',pacotes:0,produto:prod};
       agg[key].pacotes+=pacotes;
     });
+  });
   });
   return Object.values(agg).sort((a,b)=>b.pacotes-a.pacotes);
 }
@@ -44301,7 +44419,9 @@ function simCalcularPlano(){
   const itens=_simItensDoPlano(_simDia);
   if(!itens.length){ alert('Sem produtos no plano para '+(_simDia==='todos'?'a semana':_simDia)+'.'); return; }
   const res=_simExplodir(itens);
-  _simResData={...res, itens, contexto:'Plano · '+(_simDia==='todos'?'semana toda':_simDia)};
+  const alvo=_simPlanosAlvo();
+  const quais=_simSemana===SIM_ULT4 ? ('Últimos '+alvo.length+' planos ('+alvo.map(p=>semanaLabel(p.semana)).reverse().join(' · ')+')') : ('Plano'+(alvo[0]&&alvo[0].semana?(' · '+semanaLabel(alvo[0].semana)):''));
+  _simResData={...res, itens, contexto:quais+' · '+(_simDia==='todos'?(_simSemana===SIM_ULT4?'todos os dias':'semana toda'):(_simSemana===SIM_ULT4?('só as '+_simDia+'s'):_simDia))};
   renderSim();
 }
 
@@ -44636,13 +44756,18 @@ function renderSim(){
     const semSel='<div class="card-label">Semana do plano</div>'+
       '<select onchange="setSimSemana(this.value)" style="width:100%;margin:6px 0 12px;font-size:14px;padding:9px;border-radius:8px;border:1px solid var(--border-md,#d1d5db);font-family:inherit;">'+
       '<option value=""'+(_simSemana?'':' selected')+'>📍 Semana atual (cobre hoje)</option>'+
+      '<option value="'+SIM_ULT4+'"'+(_simSemana===SIM_ULT4?' selected':'')+'>🗓 Últimos 4 planos somados (consumo do mês)</option>'+
       _semanasOpcoes().filter(s=>planos.some(p=>p.semana===s&&(!p.setor||p.setor==='conf'))).sort().reverse().map(s=>'<option value="'+s+'"'+(_simSemana===s?' selected':'')+'>'+semanaLabel(s)+'</option>').join('')+
       '</select>';
     const prev=_simItensDoPlano(_simDia);
     const prevHtml=prev.length? prev.map(it=>'<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--border);"><span>'+it.nome+(it.produto?'':' <span style=\"color:var(--mc-vermelho);font-size:11px;\">(sem cadastro)</span>')+'</span><strong>'+it.pacotes+' pct</strong></div>').join('') : '<div class="empty">Sem produtos no plano para essa seleção.</div>';
+    const alvoSim=_simPlanosAlvo();
+    const quaisSim=_simSemana===SIM_ULT4 ? ('<div style="font-size:12px;line-height:1.6;margin:8px 0 2px;padding:9px 11px;border-radius:9px;background:'+(alvoSim.length<4?'#fffbeb':'#eff6ff')+';color:'+(alvoSim.length<4?'#92400e':'#1e3a8a')+';">'+
+        (alvoSim.length? ('<b>Somando '+alvoSim.length+' plano(s):</b> '+alvoSim.map(p=>semanaLabel(p.semana)).reverse().join(' · ')+(alvoSim.length<4?('<br>⚠️ Só há '+alvoSim.length+' plano(s) da confeitaria salvo(s). O resultado é a soma deles, não de 4 semanas.'):''))
+          :'Nenhum plano da confeitaria salvo ainda.')+'</div>') : '';
     corpo='<div class="card">'+
-      semSel+
-      '<div class="card-label">Dia do plano (Confeitaria)</div>'+chips+
+      semSel+quaisSim+
+      '<div class="card-label">'+(_simSemana===SIM_ULT4?'Dias que entram na soma (Confeitaria)':'Dia do plano (Confeitaria)')+'</div>'+chips+
       // a lista de produtos fica recolhida: o que interessa é o resultado,
       // não repetir o plano inteiro na tela
       '<button onclick="simTogglePrev()" style="width:100%;display:flex;justify-content:space-between;align-items:center;background:var(--bg-page);border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;font-family:inherit;margin-bottom:'+(_simPrevAberto?'8px':'0')+';">'+
